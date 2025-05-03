@@ -1,9 +1,10 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Trash2, Clock, Calendar, BookOpen, Video, ChevronDown, Target, Gauge } from 'lucide-react';
+import { Trash2, BookOpen, Video } from 'lucide-react'; // Removed unused icons
 import { useToast } from "@/hooks/use-toast";
 import { isValid, differenceInMinutes, parse, addDays, addHours, format, addMinutes } from 'date-fns';
 import {
@@ -24,11 +25,11 @@ import {
     calculateDailyUnits,
     calculateDailyUPH,
     calculateRequiredUnitsForTarget,
-    formatDurationFromHours,
     calculateProjectedGoalHitTime,
     formatDateISO,
     formatFriendlyDate,
     calculateRemainingUnits,
+    calculateCurrentMetrics, // Import the new function
 } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import PreviousLogTriggerSummary from './PreviousLogTriggerSummary'; // Import the component for previous log triggers
@@ -117,59 +118,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     }
   };
 
-  // --- Calculate Current Metrics (For Today Only) ---
-  const calculateCurrentMetrics = (log: DailyWorkLog | null, target: UPHTarget | null, now: Date | null) => {
-    if (!log || !target || !now || !isValid(now)) {
-      return { currentUnits: 0, currentUPH: 0 };
-    }
-
-    const currentUnits = calculateDailyUnits(log, target);
-
-    // Calculate net work minutes elapsed so far
-    const dateStr = log.date;
-    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
-    if (!timeRegex.test(log.startTime)) return { currentUnits, currentUPH: 0 }; // Invalid start time
-
-    const shiftStartDate = parse(`${dateStr} ${log.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
-    if (!isValid(shiftStartDate)) return { currentUnits, currentUPH: 0 }; // Invalid parsed start date
-
-    let shiftEndDate; // Need end date to calculate total shift duration for break proportion
-    if (timeRegex.test(log.endTime)) {
-        shiftEndDate = parse(`${dateStr} ${log.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
-        if (shiftEndDate < shiftStartDate) {
-             shiftEndDate = addDays(shiftEndDate, 1);
-        }
-    }
-    // Estimate end date if invalid or missing for projection purposes
-    if (!shiftEndDate || !isValid(shiftEndDate)) {
-        shiftEndDate = addHours(shiftStartDate, log.hoursWorked + (log.breakDurationMinutes / 60));
-    }
-    // Final validation after potential adjustment/estimation
-     if (!isValid(shiftEndDate)) return { currentUnits, currentUPH: 0 };
-
-
-    const totalGrossShiftMinutes = differenceInMinutes(shiftEndDate, shiftStartDate);
-    const minutesSinceShiftStart = differenceInMinutes(now, shiftStartDate);
-
-    if (minutesSinceShiftStart <= 0 || totalGrossShiftMinutes <= 0) {
-        return { currentUnits, currentUPH: 0 }; // Shift hasn't started or invalid duration
-    }
-
-    const clampedMinutesSinceStart = Math.min(minutesSinceShiftStart, totalGrossShiftMinutes);
-    const proportionOfShiftElapsed = clampedMinutesSinceStart / totalGrossShiftMinutes;
-    const estimatedBreakTakenSoFar = log.breakDurationMinutes * proportionOfShiftElapsed;
-    const netWorkMinutesElapsed = Math.max(0, clampedMinutesSinceStart - estimatedBreakTakenSoFar);
-
-    if (netWorkMinutesElapsed <= 0) {
-      return { currentUnits, currentUPH: 0 }; // No work time yet
-    }
-
-    const netWorkHoursElapsed = netWorkMinutesElapsed / 60;
-    const currentUPH = parseFloat((currentUnits / netWorkHoursElapsed).toFixed(2));
-
-    return { currentUnits, currentUPH };
-  };
-
 
   // --- Helper Function to Render a Metric Card (Used for Targets Breakdown) ---
   const renderTargetMetricCard = (log: DailyWorkLog, target: UPHTarget, isToday: boolean) => {
@@ -223,6 +171,11 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                              <p className="text-muted-foreground">Target Units</p>
                              <p className="font-medium">{totalRequiredUnits.toFixed(2)}</p>
                          </div>
+                         {/* Added Units Completed display for today as well */}
+                         <div>
+                            <p className="text-muted-foreground">Units Completed</p>
+                            <p className="font-medium">{totalActualUnits.toFixed(2)}</p>
+                         </div>
                     </>
                  ) : (
                      <>
@@ -244,9 +197,12 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
    // --- Helper Function to Render a Summary Card for a Log (Used for Today and Previous Log Content) ---
    const renderLogSummaryCard = (log: DailyWorkLog, isToday: boolean, allTargets: UPHTarget[]) => {
+        // Use the active target for summary UPH, or the first if none active/available
+        const summaryTarget = activeTarget ?? (allTargets.length > 0 ? allTargets[0] : null);
+        const overallUPHForSummaryTarget = summaryTarget ? calculateDailyUPH(log, summaryTarget) : null;
+        const summaryTargetName = summaryTarget ? summaryTarget.name : (allTargets.length > 0 ? 'First Target' : 'N/A');
         const logDate = new Date(log.date + 'T00:00:00'); // Add time component for parsing
         const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date; // Fallback to raw string if invalid
-        const overallUPHForActive = activeTarget ? calculateDailyUPH(log, activeTarget) : null; // Use active target for overall UPH display
 
         return (
             <Card className={`mb-4 relative ${!isToday ? 'shadow-none border-none bg-transparent' : ''}`}>
@@ -258,14 +214,15 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             </CardTitle>
                              <CardDescription>
                                 {log.hoursWorked.toFixed(2)} hrs ({log.startTime} - {log.endTime}, {log.breakDurationMinutes} min break)
-                                {overallUPHForActive !== null && ` | Avg UPH: ${overallUPHForActive.toFixed(2)}`}
+                                {overallUPHForSummaryTarget !== null && ` | Avg UPH (${summaryTargetName}): ${overallUPHForSummaryTarget.toFixed(2)}`}
                             </CardDescription>
                          </div>
+                         {/* Conditionally render delete button ONLY for previous logs inside the card header */}
                          {!isToday && (
                            <Button
                              variant="ghost"
                              size="icon"
-                             className="text-destructive hover:text-destructive h-8 w-8 absolute top-4 right-4" // Position delete button
+                             className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2" // Position delete button
                              onClick={(e) => {
                                e.stopPropagation(); // Prevent accordion trigger if inside one
                                handleDeleteLog(log);
@@ -279,7 +236,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     </div>
                 </CardHeader>
                  <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                     {/* Basic Info */}
+                     {/* Basic Info - Always shown */}
                      <div className="flex items-center space-x-2">
                         <BookOpen className="h-5 w-5 text-muted-foreground" />
                         <div>
@@ -334,19 +291,19 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
            <Accordion type="multiple" className="w-full space-y-1">
                {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date} className="border-none">
-                        {/* Use standard AccordionTrigger, containing the summary component */}
+                        {/* Use standard AccordionTrigger */}
                         <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-md transition-colors w-full relative group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50">
-                            <div className="flex items-center justify-between w-full"> {/* Flex container for summary and icons */}
+                            <div className="flex items-center justify-between w-full"> {/* Flex container */}
                                 {/* Pass all targets to the trigger summary */}
                                 <PreviousLogTriggerSummary log={log} allTargets={sortedTargets} />
-                                <div className="flex items-center space-x-2 ml-auto opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"> {/* Container for delete icon */}
-                                    {/* Delete Button */}
+                                {/* Delete Button - Positioned absolutely within the relative trigger */}
+                                <div className="absolute right-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity z-10">
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="text-destructive hover:text-destructive h-8 w-8 z-10"
+                                        className="text-destructive hover:text-destructive h-8 w-8" // Style as needed
                                         onClick={(e) => {
-                                            e.stopPropagation(); // Prevent accordion trigger
+                                            e.stopPropagation(); // VERY IMPORTANT: Prevent accordion toggle
                                             handleDeleteLog(log);
                                         }}
                                         title="Delete This Log"
@@ -354,14 +311,14 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                     >
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
-                                    {/* Chevron is now handled by the base AccordionTrigger */}
                                 </div>
+                                {/* Chevron is handled by the base AccordionTrigger */}
                             </div>
                         </AccordionTrigger>
 
                         <AccordionContent className="p-4 border-t bg-muted/10 mt-1 rounded-b-md">
-                             {/* Removed redundant title, now using renderLogSummaryCard */}
-                              {/* Render the detailed summary card *inside* the accordion content */}
+                             {/* Render the detailed summary card *inside* the accordion content */}
+                             {/* Note: Delete button is NOT rendered inside the summary card for previous logs anymore */}
                              {renderLogSummaryCard(log, false, sortedTargets)}
                              {sortedTargets.length > 0 ? (
                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
@@ -392,3 +349,4 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
+
