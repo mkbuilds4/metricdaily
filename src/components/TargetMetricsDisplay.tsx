@@ -3,16 +3,16 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
-import { Button } from '@/components/ui/button'; // Import Button
-import { Trash2, Clock, Calendar, BookOpen, Video } from 'lucide-react'; // Import icons
-import { useToast } from "@/hooks/use-toast"; // Import useToast
-import { isValid } from 'date-fns'; // Import isValid
+import { Button } from '@/components/ui/button';
+import { Trash2, Clock, Calendar, BookOpen, Video, ChevronDown } from 'lucide-react'; // Import ChevronDown
+import { useToast } from "@/hooks/use-toast";
+import { isValid } from 'date-fns';
 import {
     Accordion,
     AccordionContent,
     AccordionItem,
     AccordionTrigger,
-} from "@/components/ui/accordion"; // Import Accordion components
+} from "@/components/ui/accordion";
 import {
     Card,
     CardContent,
@@ -20,7 +20,7 @@ import {
     CardFooter,
     CardHeader,
     CardTitle,
-} from "@/components/ui/card"; // Import Card components
+} from "@/components/ui/card";
 import {
     calculateDailyUnits,
     calculateDailyUPH,
@@ -29,9 +29,10 @@ import {
     calculateProjectedGoalHitTime,
     formatDateISO,
     formatFriendlyDate,
-    calculateRemainingUnits, // Import the difference calculator
+    calculateRemainingUnits,
 } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
+import PreviousLogTriggerSummary from './PreviousLogTriggerSummary'; // Import the new component
 
 interface TargetMetricsDisplayProps {
   allWorkLogs: DailyWorkLog[]; // Receive all logs
@@ -42,9 +43,9 @@ interface TargetMetricsDisplayProps {
 const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   allWorkLogs = [],
   targets = [],
-  deleteWorkLogAction, // Destructure delete action
+  deleteWorkLogAction,
 }) => {
-  const { toast } = useToast(); // Initialize toast hook
+  const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -64,7 +65,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     const sortedLogs = [...allWorkLogs].sort((a, b) => b.date.localeCompare(a.date));
 
     sortedLogs.forEach(log => {
-        // Ensure the log has a valid date format before comparing
         if (log.date && /^\d{4}-\d{2}-\d{2}$/.test(log.date)) {
             if (log.date === todayDateStr && !foundTodayLog) {
               foundTodayLog = log;
@@ -72,7 +72,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                 if (!prevLogsMap[log.date]) {
                     prevLogsMap[log.date] = [];
                 }
-                // Store the first unique log for each previous date
                  if (prevLogsMap[log.date].length === 0) {
                    prevLogsMap[log.date].push(log);
                 }
@@ -82,10 +81,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         }
     });
 
-     // Convert map to array and sort by date descending
     const prevLogsGrouped = Object.entries(prevLogsMap)
-                                .map(([date, logs]) => ({ date, log: logs[0] })) // Take the first log found for that date
-                                .sort((a, b) => b.date.localeCompare(a.date)); // Sort by date string descending
+                                .map(([date, logs]) => ({ date, log: logs[0] }))
+                                .sort((a, b) => b.date.localeCompare(a.date));
 
     return { todayLog: foundTodayLog, previousLogsByDate: prevLogsGrouped };
   }, [allWorkLogs]);
@@ -96,7 +94,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
 
   const handleDeleteLog = (log: DailyWorkLog) => {
-     const logDate = new Date(log.date + 'T00:00:00'); // Add time component for safer parsing
+     const logDate = new Date(log.date + 'T00:00:00');
      const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date;
 
     if (!confirm(`Are you sure you want to delete the log for ${formattedLogDate}?`)) {
@@ -122,12 +120,10 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   const renderTargetMetricCard = (log: DailyWorkLog, target: UPHTarget, isToday: boolean) => {
       const actualUnits = calculateDailyUnits(log, target);
       const requiredUnits = calculateRequiredUnitsForTarget(log.hoursWorked, target.targetUPH);
-      // Use calculateRemainingUnits which calculates Actual - Required
       const differenceUnits = calculateRemainingUnits(log, target);
 
       let goalHitTimeFormatted = '-';
        if (isToday && currentTime) {
-           // Use the updated calculation function
            goalHitTimeFormatted = calculateProjectedGoalHitTime(log, target, currentTime);
        }
 
@@ -138,8 +134,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
             <CardHeader className="pb-2">
                  <div className="flex justify-between items-start">
                     <CardTitle className="text-lg font-semibold">{target.name}</CardTitle>
-                    {/* Display +/- Target in the header */}
-                     {/* Positive means ahead, Negative means behind */}
                     <span className={`text-lg font-bold ${isBehind ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
                         {(differenceUnits >= 0 ? '+' : '') + differenceUnits.toFixed(2)} Units
                     </span>
@@ -147,19 +141,14 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                 <CardDescription>Goal UPH: {target.targetUPH.toFixed(1)}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                {/* Only show Actual Units once per day in the summary card */}
-                {!isToday && (
-                    <div>
-                        <p className="text-muted-foreground">Actual Units</p>
-                        <p className="font-medium">{actualUnits.toFixed(2)}</p>
-                    </div>
-                )}
+                 <div>
+                    <p className="text-muted-foreground">Actual Units</p>
+                    <p className="font-medium">{actualUnits.toFixed(2)}</p>
+                </div>
                  <div>
                     <p className="text-muted-foreground">Units Needed</p>
                     <p className="font-medium">{requiredUnits.toFixed(2)}</p>
                 </div>
-                {/* Removed Actual UPH from here as requested */}
-
                 {isToday && (
                      <div>
                         <p className="text-muted-foreground">Est. Goal Hit</p>
@@ -171,16 +160,15 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       );
   };
 
-   // --- Helper Function to Render a Summary Card for a Log ---
+   // --- Helper Function to Render a Summary Card for a Log (Used for Today & Expanded Previous) ---
    const renderLogSummaryCard = (log: DailyWorkLog, isToday: boolean) => {
-        // Calculate Actual UPH using the active target (or first if none active)
         const summaryUPH = activeTarget && log.hoursWorked > 0 ? calculateDailyUPH(log, activeTarget) : 0;
         const summaryTargetName = activeTarget ? activeTarget.name : (targets.length > 0 ? 'First Target' : 'N/A');
-        const logDate = new Date(log.date + 'T00:00:00'); // Add time component for parsing
-        const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date; // Fallback to raw string if invalid
+        const logDate = new Date(log.date + 'T00:00:00');
+        const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date;
 
         return (
-            <Card className="mb-4 relative group w-full"> {/* Added w-full */}
+            <Card className={`mb-4 relative group w-full ${!isToday ? 'shadow-none border-none' : ''}`}> {/* Remove shadow/border if not today */}
                  <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                          <div>
@@ -191,13 +179,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 {log.hoursWorked.toFixed(2)} hrs ({log.startTime} - {log.endTime}, {log.breakDurationMinutes} min break)
                             </CardDescription>
                          </div>
-                           {/* Delete Button - Positioned absolutely within the CardHeader */}
+                           {/* Delete Button - Only visible on hover */}
                            <Button
                             variant="ghost"
                             size="icon"
-                            className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10" // Ensure z-index
+                            className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10"
                             onClick={(e) => {
-                                e.stopPropagation(); // Prevent accordion toggle
+                                e.stopPropagation();
                                 handleDeleteLog(log);
                             }}
                             title="Delete This Log"
@@ -254,7 +242,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         <div>
           {renderLogSummaryCard(todayLog, true)}
 
-           {/* Grid for Target Metric Cards */}
            {sortedTargets.length > 0 ? (
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {sortedTargets.map((target) => renderTargetMetricCard(todayLog, target, true))}
@@ -272,18 +259,32 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       {previousLogsByDate.length > 0 && (
         <div>
           <h3 className="text-xl font-semibold mb-3">Previous Logs</h3>
-           <Accordion type="multiple" className="w-full space-y-4">
+           <Accordion type="multiple" className="w-full space-y-1"> {/* Reduced space */}
                {previousLogsByDate.map(({ date, log }) => (
-                    <AccordionItem value={date} key={date} className="border-none rounded-lg overflow-hidden shadow-sm"> {/* Removed border, added shadow */}
-                        <AccordionTrigger asChild className="p-0 data-[state=open]:bg-muted/30 transition-colors w-full text-left rounded-t-lg cursor-pointer"> {/* Use asChild and add cursor-pointer */}
-                            {/* Render summary card inside a div */}
-                             <div className="w-full"> {/* Ensure the div takes full width */}
-                                {renderLogSummaryCard(log, false)}
-                             </div>
+                    <AccordionItem value={date} key={date} className="border rounded-lg overflow-hidden shadow-sm bg-card"> {/* Moved styling here */}
+                        {/* Use PreviousLogTriggerSummary for the trigger content */}
+                        <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 data-[state=open]:border-b"> {/* Added padding & hover */}
+                              <PreviousLogTriggerSummary log={log} activeTarget={activeTarget} />
                         </AccordionTrigger>
-                        <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-lg"> {/* Add border-t */}
-                             {/* Detailed breakdown inside the content */}
-                            <h4 className="text-md font-semibold mb-3">Target Breakdown for {formatFriendlyDate(new Date(date + 'T00:00:00'))}</h4>
+                        <AccordionContent className="p-4 border-t bg-muted/10">
+                            {/* Detailed breakdown inside the content */}
+                            {/* Move the delete button here, less intrusive */}
+                             <div className="flex justify-between items-center mb-4">
+                                <h4 className="text-md font-semibold">Target Breakdown for {formatFriendlyDate(new Date(date + 'T00:00:00'))}</h4>
+                                 <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => handleDeleteLog(log)}
+                                    title="Delete This Log"
+                                    aria-label="Delete This Log"
+                                >
+                                    <Trash2 className="h-4 w-4 mr-1" /> Delete Log
+                                </Button>
+                            </div>
+                             {log.notes && (
+                                <p className="text-sm text-muted-foreground italic mb-4">Notes: {log.notes}</p>
+                             )}
                              {sortedTargets.length > 0 ? (
                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {sortedTargets.map(target => renderTargetMetricCard(log, target, false))}
@@ -313,3 +314,4 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
 export default TargetMetricsDisplay;
 
+    
