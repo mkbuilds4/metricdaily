@@ -5,14 +5,13 @@ import ProductivityDashboard from '@/components/DashboardDisplay';
 // Import server actions directly
 import { getWorkLogs, getActiveUPHTarget, saveWorkLog, getUPHTargets, addUPHTarget, updateUPHTarget, deleteUPHTarget, setActiveUPHTarget } from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget } from '@/types';
-// Removed revalidatePath import - it will be handled within the actions
+
 
 // This component remains a Server Component
-
 export default async function Home() {
   // Fetch initial data directly in the Server Component
   // Using Promise.all for potentially parallel fetching
-  const [workLogs, activeTarget, targets] = await Promise.all([
+  const [initialWorkLogs, initialActiveTarget, initialTargets] = await Promise.all([
     getWorkLogs(),
     getActiveUPHTarget(),
     getUPHTargets(),
@@ -26,18 +25,28 @@ export default async function Home() {
       <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Metric Daily Dashboard</h1>
       <div className="w-full max-w-5xl space-y-8">
         {/* Pass the actual saveWorkLog server action */}
-        <WorkLogInputForm onWorkLogSaved={saveWorkLog} />
+        {/* The WorkLogInputForm component will handle optimistic updates internally */}
+        <WorkLogInputForm
+            onWorkLogSaved={saveWorkLog}
+            // No existingLog prop needed here as it's for adding new logs
+            // onOptimisticUpdate prop is handled within the form component now
+            />
+
         {/* Pass initial targets and the necessary action functions */}
-        {/* UPHTargetManager will call these actions directly */}
+        {/* UPHTargetManager will call these actions directly and handle optimistic updates */}
         <UPHTargetManager
-          targets={targets}
+          targets={initialTargets} // Pass initial data
           addUPHTargetAction={addUPHTarget}
           updateUPHTargetAction={updateUPHTarget}
           deleteUPHTargetAction={deleteUPHTarget}
           setActiveUPHTargetAction={setActiveUPHTarget}
         />
         {/* Pass fetched data to the display component */}
-        <ProductivityDashboard workLogs={workLogs} activeTarget={activeTarget} />
+        {/* ProductivityDashboard will now manage its own state for optimistic updates */}
+        <ProductivityDashboard
+            initialWorkLogs={initialWorkLogs}
+            initialActiveTarget={initialActiveTarget}
+            />
       </div>
     </main>
   );

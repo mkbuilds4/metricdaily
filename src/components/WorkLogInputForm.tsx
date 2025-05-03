@@ -61,13 +61,17 @@ const formSchema = z.object({
 type WorkLogFormData = z.infer<typeof formSchema>;
 
 interface WorkLogInputFormProps {
-  onWorkLogSaved: (workLogData: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { hoursWorked: number }) => Promise<void | DailyWorkLog>;
-  existingLog?: DailyWorkLog | null;
+  // The server action to save/update the log
+  onWorkLogSaved: (workLogData: DailyWorkLog) => Promise<DailyWorkLog>; // Expects the full log with ID
+  // Optional prop to signal UI update for dashboard (if not handled by revalidation)
+  onOptimisticUpdate?: (updatedLog: DailyWorkLog | null, action: 'add' | 'update' | 'delete' | 'revert', previousLog?: DailyWorkLog | null) => void;
+  existingLog?: DailyWorkLog | null; // For editing
 }
 
-const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, existingLog }) => {
+const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, onOptimisticUpdate, existingLog }) => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  // Local state for calculated hours, initialized based on existingLog
   const [calculatedHours, setCalculatedHours] = useState<number | null>(
      existingLog && isValid(parse(existingLog.date, 'yyyy-MM-dd', new Date()))
        ? calculateHoursWorked(existingLog.date, existingLog.startTime, existingLog.endTime, existingLog.breakDurationMinutes)
@@ -76,14 +80,15 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
 
   const form = useForm<WorkLogFormData>({
     resolver: zodResolver(formSchema),
+    // Initialize defaultValues inside useEffect to handle existingLog correctly
     defaultValues: {
-      date: existingLog && isValid(parse(existingLog.date, 'yyyy-MM-dd', new Date())) ? parse(existingLog.date, 'yyyy-MM-dd', new Date()) : new Date(),
-      startTime: existingLog?.startTime ?? '',
-      endTime: existingLog?.endTime ?? '',
-      breakDurationMinutes: existingLog?.breakDurationMinutes ?? 0,
-      documentsCompleted: existingLog?.documentsCompleted ?? 0,
-      videoSessionsCompleted: existingLog?.videoSessionsCompleted ?? 0,
-      notes: existingLog?.notes ?? '',
+        date: new Date(),
+        startTime: '',
+        endTime: '',
+        breakDurationMinutes: 0,
+        documentsCompleted: 0,
+        videoSessionsCompleted: 0,
+        notes: '',
     },
   });
 
@@ -97,19 +102,21 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
       // Check if watchDate is a valid Date object before formatting
       if (isValid(watchDate)) {
           const formattedDate = format(watchDate, 'yyyy-MM-dd');
-          if (watchStartTime && watchEndTime && watchBreakMinutes !== undefined && formattedDate) {
-              const hours = calculateHoursWorked(formattedDate, watchStartTime, watchEndTime, watchBreakMinutes);
-              setCalculatedHours(hours);
-          } else {
-              setCalculatedHours(null); // Reset if other inputs are incomplete/invalid
-          }
+          // Make sure times are valid HH:mm strings before calculating
+           const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+            if (timeRegex.test(watchStartTime) && timeRegex.test(watchEndTime) && watchBreakMinutes !== undefined && formattedDate) {
+                const hours = calculateHoursWorked(formattedDate, watchStartTime, watchEndTime, watchBreakMinutes);
+                setCalculatedHours(hours);
+            } else {
+                 setCalculatedHours(null); // Reset if times are incomplete/invalid
+            }
       } else {
           setCalculatedHours(null); // Reset if date is invalid
       }
   }, [watchStartTime, watchEndTime, watchBreakMinutes, watchDate]);
 
 
-   // Update form default values if existingLog changes
+   // Update form default values if existingLog changes or on initial load
    useEffect(() => {
     if (existingLog) {
       const parsedDate = parse(existingLog.date, 'yyyy-MM-dd', new Date());
@@ -139,6 +146,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
          });
       }
     } else {
+       // Reset form for adding a new log
        setCalculatedHours(null);
        form.reset({
         date: new Date(),
@@ -150,63 +158,51 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
         notes: '',
       });
     }
-  }, [existingLog, form]);
+   }, [existingLog, form]); // Rerun when existingLog or form instance changes
 
 
-  // Handle form submission
+  // Handle form submission with optimistic updates
   const onSubmit = async (values: WorkLogFormData) => {
     setIsLoading(true);
     // Ensure date is valid before proceeding
     if (!isValid(values.date)) {
-        toast({
-            variant: "destructive",
-            title: "Invalid Date",
-            description: "Please select a valid date.",
-        });
+        toast({ variant: "destructive", title: "Invalid Date", description: "Please select a valid date." });
         setIsLoading(false);
         return;
     }
 
-    try {
-      const formattedDate = format(values.date, 'yyyy-MM-dd');
-      const hoursWorked = calculateHoursWorked(formattedDate, values.startTime, values.endTime, values.breakDurationMinutes);
+    const formattedDate = format(values.date, 'yyyy-MM-dd');
+    const hoursWorked = calculateHoursWorked(formattedDate, values.startTime, values.endTime, values.breakDurationMinutes);
 
-      if (hoursWorked <= 0 && (values.documentsCompleted > 0 || values.videoSessionsCompleted > 0)) {
-           toast({
-            variant: "destructive",
-            title: "Invalid Time Entry",
-            description: "Calculated hours worked is zero or negative. Please check start time, end time, and break duration.",
-           });
-           setIsLoading(false);
-           return; // Prevent saving if hours are invalid but work was done
-      }
+    if (hoursWorked <= 0 && (values.documentsCompleted > 0 || values.videoSessionsCompleted > 0)) {
+        toast({ variant: "destructive", title: "Invalid Time Entry", description: "Calculated hours worked is zero or negative. Please check start time, end time, and break duration." });
+        setIsLoading(false);
+        return;
+    }
 
-
-      const workLogData = { // Omit id, it will be handled by the action
+    // Prepare optimistic data (use existing ID or a temporary one)
+    const optimisticId = existingLog?.id || `temp-${Date.now()}`;
+    const optimisticLogData: DailyWorkLog = {
+        ...values,
+        id: optimisticId,
         date: formattedDate,
-        startTime: values.startTime,
-        endTime: values.endTime,
-        breakDurationMinutes: values.breakDurationMinutes,
-        hoursWorked: hoursWorked, // Send the calculated hours
-        documentsCompleted: values.documentsCompleted,
-        videoSessionsCompleted: values.videoSessionsCompleted,
-        notes: values.notes,
-      };
+        hoursWorked: hoursWorked,
+        notes: values.notes || '', // Ensure notes is a string
+    };
 
-      // Add the existing ID if we are editing
-      const payload = existingLog ? { ...workLogData, id: existingLog.id } : workLogData;
+    // Store previous state for potential rollback (only needed if editing)
+    const previousLogState = existingLog ? { ...existingLog } : null;
 
-      await onWorkLogSaved(payload); // Call the server action passed as prop
+    // --- Optimistic UI Update ---
+    if (onOptimisticUpdate) {
+       onOptimisticUpdate(optimisticLogData, existingLog ? 'update' : 'add', previousLogState ?? undefined);
+    }
 
-      toast({
-        title: "Work Log Saved",
-        description: `Entry for ${formattedDate} has been saved.`,
-      });
-      // Reset form after successful submission only if NOT editing
-      if (!existingLog) {
-         setCalculatedHours(null);
-         form.reset({
-            date: new Date(), // Keep today's date as default
+    // If not editing, reset the form optimistically *after* capturing values
+    if (!existingLog) {
+        setCalculatedHours(null);
+        form.reset({
+            date: new Date(), // Reset to today's date
             startTime: '',
             endTime: '',
             breakDurationMinutes: 0,
@@ -214,16 +210,76 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
             videoSessionsCompleted: 0,
             notes: '',
         });
-      }
+    }
+
+
+    try {
+       // --- Call Server Action ---
+      // Pass the full object, including the ID if it exists (for update)
+      // Or the object without ID for add (server will generate one)
+      const payloadToServer = existingLog
+            ? { ...optimisticLogData, id: existingLog.id } // Ensure correct ID for update
+            : { // Omit ID for add
+                date: formattedDate,
+                startTime: values.startTime,
+                endTime: values.endTime,
+                breakDurationMinutes: values.breakDurationMinutes,
+                hoursWorked: hoursWorked,
+                documentsCompleted: values.documentsCompleted,
+                videoSessionsCompleted: values.videoSessionsCompleted,
+                notes: values.notes,
+            };
+
+      const savedLog = await onWorkLogSaved(payloadToServer as DailyWorkLog); // Cast based on context
+
+      // --- Update UI with actual data from server (if needed, e.g., replacing temp ID) ---
+       if (!existingLog && onOptimisticUpdate) {
+           // If adding, replace the temporary log with the one returned by the server (with the real ID)
+           onOptimisticUpdate(savedLog, 'update', optimisticLogData); // Treat replacement as an update
+       }
+        // If editing, the server action revalidates, props will update eventually. Optimistic update already happened.
+
+
+      toast({
+        title: "Work Log Saved",
+        description: `Entry for ${formattedDate} has been ${existingLog ? 'updated' : 'added'}.`,
+      });
+
     } catch (error) {
-        console.error("Failed to save work log:", error);
-        toast({
-            variant: "destructive",
-            title: "Save Failed",
-            description: error instanceof Error ? error.message : "Could not save the work log.",
-        });
+      console.error("Failed to save work log:", error);
+        // --- Rollback Optimistic Update ---
+        if (onOptimisticUpdate) {
+            if (existingLog && previousLogState) {
+                // Rollback edit: update the item back to its previous state
+                onOptimisticUpdate(previousLogState, 'update', optimisticLogData);
+            } else {
+                 // Rollback add: remove the temporary item
+                 onOptimisticUpdate(optimisticLogData, 'delete'); // Signal deletion of the optimistic item
+            }
+             // Reset form back to the state before submission attempt if it was an edit failure
+             if (existingLog && previousLogState) {
+                 const parsedDate = parse(previousLogState.date, 'yyyy-MM-dd', new Date());
+                 if (isValid(parsedDate)) {
+                    form.reset({
+                        date: parsedDate,
+                        startTime: previousLogState.startTime,
+                        endTime: previousLogState.endTime,
+                        breakDurationMinutes: previousLogState.breakDurationMinutes,
+                        documentsCompleted: previousLogState.documentsCompleted,
+                        videoSessionsCompleted: previousLogState.videoSessionsCompleted,
+                        notes: previousLogState.notes ?? '',
+                    });
+                    setCalculatedHours(previousLogState.hoursWorked);
+                 }
+             }
+        }
+      toast({
+        variant: "destructive",
+        title: "Save Failed",
+        description: error instanceof Error ? error.message : "Could not save the work log.",
+      });
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -377,7 +433,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                 <FormItem>
                   <FormLabel>Notes (Optional)</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Any relevant notes..." {...field} />
+                    <Textarea placeholder="Any relevant notes..." {...field} value={field.value ?? ''} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -390,7 +446,24 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                 </Button>
                 {/* Optional: Add a button to clear/reset or cancel edit */}
                 {existingLog && (
-                    <Button type="button" variant="outline" onClick={() => form.reset()} className="ml-2" disabled={isLoading}>
+                    <Button type="button" variant="outline" onClick={() => {
+                        // Reset form to the original existingLog data
+                        if (existingLog) {
+                             const parsedDate = parse(existingLog.date, 'yyyy-MM-dd', new Date());
+                             if(isValid(parsedDate)) {
+                                form.reset({
+                                    date: parsedDate,
+                                    startTime: existingLog.startTime,
+                                    endTime: existingLog.endTime,
+                                    breakDurationMinutes: existingLog.breakDurationMinutes,
+                                    documentsCompleted: existingLog.documentsCompleted,
+                                    videoSessionsCompleted: existingLog.videoSessionsCompleted,
+                                    notes: existingLog.notes ?? '',
+                                });
+                                setCalculatedHours(existingLog.hoursWorked);
+                             }
+                        }
+                    }} className="ml-2" disabled={isLoading}>
                         Cancel Edit
                     </Button>
                 )}

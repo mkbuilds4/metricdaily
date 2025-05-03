@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -53,7 +53,7 @@ interface UPHTargetManagerProps {
 
 // --- Component ---
 const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
-    targets = [],
+    targets: initialTargets = [], // Rename prop to avoid conflict
     addUPHTargetAction,
     updateUPHTargetAction,
     deleteUPHTargetAction,
@@ -63,6 +63,14 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTarget, setEditingTarget] = useState<UPHTarget | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  // Use local state for targets to enable optimistic updates
+  const [localTargets, setLocalTargets] = useState<UPHTarget[]>(initialTargets);
+
+  // Sync local state when the initial prop changes (e.g., after server revalidation)
+   useEffect(() => {
+    setLocalTargets(initialTargets);
+  }, [initialTargets]);
+
 
   const form = useForm<TargetFormData>({
     resolver: zodResolver(targetFormSchema),
@@ -97,66 +105,101 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     setIsDialogOpen(true);
   };
 
-  const handleFormSubmit = async (values: TargetFormData) => {
-     setIsLoading(true);
+ const handleFormSubmit = async (values: TargetFormData) => {
+    setIsLoading(true);
+    const previousTargets = [...localTargets]; // Store previous state for rollback
+
     try {
       if (editingTarget) {
-        // Update existing target - use the update action prop
+        // === Optimistic Update (Edit) ===
         const updatedTargetData: UPHTarget = {
-          ...editingTarget, // Keep id and isActive status from the original editing target
-          ...values, // Include updated form values
+          ...editingTarget,
+          ...values,
         };
-        await updateUPHTargetAction(updatedTargetData); // Call server Action prop
+        setLocalTargets(prev =>
+          prev.map(t => (t.id === editingTarget.id ? updatedTargetData : t))
+        );
+        setIsDialogOpen(false); // Close dialog optimistically
+        // === Call Server Action ===
+        await updateUPHTargetAction(updatedTargetData);
         toast({ title: "Target Updated", description: `"${values.name}" has been updated.` });
+        // Server action revalidates, props will eventually update, local state is already updated
       } else {
-        // Add new target - use the add action prop
+        // === Optimistic Update (Add) ===
+        // Create a temporary ID for the optimistic update
+        const tempId = `temp-${Date.now()}`;
+        const optimisticNewTarget: UPHTarget = {
+          ...values,
+          id: tempId,
+          isActive: false, // New targets are inactive
+        };
+        setLocalTargets(prev => [...prev, optimisticNewTarget]);
+        setIsDialogOpen(false); // Close dialog optimistically
+         // === Call Server Action ===
         const newTargetData: Omit<UPHTarget, 'id' | 'isActive'> = values;
-        await addUPHTargetAction(newTargetData); // Call server Action prop
+        const actualNewTarget = await addUPHTargetAction(newTargetData);
+        // === Replace temporary target with actual data from server ===
+        setLocalTargets(prev =>
+          prev.map(t => (t.id === tempId ? actualNewTarget : t))
+        );
         toast({ title: "Target Added", description: `"${values.name}" has been added.` });
+         // Server action revalidates
       }
-      setIsDialogOpen(false); // Close dialog on success
-      // Revalidation is handled by the server action, no need for onTargetsUpdate callback
     } catch (error) {
-        console.error("Failed to save target:", error);
-        toast({
-            variant: "destructive",
-            title: "Save Failed",
-            description: error instanceof Error ? error.message : "Could not save the UPH target.",
-        });
+      console.error("Failed to save target:", error);
+      // === Rollback ===
+      setLocalTargets(previousTargets);
+      setIsDialogOpen(true); // Re-open dialog on error? Or just show toast?
+      toast({
+        variant: "destructive",
+        title: "Save Failed",
+        description: error instanceof Error ? error.message : "Could not save the UPH target.",
+      });
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
+
 
   // --- Action Handlers ---
-  const handleSetActive = async (id: string) => {
-     setIsLoading(true);
+ const handleSetActive = async (id: string) => {
+    setIsLoading(true);
+    const previousTargets = [...localTargets];
+
+    // === Optimistic Update ===
+    setLocalTargets(prev =>
+      prev.map(t => ({ ...t, isActive: t.id === id }))
+    );
+
     try {
-      await setActiveUPHTargetAction(id); // Use the set active action prop
+      // === Call Server Action ===
+      await setActiveUPHTargetAction(id);
       toast({ title: "Target Activated", description: "The selected target is now active." });
-      // Revalidation handled by server action
+      // Server action revalidates
     } catch (error) {
-        console.error("Failed to set active target:", error);
-         toast({
-            variant: "destructive",
-            title: "Activation Failed",
-            description: error instanceof Error ? error.message : "Could not activate the target.",
-        });
+      console.error("Failed to set active target:", error);
+      // === Rollback ===
+      setLocalTargets(previousTargets);
+      toast({
+        variant: "destructive",
+        title: "Activation Failed",
+        description: error instanceof Error ? error.message : "Could not activate the target.",
+      });
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    // Find the target to ensure it's not active before confirming
-    const targetToDelete = targets.find(t => t.id === id);
+
+ const handleDelete = async (id: string, name: string) => {
+    const targetToDelete = localTargets.find(t => t.id === id);
     if (targetToDelete?.isActive) {
         toast({
             variant: "destructive",
             title: "Deletion Blocked",
             description: "Cannot delete the currently active target. Set another target as active first.",
         });
-        return; // Prevent deletion if it's active
+        return;
     }
 
     if (!confirm(`Are you sure you want to delete the target "${name}"?`)) {
@@ -164,13 +207,22 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     }
 
     setIsLoading(true);
+    const previousTargets = [...localTargets];
+
+     // === Optimistic Update ===
+    setLocalTargets(prev => prev.filter(t => t.id !== id));
+
+
     try {
-      await deleteUPHTargetAction(id); // Use the delete action prop
+      // === Call Server Action ===
+      await deleteUPHTargetAction(id);
       toast({ title: "Target Deleted", description: `"${name}" has been deleted.` });
-       // Revalidation handled by server action
+       // Server action revalidates
     } catch (error) {
        console.error("Failed to delete target:", error);
-         toast({
+        // === Rollback ===
+       setLocalTargets(previousTargets);
+       toast({
             variant: "destructive",
             title: "Deletion Failed",
             description: error instanceof Error ? error.message : "Could not delete the target.",
@@ -187,7 +239,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
         <CardTitle>UPH Target Manager</CardTitle>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={openAddDialog}>Add New Target</Button>
+            <Button onClick={openAddDialog} disabled={isLoading}>Add New Target</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
@@ -278,12 +330,12 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {targets.length === 0 && (
+            {localTargets.length === 0 && (
                  <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground">No UPH targets defined yet.</TableCell>
                 </TableRow>
             )}
-            {targets.map((target) => (
+            {localTargets.map((target) => (
               <TableRow key={target.id} className={target.isActive ? 'bg-accent/10' : ''}>
                 <TableCell>
                   {target.isActive ? (
