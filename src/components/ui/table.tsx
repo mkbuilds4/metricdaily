@@ -54,7 +54,7 @@ TableFooter.displayName = "TableFooter"
 const TableRow = React.forwardRef<
   HTMLTableRowElement,
   React.HTMLAttributes<HTMLTableRowElement>
->(({ className, children, ...props }, ref) => ( // Added children prop
+>(({ className, children, ...props }, ref) => (
   <tr
     ref={ref}
     className={cn(
@@ -62,9 +62,7 @@ const TableRow = React.forwardRef<
       className
     )}
     {...props}
-  >
-    {children} {/* Explicitly render children */}
-  </tr>
+  >{children}</tr> // Ensure no whitespace around children
 ))
 TableRow.displayName = "TableRow"
 
