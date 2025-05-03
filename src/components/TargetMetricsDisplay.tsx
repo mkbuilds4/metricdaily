@@ -159,15 +159,11 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
               <TableCell className="text-right">{actualUPH.toFixed(2)}</TableCell>
               <TableCell className="text-right">{actualUnits.toFixed(2)}</TableCell>
               {isToday && (
-                   <TableCell className={`text-right ${requiredUnits - actualUnits <= 0 ? 'text-accent' : ''}`}>
-                       {timeLeftFormatted}
-                   </TableCell>
-              )}
-               {isToday && (
                  <TableCell className="text-right">
                      {actualUPH > 0 ? goalHitTimeFormatted : 'N/A'}
                  </TableCell>
               )}
+              {/* Removed 'Time Left to Goal' / 'Difference vs Goal' column for both today and previous */}
           </TableRow>
       );
   };
@@ -201,7 +197,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                   <TableHead className="text-right">Total Units Needed</TableHead>
                   <TableHead className="text-right">Actual UPH</TableHead>
                   <TableHead className="text-right">Actual Units</TableHead>
-                  <TableHead className="text-right">Time Left to Goal</TableHead>
+                  {/* <TableHead className="text-right">Time Left to Goal</TableHead> // Removed */}
                   <TableHead className="text-right">Est. Goal Hit Time</TableHead>
                 </TableRow>
               </TableHeader>
@@ -210,7 +206,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     sortedTargets.map((target) => renderMetricsRow(todayLog, target, true))
                 ) : (
                     <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground">No UPH targets defined.</TableCell>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground">No UPH targets defined.</TableCell> {/* Updated colspan */}
                     </TableRow>
                 )}
               </TableBody>
@@ -229,9 +225,11 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
            <Accordion type="multiple" className="w-full">
                {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date}>
+                         {/* Wrap content in a div to prevent button nesting */}
                         <AccordionTrigger className="text-base hover:no-underline">
-                            <div className="flex justify-between items-center w-full pr-2">
+                            <div className="flex justify-between items-center w-full pr-2"> {/* Use full width and padding for spacing */}
                                 <span>{formatFriendlyDate(new Date(date + 'T00:00:00'))}</span>
+                                 {/* Delete button is now a sibling of the span within the div, not a child of the trigger's button */}
                                 <Button
                                     variant="ghost"
                                     size="icon"
