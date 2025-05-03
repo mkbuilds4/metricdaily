@@ -14,7 +14,8 @@ import {
     addMinutes,
     getHours,
     getMinutes,
-    getSeconds
+    getSeconds,
+    addDays, // Import addDays
 } from 'date-fns';
 import type { DailyWorkLog, UPHTarget } from '@/types'; // Assuming types are defined
 
@@ -60,8 +61,8 @@ export function getWeekDates(date: Date = new Date()): Date[] {
 export function formatFriendlyDate(date: Date | null | undefined): string {
     if (!date || !isValid(date)) return 'Invalid Date';
     // Add T00:00:00 to ensure consistent parsing regardless of local timezone issues with parseISO/new Date()
-    const dateObj = typeof date === 'string' ? parseISO(date + 'T00:00:00') : date;
-    if (!isValid(dateObj)) return 'Invalid Date';
+    const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
+     if (!isValid(dateObj)) return 'Invalid Date';
     return format(dateObj, 'eee, MMM d');
 }
 
@@ -89,7 +90,8 @@ export function formatDurationFromHours(totalHours: number): string {
 
 
 /**
- * Calculates the projected time when the shift's target units will be hit, based on current progress.
+ * Calculates the projected time when the shift's target units will be hit,
+ * based on current progress and pace relative to the time elapsed in the shift.
  *
  * @param log - Today's DailyWorkLog object.
  * @param target - The relevant UPHTarget object.
@@ -102,49 +104,92 @@ export function calculateProjectedGoalHitTime(
     currentTime: Date | null
 ): string {
     if (!log || !target || !currentTime || !isValid(currentTime)) {
-        return '-'; // Not enough data or invalid current time
+        return '-';
     }
 
-    // 1. Calculate Total Planned Shift Duration (using the log's planned start/end/break)
-    const totalShiftDurationHours = calculateHoursWorked(log.date, log.startTime, log.endTime, log.breakDurationMinutes);
-    if (totalShiftDurationHours <= 0) {
-        // If total shift duration is zero or less, projection is not meaningful
-        return 'N/A (Shift Duration)';
+    // 1. Parse shift start/end times
+    const dateStr = log.date;
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(log.startTime) || !timeRegex.test(log.endTime)) {
+        console.error("Invalid log start/end time format:", log);
+        return 'Invalid Time';
+    }
+    const shiftStartDate = parse(`${dateStr} ${log.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+    let shiftEndDate = parse(`${dateStr} ${log.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+
+    if (!isValid(shiftStartDate) || !isValid(shiftEndDate)) {
+        console.error("Invalid parsed log start/end dates for projection:", log);
+        return 'Invalid Date';
     }
 
-    // 2. Calculate Target Units for the Full Planned Shift
-    const targetUnitsForShift = calculateRequiredUnitsForTarget(totalShiftDurationHours, target.targetUPH);
-    if (targetUnitsForShift <= 0) {
-        return 'N/A (Target Units)'; // If target units are zero or less
+    // Handle overnight shift
+    if (shiftEndDate < shiftStartDate) {
+        shiftEndDate = addDays(shiftEndDate, 1);
     }
 
-    // 3. Calculate Actual Units Completed So Far
+    // 2. Calculate Planned Total Shift Duration (including break)
+    const totalGrossShiftMinutes = differenceInMinutes(shiftEndDate, shiftStartDate);
+    if (totalGrossShiftMinutes <= 0) return 'N/A (Shift)';
+
+    // 3. Calculate Planned Net Work Duration
+    const totalNetWorkMinutes = totalGrossShiftMinutes - log.breakDurationMinutes;
+    if (totalNetWorkMinutes <= 0) return 'N/A (Work Time)';
+    const totalNetWorkHours = totalNetWorkMinutes / 60;
+
+    // 4. Calculate Target Units for the Full Shift
+    const targetUnitsForShift = totalNetWorkHours * target.targetUPH;
+    if (targetUnitsForShift <= 0) return 'N/A (Target)';
+
+    // 5. Calculate Actual Units Completed So Far
     const actualUnitsSoFar = calculateDailyUnits(log, target);
 
-    // 4. Calculate Units Still Needed for the Full Shift Target
-    const unitsNeeded = targetUnitsForShift - actualUnitsSoFar;
-
-    // 5. Check if Goal Already Met or Exceeded
-    if (unitsNeeded <= 0) {
+    // 6. Check if Goal Already Met
+    if (actualUnitsSoFar >= targetUnitsForShift) {
         return 'Goal Met';
     }
 
-    // 6. Calculate Current Actual UPH (based on time worked *so far*)
-    // 'log.hoursWorked' should represent the hours worked *up to the last save*.
-    // We need the UPH based on work done *so far today*.
-    const actualUPH = calculateDailyUPH(log, target); // This uses log.hoursWorked
+    // 7. Calculate Effective Work Time Elapsed *so far*
+    const minutesSinceShiftStart = differenceInMinutes(currentTime, shiftStartDate);
+    // If current time is before shift start, no time has elapsed
+    if (minutesSinceShiftStart <= 0) {
+       return '-'; // Shift hasn't started or just started
+    }
+    // Clamp elapsed time to the planned shift duration
+    const clampedMinutesSinceStart = Math.min(minutesSinceShiftStart, totalGrossShiftMinutes);
 
-    // 7. Check if Pace is Zero or negative (and goal not met)
-    if (actualUPH <= 0) {
-        return 'N/A (No Pace)'; // Cannot estimate if not progressing
+    // Estimate proportion of break taken based on time elapsed
+    const proportionOfShiftElapsed = clampedMinutesSinceStart / totalGrossShiftMinutes;
+    const estimatedBreakTakenSoFar = log.breakDurationMinutes * proportionOfShiftElapsed;
+
+    // Calculate net work minutes elapsed so far
+    const netWorkMinutesElapsed = Math.max(0, clampedMinutesSinceStart - estimatedBreakTakenSoFar);
+    if (netWorkMinutesElapsed <= 0) {
+        return '-'; // No effective work time yet (likely still on break)
+    }
+    const netWorkHoursElapsed = netWorkMinutesElapsed / 60;
+
+    // 8. Calculate Current Actual UPH (based on work done vs *actual time worked so far*)
+    const currentActualUPH = actualUnitsSoFar / netWorkHoursElapsed;
+
+    // 9. Check if Pace is Zero or negative (and goal not met)
+    if (currentActualUPH <= 0) {
+        return 'N/A (Pace)'; // Cannot estimate if not progressing
     }
 
-    // 8. Calculate Remaining Work Hours Needed at Current Pace
-    const remainingWorkHoursNeeded = unitsNeeded / actualUPH;
+    // 10. Calculate Units Still Needed
+    const unitsNeeded = targetUnitsForShift - actualUnitsSoFar;
 
-    // 9. Project the Completion Time
-    // Base the projection on the *current time*, adding the remaining *work hours* needed.
-    const projectedHitDate = addMinutes(currentTime, remainingWorkHoursNeeded * 60);
+    // 11. Calculate Remaining Net Work Hours Needed at Current Pace
+    const remainingNetWorkHoursNeeded = unitsNeeded / currentActualUPH;
+
+    // 12. Estimate Remaining Break Time
+    const remainingBreakMinutes = Math.max(0, log.breakDurationMinutes - estimatedBreakTakenSoFar);
+
+    // 13. Calculate Total Remaining Time (Work + Remaining Break) in minutes
+    const totalRemainingMinutesNeeded = (remainingNetWorkHoursNeeded * 60) + remainingBreakMinutes;
+
+    // 14. Project the Completion Time based on Current Time + Total Remaining Minutes
+    const projectedHitDate = addMinutes(currentTime, totalRemainingMinutesNeeded);
 
     if (!isValid(projectedHitDate)) {
         return 'Invalid Date';
@@ -152,8 +197,6 @@ export function calculateProjectedGoalHitTime(
 
     return format(projectedHitDate, 'hh:mm a'); // e.g., "11:40 PM"
 }
-
-
 
 
 // --- Calculation Helper Functions ---
@@ -288,10 +331,9 @@ export function calculateRequiredUnitsForTarget(hoursWorked: number | null | und
 }
 
 /**
- * Calculates the difference between the required units (to meet the target for the total logged hours)
- * and the actual units completed so far.
- * A positive result means the user is behind the target pace FOR THE LOGGED DURATION.
- * A negative result means the user is ahead of the target pace FOR THE LOGGED DURATION.
+ * Calculates the difference between the actual units completed and the required units (to meet the target for the total logged hours).
+ * A positive result means the user is ahead of the target pace FOR THE LOGGED DURATION.
+ * A negative result means the user is behind the target pace FOR THE LOGGED DURATION.
  *
  * @param log - The DailyWorkLog object.
  * @param target - The UPHTarget object.
@@ -308,3 +350,5 @@ export function calculateRemainingUnits(log: DailyWorkLog | null | undefined, ta
   // Difference = Actual - Required. Positive = Ahead, Negative = Behind
   return parseFloat((actualUnits - requiredUnits).toFixed(2));
 }
+
+    
