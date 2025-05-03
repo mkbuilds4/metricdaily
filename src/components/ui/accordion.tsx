@@ -3,7 +3,7 @@
 
 import * as React from "react"
 import * as AccordionPrimitive from "@radix-ui/react-accordion"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown } from "lucide-react" // Keep the import if needed elsewhere, but remove from default render
 
 import { cn } from "@/lib/utils"
 
@@ -15,8 +15,8 @@ const AccordionItem = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AccordionPrimitive.Item
     ref={ref}
-    // Removed border-b here, apply it on the item or trigger as needed
-    className={cn("", className)} // Keep base class empty or adjust as needed
+    // Ensure border is handled by the Item wrapper or content styling
+    className={cn("", className)} // Keep base class minimal
     {...props}
   />
 ))
@@ -27,20 +27,19 @@ const AccordionTrigger = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger>
 >(({ className, children, ...props }, ref) => (
   <AccordionPrimitive.Header className="flex">
-    {/* Ensure the Trigger itself doesn't introduce unwanted styles like underline */}
+    {/* Apply flex-1 to the trigger itself if it wraps content that needs space */}
     <AccordionPrimitive.Trigger
       ref={ref}
       className={cn(
-        "flex flex-1 items-center justify-between py-4 font-medium transition-all [&[data-state=open]>svg]:rotate-180",
-        // Remove hover:underline if it conflicts with card styling or nested buttons
-        // "hover:underline",
+        "flex flex-1 items-center font-medium transition-all", // Removed justify-between, py-4, removed hover:underline, removed icon rotation class
+        // Add custom styles for hover/focus/state if needed, e.g., hover:bg-muted/50
         className
       )}
       {...props}
     >
       {children}
-       {/* Chevron is now outside the main children flow if needed, or keep inside if layout demands */}
-       <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ml-2" /> {/* Added margin */}
+      {/* Removed the default ChevronDown icon - it should be added manually where needed */}
+      {/* <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ml-auto group-data-[state=open]:rotate-180" /> */}
     </AccordionPrimitive.Trigger>
   </AccordionPrimitive.Header>
 ))
@@ -55,7 +54,7 @@ const AccordionContent = React.forwardRef<
     className="overflow-hidden text-sm transition-all data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
     {...props}
   >
-    {/* Adjust padding as needed */}
+    {/* Padding should be applied consistently, maybe pb-4 is enough */}
     <div className={cn("pb-4 pt-0", className)}>{children}</div>
   </AccordionPrimitive.Content>
 ))

@@ -6,6 +6,7 @@ import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button'; // Import Button
 import { Trash2, Clock, Calendar, BookOpen, Video } from 'lucide-react'; // Import icons
 import { useToast } from "@/hooks/use-toast"; // Import useToast
+import { isValid } from 'date-fns'; // Import isValid
 import {
     Accordion,
     AccordionContent,
@@ -146,10 +147,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                 <CardDescription>Goal UPH: {target.targetUPH.toFixed(1)}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <div>
-                    <p className="text-muted-foreground">Actual Units</p>
-                    <p className="font-medium">{actualUnits.toFixed(2)}</p>
-                </div>
+                {/* Only show Actual Units once per day in the summary card */}
+                {!isToday && (
+                    <div>
+                        <p className="text-muted-foreground">Actual Units</p>
+                        <p className="font-medium">{actualUnits.toFixed(2)}</p>
+                    </div>
+                )}
                  <div>
                     <p className="text-muted-foreground">Units Needed</p>
                     <p className="font-medium">{requiredUnits.toFixed(2)}</p>
@@ -176,7 +180,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date; // Fallback to raw string if invalid
 
         return (
-            <Card className="mb-4 relative"> {/* Added relative positioning for delete button */}
+            <Card className="mb-4 relative group"> {/* Added relative positioning and group */}
                  <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                          <div>
@@ -191,7 +195,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                          <Button
                             variant="ghost"
                             size="icon"
-                            className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2" // Positioned top-right
+                            className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" // Positioned top-right, hide by default, show on hover/focus
                             onClick={(e) => {
                                 e.stopPropagation(); // Prevent accordion toggle if inside trigger
                                 handleDeleteLog(log);
@@ -270,13 +274,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
           <h3 className="text-xl font-semibold mb-3">Previous Logs</h3>
            <Accordion type="multiple" className="w-full space-y-4">
                {previousLogsByDate.map(({ date, log }) => (
-                    <AccordionItem value={date} key={date} className="border rounded-lg overflow-hidden">
+                    <AccordionItem value={date} key={date} className="border-none rounded-lg overflow-hidden shadow-sm"> {/* Removed border, added shadow */}
                          {/* Use AccordionTrigger to wrap the summary card for clickability */}
-                        <AccordionTrigger className="hover:no-underline p-0 data-[state=open]:bg-muted/30 transition-colors w-full text-left">
+                        <AccordionTrigger className="hover:no-underline p-0 data-[state=open]:bg-muted/30 transition-colors w-full text-left rounded-t-lg"> {/* Remove underline on hover */}
                              {/* Render summary card inside the trigger */}
                              {renderLogSummaryCard(log, false)}
                         </AccordionTrigger>
-                        <AccordionContent className="p-4 border-t bg-muted/10">
+                        <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-lg"> {/* Add border-t */}
                              {/* Detailed breakdown inside the content */}
                             <h4 className="text-md font-semibold mb-3">Target Breakdown for {formatFriendlyDate(new Date(date + 'T00:00:00'))}</h4>
                              {sortedTargets.length > 0 ? (
