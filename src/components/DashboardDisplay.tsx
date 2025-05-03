@@ -1,145 +1,162 @@
-"use client";
+'use client';
 
-import * as React from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Download, ArrowLeft, ArrowRight } from 'lucide-react'; // Add navigation icons
-import { type Metric } from "@/types";
-import { getMetricsForCurrentWeek, calculateWeeklyAverage, formatDateISO, getWeekDates, getMetricForDate } from "@/lib/utils";
-import { exportMetricsToSheet } from "@/app/actions"; // Import server action
-import { useToast } from "@/hooks/use-toast";
-import { eachDayOfInterval, format, addWeeks, subWeeks } from 'date-fns';
+import type React from 'react';
+import type { DailyWorkLog, UPHTarget } from '@/types'; // Assuming types are defined
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { exportWorkLogsToSheet } from '@/lib/actions'; // Assuming an action exists
 
+// --- Helper Functions (Move to lib/utils.ts later) ---
 
-type DashboardDisplayProps = {
-  metrics: Metric[]; // Directly use the metrics prop
-};
+/** Calculates total units for a log entry based on a target's weights. */
+function calculateDailyUnits(log: DailyWorkLog, target: UPHTarget): number {
+  return (log.documentsCompleted * target.docWeight) + (log.videoSessionsCompleted * target.videoWeight);
+}
 
-export function DashboardDisplay({ metrics }: DashboardDisplayProps) {
-  // Initialize currentWeekDate state internally and ensure it runs only once on mount
-  const [currentWeekDate, setCurrentWeekDate] = React.useState(() => new Date());
-  const [isExporting, setIsExporting] = React.useState(false);
-  const { toast } = useToast();
+/** Calculates Units Per Hour (UPH) for a log entry. */
+function calculateDailyUPH(log: DailyWorkLog, target: UPHTarget): number {
+  if (log.hoursWorked <= 0) {
+    return 0; // Avoid division by zero
+  }
+  const totalUnits = calculateDailyUnits(log, target);
+  return parseFloat((totalUnits / log.hoursWorked).toFixed(2));
+}
 
-  // Calculate derived state based on props and internal state
-  const weeklyMetrics = getMetricsForCurrentWeek(metrics, currentWeekDate);
-  const weeklyAverage = calculateWeeklyAverage(weeklyMetrics);
-  const { start, end } = getWeekDates(currentWeekDate);
-  const daysInWeek = eachDayOfInterval({ start, end });
+/** Calculates the number of units required to meet the target UPH for the hours worked. */
+function calculateRequiredUnitsForTarget(hoursWorked: number, targetUPH: number): number {
+    return parseFloat((hoursWorked * targetUPH).toFixed(2));
+}
+
+/** Calculates the difference between actual units and target units. */
+function calculateRemainingUnits(log: DailyWorkLog, target: UPHTarget): number {
+    const actualUnits = calculateDailyUnits(log, target);
+    const requiredUnits = calculateRequiredUnitsForTarget(log.hoursWorked, target.targetUPH);
+    return parseFloat((requiredUnits - actualUnits).toFixed(2));
+}
+
+// --- Component Props ---
+
+interface ProductivityDashboardProps {
+  workLogs: DailyWorkLog[];
+  activeTarget: UPHTarget | null;
+  // Add week selection/navigation props if needed
+}
+
+// --- Component ---
+
+const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({ workLogs = [], activeTarget }) => {
 
   const handleExport = async () => {
-    setIsExporting(true);
+    if (!activeTarget) {
+        alert("Please set an active target before exporting.");
+        return;
+    }
+     if (workLogs.length === 0) {
+        alert("No work logs available to export for the selected period.");
+        return;
+    }
+
+    // Format data for export
+    const exportData = workLogs.map(log => ({
+        date: log.date,
+        docs: log.documentsCompleted,
+        videos: log.videoSessionsCompleted,
+        hours: log.hoursWorked,
+        calculatedUnits: calculateDailyUnits(log, activeTarget),
+        calculatedUPH: calculateDailyUPH(log, activeTarget),
+        targetUnits: calculateRequiredUnitsForTarget(log.hoursWorked, activeTarget.targetUPH),
+        remainingUnits: calculateRemainingUnits(log, activeTarget),
+        notes: log.notes || '',
+    }));
+
     try {
-       const sheetData = metrics.map(m => ({
-        date: m.date,
-        value: m.value,
-        notes: m.notes || '',
-      }));
-
-      await exportMetricsToSheet(sheetData);
-
-      toast({
-        title: "Export Successful",
-        description: "Metrics data exported to Google Sheet.",
-        variant: "default",
-      });
+        // Assume exportWorkLogsToSheet is a server action defined in lib/actions.ts
+        // You'll need to pass spreadsheetId and sheetName, perhaps from config or state
+        await exportWorkLogsToSheet(exportData, 'YOUR_SPREADSHEET_ID', 'WorkLogsExport'); // Replace placeholders
+        alert('Data exported successfully!');
     } catch (error) {
-      console.error("Failed to export metrics:", error);
-      const errorMessage = error instanceof Error ? error.message : "Could not export data to Google Sheet. Ensure authentication and configuration are correct.";
-      toast({
-        title: "Export Failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setIsExporting(false);
+        console.error('Export failed:', error);
+        alert(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
-  const goToPreviousWeek = () => {
-    setCurrentWeekDate(prevDate => subWeeks(prevDate, 1));
-  };
-
-  const goToNextWeek = () => {
-    setCurrentWeekDate(prevDate => addWeeks(prevDate, 1));
-  };
 
   return (
-    <Card className="w-full shadow-lg">
-      <CardHeader className="flex flex-row items-center justify-between pb-2 space-x-4">
-        {/* Week Navigation */}
-        <div className="flex items-center space-x-2">
-           <Button onClick={goToPreviousWeek} variant="outline" size="icon" aria-label="Previous Week">
-              <ArrowLeft className="h-4 w-4" />
-           </Button>
-            <div>
-                <CardTitle className="text-xl md:text-2xl font-bold">Dashboard</CardTitle>
-                <CardDescription>
-                    Week: {format(start, 'MMM d')} - {format(end, 'MMM d, yyyy')}
-                </CardDescription>
+    <Card>
+      <CardHeader>
+        <CardTitle>Productivity Dashboard</CardTitle>
+         {/* Display Active Target Info */}
+         {activeTarget ? (
+            <div className="text-sm text-muted-foreground mt-2 p-3 border rounded-md">
+                <h4 className="font-semibold">Active Target: {activeTarget.name}</h4>
+                <p>Target UPH: {activeTarget.targetUPH}</p>
+                <p>Doc Weight: {activeTarget.docWeight} units</p>
+                <p>Video Weight: {activeTarget.videoWeight} units</p>
             </div>
-           <Button onClick={goToNextWeek} variant="outline" size="icon" aria-label="Next Week">
-              <ArrowRight className="h-4 w-4" />
-           </Button>
-        </div>
-
-        {/* Export Button */}
-        <Button onClick={handleExport} variant="outline" size="sm" disabled={isExporting} className="ml-auto">
-          <Download className="mr-2 h-4 w-4" />
-          {isExporting ? 'Exporting...' : 'Export'}
-        </Button>
+            ) : (
+            <p className="text-sm text-destructive mt-2">No active UPH target set. Please set one in the Target Manager.</p>
+            )}
       </CardHeader>
-      <CardContent className="space-y-6">
-        <Card>
-           <CardHeader>
-             <CardTitle className="text-lg">Weekly Overview</CardTitle>
-           </CardHeader>
-           <CardContent>
-              <div className="text-3xl font-bold text-primary">
-                {weeklyAverage.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Average metric value this week
-              </p>
-           </CardContent>
-        </Card>
+      <CardContent>
+        {/* Daily Breakdown Table */}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Docs</TableHead>
+              <TableHead>Videos</TableHead>
+              <TableHead>Hours</TableHead>
+              <TableHead>Total Units</TableHead>
+              <TableHead>Actual UPH</TableHead>
+              <TableHead>Target Units</TableHead>
+              <TableHead>+/- Target</TableHead>
+              {/* Optional: <TableHead>Progress</TableHead> */}
+              <TableHead>Notes</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {workLogs.length === 0 && (
+                 <TableRow>
+                    <TableCell colSpan={9} className="text-center text-muted-foreground">No work logs recorded for this period.</TableCell>
+                </TableRow>
+            )}
+            {workLogs.map((log) => {
+              const hasTarget = !!activeTarget;
+              const totalUnits = hasTarget ? calculateDailyUnits(log, activeTarget) : '-';
+              const actualUPH = hasTarget ? calculateDailyUPH(log, activeTarget) : '-';
+              const targetUnits = hasTarget ? calculateRequiredUnitsForTarget(log.hoursWorked, activeTarget.targetUPH) : '-';
+              const remainingUnits = hasTarget ? calculateRemainingUnits(log, activeTarget) : '-';
+              const remainingColor = typeof remainingUnits === 'number' ? (remainingUnits > 0 ? 'text-destructive' : 'text-accent') : ''; // Red if behind, Green if ahead/met
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Daily Metrics</CardTitle>
-          </CardHeader>
-          <CardContent>
-             <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[100px] md:w-[150px]">Date</TableHead>
-                    <TableHead>Day</TableHead>
-                    <TableHead className="text-right">Value</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {daysInWeek.map((day) => {
-                    // Use weeklyMetrics derived from the main metrics prop and currentWeekDate state
-                    const metric = getMetricForDate(weeklyMetrics, day);
-                    const formattedDate = formatDateISO(day);
-                    const dayOfWeek = format(day, 'EEEE'); // e.g., Monday
-
-                    return (
-                      <TableRow key={formattedDate}>
-                        <TableCell className="font-medium">{format(day, 'MMM d')}</TableCell>
-                        <TableCell>{dayOfWeek}</TableCell>
-                        <TableCell className="text-right">
-                            {metric !== undefined ? metric.toLocaleString() : <span className="text-muted-foreground">-</span>}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-          </CardContent>
-        </Card>
+              return (
+                <TableRow key={log.id || log.date}>
+                  <TableCell>{log.date}</TableCell>
+                  <TableCell>{log.documentsCompleted}</TableCell>
+                  <TableCell>{log.videoSessionsCompleted}</TableCell>
+                  <TableCell>{log.hoursWorked}</TableCell>
+                  <TableCell>{totalUnits}</TableCell>
+                  <TableCell>{actualUPH}</TableCell>
+                  <TableCell>{targetUnits}</TableCell>
+                  <TableCell className={remainingColor}>
+                     {typeof remainingUnits === 'number' ? (remainingUnits > 0 ? `-${remainingUnits}` : `+${Math.abs(remainingUnits)}`) : '-'}
+                  </TableCell>
+                  {/* Optional Progress Bar Cell */}
+                  <TableCell className="max-w-[200px] truncate">{log.notes || ''}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+        {/* Export Button */}
+         <div className="mt-4 flex justify-end">
+            <Button onClick={handleExport} disabled={!activeTarget || workLogs.length === 0}>
+                Export to Sheet
+            </Button>
+         </div>
       </CardContent>
     </Card>
   );
-}
+};
+
+export default ProductivityDashboard;

@@ -1,105 +1,63 @@
-'use client'
+import React from 'react';
+import WorkLogInputForm from '@/components/WorkLogInputForm';
+import UPHTargetManager from '@/components/UPHTargetManager';
+import ProductivityDashboard from '@/components/DashboardDisplay';
+import { getWorkLogs, getActiveUPHTarget, saveWorkLog, getUPHTargets } from '@/lib/actions'; // Import server actions
+import type { DailyWorkLog, UPHTarget } from '@/types';
+import { revalidatePath } from 'next/cache'; // Import revalidatePath
 
-import * as React from 'react';
-import { MetricInputForm } from '@/components/MetricInputForm';
-import { DashboardDisplay } from '@/components/DashboardDisplay';
-import { type Metric } from '@/types';
-import { getMetrics, addMetric } from '@/app/actions'; // Import server actions
-import { useToast } from "@/hooks/use-toast"; // Import useToast
+// This component remains a Server Component
 
-export default function Home() {
-  const [metrics, setMetrics] = React.useState<Metric[]>([]);
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const { toast } = useToast(); // Use the toast hook
+// Helper function to trigger revalidation - needed after mutations
+async function revalidateDashboard() {
+  'use server';
+  revalidatePath('/'); // Revalidate the home page
+}
 
-  // Fetch initial metrics on component mount
-  React.useEffect(() => {
-    async function loadMetrics() {
-      try {
-        setIsLoading(true);
-        const fetchedMetrics = await getMetrics();
-        // Sort fetched metrics by date descending immediately
-        setMetrics(fetchedMetrics.sort((a, b) => b.date.localeCompare(a.date)));
-        setError(null);
-      } catch (err) {
-        console.error("Failed to fetch metrics:", err);
-        setError("Failed to load metrics. Please try refreshing the page.");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    loadMetrics();
-  }, []); // Empty dependency array ensures this runs only once on mount
 
-  // Callback function to update metrics state when a new metric is added or updated
-  const handleMetricSaved = async (metricData: Omit<Metric, 'id'>) => {
+export default async function Home() {
+  // Fetch initial data directly in the Server Component
+  // Using Promise.all for potentially parallel fetching
+  const [workLogs, activeTarget, targets] = await Promise.all([
+    getWorkLogs(),
+    getActiveUPHTarget(),
+    getUPHTargets(),
+  ]);
+
+  // Server action to handle saving work logs
+  // It will internally call the saveWorkLog action and then revalidate
+  // No need for inline 'use server' here as it's defined within a Server Component
+  const handleSaveWorkLogAction = async (logData: Omit<DailyWorkLog, 'id'>) => {
+    // 'use server'; // Removed inline directive
     try {
-      const savedMetric = await addMetric(metricData); // Call the server action
-
-      setMetrics((prevMetrics) => {
-        // Check if the metric already exists (based on date)
-        const existingIndex = prevMetrics.findIndex(m => m.date === savedMetric.date);
-        let updatedMetrics;
-        if (existingIndex > -1) {
-          // Update existing metric in the array
-          updatedMetrics = [...prevMetrics];
-          updatedMetrics[existingIndex] = savedMetric;
-           toast({
-             title: "Metric Updated",
-             description: `Metric for ${savedMetric.date} updated successfully.`,
-             variant: "default",
-           });
-        } else {
-          // Add new metric
-          updatedMetrics = [...prevMetrics, savedMetric];
-           toast({
-             title: "Metric Added",
-             description: `Metric for ${savedMetric.date} saved successfully.`,
-             variant: "default",
-           });
-        }
-        // Ensure the list remains sorted by date descending
-        return updatedMetrics.sort((a, b) => b.date.localeCompare(a.date));
-      });
-
+      await saveWorkLog(logData);
+      revalidateDashboard(); // Revalidate after saving
     } catch (error) {
-       console.error("Failed to save metric:", error);
-       toast({
-           title: "Error",
-           description: "Failed to save metric. Please try again.",
-           variant: "destructive",
-       });
+      console.error("Failed to save work log:", error);
+      // Optionally, return an error state or throw the error
+      throw error; // Re-throw to potentially handle in the form
     }
+  };
+
+   // Server action to handle target updates and revalidation
+   // No need for inline 'use server' here as it's defined within a Server Component
+  const handleTargetsUpdateAction = async () => {
+    // 'use server'; // Removed inline directive
+    revalidateDashboard(); // Revalidate when targets are updated/deleted/activated
   };
 
 
   return (
-    <main className="container mx-auto p-4 md:p-8 min-h-screen bg-background"> {/* Changed bg-secondary to bg-background for main area */}
-      <header className="mb-8">
-        <h1 className="text-4xl font-bold text-primary">Metric Daily</h1>
-        <p className="text-muted-foreground">Track your important numbers day by day.</p>
-      </header>
-
-      {error && (
-        <div className="mb-4 p-4 border border-destructive/50 text-destructive bg-destructive/10 rounded-md">
-          {error}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Form now sits in a Card for visual consistency */}
-        <div className="lg:col-span-1">
-           <MetricInputForm onMetricSaved={handleMetricSaved} />
-        </div>
-
-        <div className="lg:col-span-2">
-          {isLoading ? (
-             <div className="p-6 border rounded-lg shadow-sm bg-card text-center text-muted-foreground">Loading dashboard...</div>
-          ) : (
-             <DashboardDisplay metrics={metrics} />
-          )}
-        </div>
+    <main className="flex min-h-screen flex-col items-center p-4 md:p-8 lg:p-12">
+       {/* Added responsive padding */}
+      <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Metric Daily Dashboard</h1>
+      <div className="w-full max-w-5xl space-y-8">
+        {/* Pass the server action wrapper to the client component */}
+        <WorkLogInputForm onWorkLogSaved={handleSaveWorkLogAction} />
+        {/* Pass targets and the revalidation action wrapper */}
+        <UPHTargetManager targets={targets} onTargetsUpdate={handleTargetsUpdateAction} />
+        {/* Pass fetched data to the display component */}
+        <ProductivityDashboard workLogs={workLogs} activeTarget={activeTarget} />
       </div>
     </main>
   );
