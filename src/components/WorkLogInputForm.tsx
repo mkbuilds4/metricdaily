@@ -20,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Clock } from 'lucide-react'; // Import Clock icon
 import { cn, calculateHoursWorked } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 import type { DailyWorkLog } from '@/types';
@@ -300,7 +300,10 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                     <FormItem>
                     <FormLabel>Start Time (HH:mm)</FormLabel>
                     <FormControl>
-                        <Input type="time" {...field} />
+                       <div className="relative">
+                          <Input type="time" {...field} className="pr-8" />
+                          <Clock className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                       </div>
                     </FormControl>
                     <FormMessage />
                     </FormItem>
@@ -314,7 +317,10 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                     <FormItem>
                     <FormLabel>End Time (HH:mm)</FormLabel>
                     <FormControl>
-                        <Input type="time" {...field} />
+                       <div className="relative">
+                          <Input type="time" {...field} className="pr-8" />
+                           <Clock className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                       </div>
                     </FormControl>
                     <FormMessage />
                     </FormItem>
