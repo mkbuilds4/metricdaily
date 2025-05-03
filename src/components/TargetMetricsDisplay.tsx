@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -141,7 +140,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
              shiftEndDate = addDays(shiftEndDate, 1);
         }
     }
-    if (!isValid(shiftEndDate)) shiftEndDate = addHours(shiftStartDate, log.hoursWorked + (log.breakDurationMinutes / 60)); // Estimate if end time invalid
+    // Estimate end date if invalid or missing for projection purposes
+    if (!shiftEndDate || !isValid(shiftEndDate)) {
+        shiftEndDate = addHours(shiftStartDate, log.hoursWorked + (log.breakDurationMinutes / 60));
+    }
+    // Final validation after potential adjustment/estimation
+     if (!isValid(shiftEndDate)) return { currentUnits, currentUPH: 0 };
+
 
     const totalGrossShiftMinutes = differenceInMinutes(shiftEndDate, shiftStartDate);
     const minutesSinceShiftStart = differenceInMinutes(now, shiftStartDate);
@@ -172,6 +177,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       const totalActualUnits = calculateDailyUnits(log, target);
       const totalRequiredUnits = calculateRequiredUnitsForTarget(log.hoursWorked, target.targetUPH);
       const totalDifferenceUnits = calculateRemainingUnits(log, target);
+      const totalActualUPH = calculateDailyUPH(log, target); // Total UPH for the log
 
       let goalHitTimeFormatted = '-';
       let currentMetrics = { currentUnits: 0, currentUPH: 0 };
@@ -188,7 +194,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
             <CardHeader className="pb-2">
                  <div className="flex justify-between items-start">
                     <CardTitle className="text-lg font-semibold">{target.name}</CardTitle>
-                    {/* Show +/- vs Goal only for previous logs, not today */}
+                    {/* Show +/- vs Goal only for previous logs */}
                     {!isToday && (
                          <span className={`text-lg font-bold ${isBehind ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
                             {(totalDifferenceUnits >= 0 ? '+' : '') + totalDifferenceUnits.toFixed(2)} Units
@@ -198,17 +204,18 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                 <CardDescription>Goal UPH: {target.targetUPH.toFixed(1)}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                 {/* Show total metrics for comparison (shown for both today and previous) */}
+                 {/* Total Metrics (Comparison) */}
                  <div>
-                    <p className="text-muted-foreground">Units (Total)</p>
+                    <p className="text-muted-foreground">Units Completed</p>
                     <p className="font-medium">{totalActualUnits.toFixed(2)}</p>
-                </div>
+                 </div>
                  <div>
-                    <p className="text-muted-foreground">Units Needed (Total)</p>
+                    <p className="text-muted-foreground">Units Needed</p>
                     <p className="font-medium">{totalRequiredUnits.toFixed(2)}</p>
-                </div>
+                 </div>
 
-                 {/* Show current metrics only for today */}
+
+                 {/* Current Metrics (Today Only) */}
                 {isToday && (
                     <>
                         <div>
@@ -254,7 +261,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 size="icon"
                                 className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10"
                                 onClick={(e) => {
-                                    e.stopPropagation(); // Prevent accordion trigger
+                                    e.stopPropagation(); // Prevent accordion trigger if inside one
                                     handleDeleteLog(log);
                                 }}
                                 title="Delete This Log"
@@ -338,7 +345,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                          {/* Previous Log Summary Component used as the trigger */}
                          <AccordionTrigger asChild className="p-0 hover:no-underline focus-visible:ring-1 focus-visible:ring-ring rounded-md data-[state=open]:bg-muted/50">
                             <div className="p-4 cursor-pointer hover:bg-muted/30 rounded-md transition-colors w-full relative group">
-                                <PreviousLogTriggerSummary log={log} activeTarget={activeTarget} /> {/* Use the dedicated trigger component */}
+                                {/* Pass all targets to the trigger summary */}
+                                <PreviousLogTriggerSummary log={log} allTargets={sortedTargets} />
                                 <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 absolute top-4 right-4 group-data-[state=open]:rotate-180" />
                                  {/* Delete Button specific to previous logs trigger */}
                                  <Button
@@ -389,5 +397,3 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
-
-    
