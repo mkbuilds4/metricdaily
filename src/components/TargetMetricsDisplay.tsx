@@ -1,17 +1,22 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  calculateDailyUnits,
-  calculateDailyUPH,
-  calculateRequiredUnitsForTarget,
-  formatDurationFromHours,
-  calculateProjectedGoalHitTime,
-  formatDateISO,
-  formatFriendlyDate, // Import for displaying dates
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from "@/components/ui/accordion"; // Import Accordion components
+import {
+    calculateDailyUnits,
+    calculateDailyUPH,
+    calculateRequiredUnitsForTarget,
+    formatDurationFromHours,
+    calculateProjectedGoalHitTime,
+    formatDateISO,
+    formatFriendlyDate,
 } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 
@@ -39,11 +44,11 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     return () => clearInterval(timerId);
   }, []);
 
-  // Separate logs into today and previous days
-  const { todayLog, previousLogs } = useMemo(() => {
+  // Separate logs into today and previous days, grouped by date for previous logs
+  const { todayLog, previousLogsByDate } = useMemo(() => {
     const todayDateStr = formatDateISO(new Date());
     let foundTodayLog: DailyWorkLog | null = null;
-    const prevLogs: DailyWorkLog[] = [];
+    const prevLogsMap: Record<string, DailyWorkLog[]> = {};
 
     // Sort logs by date descending first
     const sortedLogs = [...allWorkLogs].sort((a, b) => b.date.localeCompare(a.date));
@@ -51,25 +56,38 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     sortedLogs.forEach(log => {
       if (log.date === todayDateStr && !foundTodayLog) {
         foundTodayLog = log; // Take the first (most recent) log for today
-      } else {
-        prevLogs.push(log);
+      } else if (log.date !== todayDateStr) {
+          if (!prevLogsMap[log.date]) {
+              prevLogsMap[log.date] = [];
+          }
+          // For simplicity, let's assume only one log per previous date for now
+          // If multiple logs per day need merging/handling, logic would go here.
+          // Currently, it will just store the most recent log for that date based on sorting.
+          if (prevLogsMap[log.date].length === 0) {
+            prevLogsMap[log.date].push(log);
+          }
       }
     });
 
-    return { todayLog: foundTodayLog, previousLogs: prevLogs };
+    // Convert map to array of {date, log} for easier rendering
+    const prevLogsGrouped = Object.entries(prevLogsMap)
+                                .map(([date, logs]) => ({ date, log: logs[0] })) // Take the first log for that date
+                                .sort((a, b) => b.date.localeCompare(a.date)); // Ensure dates are descending
+
+    return { todayLog: foundTodayLog, previousLogsByDate: prevLogsGrouped };
   }, [allWorkLogs]);
 
 
   // Sort targets by Goal UPH ascending for display consistency
   const sortedTargets = [...targets].sort((a, b) => a.targetUPH - b.targetUPH);
 
-  // --- Helper Function to Render a Metrics Row ---
-  const renderMetricsRow = (log: DailyWorkLog, target: UPHTarget, isToday: boolean) => {
+  // --- Helper Function to Render a Metrics Row (Shared by Today and Previous) ---
+  const renderMetricsRow = (log: DailyWorkLog, target: UPHTarget, isToday: boolean, showDate: boolean = false) => {
       if (log.hoursWorked <= 0) {
           // Display placeholder row if no valid log data yet for calculations
           return (
               <TableRow key={`${log.id}-${target.id}`}>
-                  {!isToday && <TableCell>{formatFriendlyDate(new Date(log.date + 'T00:00:00'))}</TableCell>} {/* Add Date for previous logs */}
+                  {showDate && <TableCell>{formatFriendlyDate(new Date(log.date + 'T00:00:00'))}</TableCell>}
                   <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
                   <TableCell className="text-right">{log.documentsCompleted}</TableCell>
                   <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>
@@ -105,7 +123,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
       return (
           <TableRow key={`${log.id}-${target.id}`}>
-               {!isToday && <TableCell>{formatFriendlyDate(new Date(log.date + 'T00:00:00'))}</TableCell>}
+               {showDate && <TableCell>{formatFriendlyDate(new Date(log.date + 'T00:00:00'))}</TableCell>}
               <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
               <TableCell className="text-right">{log.documentsCompleted}</TableCell>
               <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>
@@ -138,8 +156,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-right">Goal UPH</TableHead>
-                  <TableHead className="text-right">Docs Done</TableHead> {/* Added */}
-                  <TableHead className="text-right">Videos Done</TableHead> {/* Added */}
+                  <TableHead className="text-right">Docs Done</TableHead>
+                  <TableHead className="text-right">Videos Done</TableHead>
                   <TableHead className="text-right">Total Units Needed</TableHead>
                   <TableHead className="text-right">Actual UPH</TableHead>
                   <TableHead className="text-right">Actual Units</TableHead>
@@ -162,44 +180,52 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       )}
 
       {/* --- Separator --- */}
-       {todayLog && previousLogs.length > 0 && <Separator className="my-6" />}
+       {todayLog && previousLogsByDate.length > 0 && <Separator className="my-6" />}
 
-      {/* --- Previous Logs Section --- */}
-      {previousLogs.length > 0 && (
+      {/* --- Previous Logs Section (Accordion) --- */}
+      {previousLogsByDate.length > 0 && (
         <div>
           <h3 className="text-lg font-semibold mb-2">Previous Logs</h3>
-           <div className="overflow-x-auto border rounded-md">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                    <TableHead>Date</TableHead> {/* Added Date column */}
-                    <TableHead className="text-right">Goal UPH</TableHead>
-                    <TableHead className="text-right">Docs Done</TableHead> {/* Added */}
-                    <TableHead className="text-right">Videos Done</TableHead> {/* Added */}
-                    <TableHead className="text-right">Total Units Needed</TableHead>
-                    <TableHead className="text-right">Actual UPH</TableHead>
-                    <TableHead className="text-right">Actual Units</TableHead>
-                   {/* Removed % Completed, % Diff, Time Left, Est. Time */}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedTargets.length > 0 ? (
-                    previousLogs.flatMap(log => // Use flatMap to handle multiple logs
-                      sortedTargets.map(target => renderMetricsRow(log, target, false))
-                    )
-                ) : (
-                     <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground">No UPH targets defined.</TableCell>
-                    </TableRow>
-                )}
-              </TableBody>
-            </Table>
-           </div>
+           <Accordion type="multiple" className="w-full">
+               {previousLogsByDate.map(({ date, log }) => (
+                    <AccordionItem value={date} key={date}>
+                        <AccordionTrigger className="text-base hover:no-underline">
+                            {formatFriendlyDate(new Date(date + 'T00:00:00'))}
+                        </AccordionTrigger>
+                        <AccordionContent>
+                             <div className="overflow-x-auto border rounded-md mt-2">
+                                <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                    {/* No Date column needed here */}
+                                    <TableHead className="text-right">Goal UPH</TableHead>
+                                    <TableHead className="text-right">Docs Done</TableHead>
+                                    <TableHead className="text-right">Videos Done</TableHead>
+                                    <TableHead className="text-right">Total Units Needed</TableHead>
+                                    <TableHead className="text-right">Actual UPH</TableHead>
+                                    <TableHead className="text-right">Actual Units</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {sortedTargets.length > 0 ? (
+                                        sortedTargets.map(target => renderMetricsRow(log, target, false)) // Pass false for isToday
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center text-muted-foreground">No UPH targets defined for this day.</TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                                </Table>
+                            </div>
+                        </AccordionContent>
+                    </AccordionItem>
+               ))}
+           </Accordion>
         </div>
       )}
 
        {/* Message if no logs exist at all */}
-       {!todayLog && previousLogs.length === 0 && targets.length > 0 && (
+       {!todayLog && previousLogsByDate.length === 0 && targets.length > 0 && (
            <p className="text-sm text-muted-foreground">No work logs found.</p>
        )}
        {/* Message if no targets exist */}
