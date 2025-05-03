@@ -46,12 +46,14 @@ const formSchema = z.object({
 }).refine(data => {
     // Basic validation: end time should logically be after start time (simple check)
     // More complex validation (crossing midnight) is handled in calculateHoursWorked
+    // Ensure date is valid before attempting to parse times with it
+    if (!isValid(data.date)) return false;
     const startDate = parse(`${format(data.date, 'yyyy-MM-dd')} ${data.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
     const endDate = parse(`${format(data.date, 'yyyy-MM-dd')} ${data.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
     return isValid(startDate) && isValid(endDate); // Ensure dates are valid before comparison logic
     // We let calculateHoursWorked handle the overnight logic, just check parsing here
 }, {
-    message: "Start or end time is invalid.",
+    message: "Start or end time is invalid or date is missing.",
     path: ["endTime"], // Attach error to endTime field for simplicity
 });
 
@@ -67,13 +69,15 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [calculatedHours, setCalculatedHours] = useState<number | null>(
-     existingLog ? calculateHoursWorked(existingLog.date, existingLog.startTime, existingLog.endTime, existingLog.breakDurationMinutes) : null
+     existingLog && isValid(parse(existingLog.date, 'yyyy-MM-dd', new Date()))
+       ? calculateHoursWorked(existingLog.date, existingLog.startTime, existingLog.endTime, existingLog.breakDurationMinutes)
+       : null
   );
 
   const form = useForm<WorkLogFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      date: existingLog ? parse(existingLog.date, 'yyyy-MM-dd', new Date()) : new Date(),
+      date: existingLog && isValid(parse(existingLog.date, 'yyyy-MM-dd', new Date())) ? parse(existingLog.date, 'yyyy-MM-dd', new Date()) : new Date(),
       startTime: existingLog?.startTime ?? '',
       endTime: existingLog?.endTime ?? '',
       breakDurationMinutes: existingLog?.breakDurationMinutes ?? 0,
@@ -90,12 +94,17 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
 
   // Calculate hours worked whenever relevant fields change
   useEffect(() => {
-      const formattedDate = format(watchDate, 'yyyy-MM-dd');
-      if (watchStartTime && watchEndTime && watchBreakMinutes !== undefined && formattedDate) {
-          const hours = calculateHoursWorked(formattedDate, watchStartTime, watchEndTime, watchBreakMinutes);
-          setCalculatedHours(hours);
+      // Check if watchDate is a valid Date object before formatting
+      if (isValid(watchDate)) {
+          const formattedDate = format(watchDate, 'yyyy-MM-dd');
+          if (watchStartTime && watchEndTime && watchBreakMinutes !== undefined && formattedDate) {
+              const hours = calculateHoursWorked(formattedDate, watchStartTime, watchEndTime, watchBreakMinutes);
+              setCalculatedHours(hours);
+          } else {
+              setCalculatedHours(null); // Reset if other inputs are incomplete/invalid
+          }
       } else {
-          setCalculatedHours(null); // Reset if inputs are incomplete/invalid
+          setCalculatedHours(null); // Reset if date is invalid
       }
   }, [watchStartTime, watchEndTime, watchBreakMinutes, watchDate]);
 
@@ -103,17 +112,32 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
    // Update form default values if existingLog changes
    useEffect(() => {
     if (existingLog) {
-      const hours = calculateHoursWorked(existingLog.date, existingLog.startTime, existingLog.endTime, existingLog.breakDurationMinutes);
-      setCalculatedHours(hours);
-      form.reset({
-        date: parse(existingLog.date, 'yyyy-MM-dd', new Date()),
-        startTime: existingLog.startTime,
-        endTime: existingLog.endTime,
-        breakDurationMinutes: existingLog.breakDurationMinutes,
-        documentsCompleted: existingLog.documentsCompleted,
-        videoSessionsCompleted: existingLog.videoSessionsCompleted,
-        notes: existingLog.notes ?? '',
-      });
+      const parsedDate = parse(existingLog.date, 'yyyy-MM-dd', new Date());
+      if (isValid(parsedDate)) {
+        const hours = calculateHoursWorked(existingLog.date, existingLog.startTime, existingLog.endTime, existingLog.breakDurationMinutes);
+        setCalculatedHours(hours);
+        form.reset({
+          date: parsedDate,
+          startTime: existingLog.startTime,
+          endTime: existingLog.endTime,
+          breakDurationMinutes: existingLog.breakDurationMinutes,
+          documentsCompleted: existingLog.documentsCompleted,
+          videoSessionsCompleted: existingLog.videoSessionsCompleted,
+          notes: existingLog.notes ?? '',
+        });
+      } else {
+         // Handle case where existingLog.date is invalid
+         setCalculatedHours(null);
+         form.reset({
+            date: new Date(), // Default to today if existing date is bad
+            startTime: existingLog.startTime,
+            endTime: existingLog.endTime,
+            breakDurationMinutes: existingLog.breakDurationMinutes,
+            documentsCompleted: existingLog.documentsCompleted,
+            videoSessionsCompleted: existingLog.videoSessionsCompleted,
+            notes: existingLog.notes ?? '',
+         });
+      }
     } else {
        setCalculatedHours(null);
        form.reset({
@@ -132,6 +156,17 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
   // Handle form submission
   const onSubmit = async (values: WorkLogFormData) => {
     setIsLoading(true);
+    // Ensure date is valid before proceeding
+    if (!isValid(values.date)) {
+        toast({
+            variant: "destructive",
+            title: "Invalid Date",
+            description: "Please select a valid date.",
+        });
+        setIsLoading(false);
+        return;
+    }
+
     try {
       const formattedDate = format(values.date, 'yyyy-MM-dd');
       const hoursWorked = calculateHoursWorked(formattedDate, values.startTime, values.endTime, values.breakDurationMinutes);
@@ -218,7 +253,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                                 !field.value && 'text-muted-foreground'
                             )}
                             >
-                            {field.value ? (
+                            {field.value && isValid(field.value) ? (
                                 format(field.value, 'PPP') // Pretty date format
                             ) : (
                                 <span>Pick a date</span>
@@ -247,7 +282,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                  <div className="flex flex-col justify-end pb-1">
                     <FormLabel>Calculated Hours</FormLabel>
                     <div className="h-10 px-3 py-2 text-sm font-medium text-muted-foreground border border-input rounded-md bg-muted">
-                        {calculatedHours !== null ? `${calculatedHours} hrs` : 'Enter times & break'}
+                        {calculatedHours !== null ? `${calculatedHours.toFixed(2)} hrs` : 'Enter times & break'}
                     </div>
                  </div>
             </div>
