@@ -1,117 +1,102 @@
+// src/lib/actions.ts
 'use server';
 
-import { revalidatePath } from 'next/cache'; // Import revalidatePath
+import { revalidatePath } from 'next/cache';
 import type { DailyWorkLog, UPHTarget, GoogleSheetsData } from '@/types';
-import { exportToGoogleSheets as exportSheetService } from '@/services/google-sheets'; // Import the service
-import { calculateHoursWorked } from './utils'; // Import the calculator
+import { db } from './firebase'; // Import the initialized Firestore instance
+import { exportToGoogleSheets as exportSheetService } from '@/services/google-sheets';
+import { FieldValue } from 'firebase-admin/firestore'; // Needed for transactions/updates
 
-// --- In-Memory Data Stores (Replace with Database/Persistent Storage) ---
+// Firestore Collection References
+const workLogsCollection = db.collection('worklogs');
+const uphTargetsCollection = db.collection('uphtargets');
 
-let workLogStore: DailyWorkLog[] = [
-    // Sample Data (Optional - remove for production)
-    // { id: 'log-1721234567890-abc12', date: '2024-07-15', startTime: '09:00', endTime: '17:30', breakDurationMinutes: 30, hoursWorked: 8, documentsCompleted: 50, videoSessionsCompleted: 10, notes: 'Regular day' },
-    // { id: 'log-1721320987654-def34', date: '2024-07-16', startTime: '08:30', endTime: '17:30', breakDurationMinutes: 45, hoursWorked: 8.25, documentsCompleted: 65, videoSessionsCompleted: 12, notes: 'Busy morning' },
-    // { id: 'log-1721407321098-ghi56', date: '2024-07-17', startTime: '10:00', endTime: '16:00', breakDurationMinutes: 0, hoursWorked: 6, documentsCompleted: 40, videoSessionsCompleted: 8, notes: 'Short day' },
-]; // Start empty or with actual persisted data
-
-let uphTargetStore: UPHTarget[] = [
-    // Sample Data (Ensure one is active by default) - Using new fields
-    { id: 'std-1', name: 'Standard', targetUPH: 10, docsPerUnit: 5, videosPerUnit: 2.5, isActive: true }, // e.g., 5 docs = 1 unit, 2.5 videos = 1 unit
-    { id: 'peak-1', name: 'Peak Hours', targetUPH: 12.5, docsPerUnit: 4, videosPerUnit: 2, isActive: false }, // e.g., 4 docs = 1 unit, 2 videos = 1 unit
-];
-
-// let nextWorkLogId = workLogStore.length + 1; // Remove if using timestamp/random ID
-let nextTargetId = uphTargetStore.length + 1;
-
-// --- Helper Function ---
-function generateId(prefix: string = 'id'): string {
-    // In a real app, use a more robust ID generation (e.g., UUID)
-    // Using timestamp + random string for better uniqueness for logs
-    return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-}
-
+// --- Helper Function (No longer needed for in-memory ID generation) ---
+// function generateId(prefix: string = 'id'): string {
+//     return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+// }
 
 // === Work Log Actions ===
 
 /**
- * Fetches all work logs.
- * Replace with database query in a real application.
+ * Fetches all work logs from Firestore, sorted by date descending.
  */
 export async function getWorkLogs(): Promise<DailyWorkLog[]> {
   console.log('[Action] getWorkLogs called');
-  // Simulate async operation
-  await new Promise(resolve => setTimeout(resolve, 50));
-  // Return a deep copy to prevent accidental mutation of the store, sorted by date desc
-  return JSON.parse(JSON.stringify(workLogStore)).sort((a: DailyWorkLog, b: DailyWorkLog) => b.date.localeCompare(a.date));
+  try {
+    const snapshot = await workLogsCollection.orderBy('date', 'desc').get();
+    if (snapshot.empty) {
+      return [];
+    }
+    // Map Firestore documents to DailyWorkLog type
+    const logs = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...(doc.data() as Omit<DailyWorkLog, 'id'>), // Assert type after getting data
+    }));
+    return logs;
+  } catch (error) {
+    console.error("[Action] Error fetching work logs:", error);
+    // Depending on requirements, you might return [] or throw the error
+    throw new Error("Could not fetch work logs.");
+  }
 }
 
 /**
- * Saves (adds or updates) a work log entry.
- * If an entry for the given date exists, it updates it. Otherwise, it adds a new one.
- * Expects `hoursWorked` to be pre-calculated and passed in.
- * Replace with database upsert logic in a real application.
+ * Saves (adds or updates) a work log entry in Firestore.
+ * Expects `hoursWorked` to be pre-calculated.
+ * If `logData.id` is provided, it updates the existing document.
+ * Otherwise, it adds a new document and Firestore generates the ID.
  */
 export async function saveWorkLog(
-    logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number } // Allow optional ID for updates
+    logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }
 ): Promise<DailyWorkLog> {
     console.log('[Action] saveWorkLog called with:', logData);
-    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async
 
-    // Data validation (basic)
+    // Basic validation
     if (logData.hoursWorked < 0) {
         throw new Error("Hours worked cannot be negative.");
     }
-    // Consider adding more validation for times, break duration etc. if needed server-side
+    // Firestore handles Date object conversion, but ensure format consistency if needed
 
-    const existingIndex = logData.id ? workLogStore.findIndex(log => log.id === logData.id) : workLogStore.findIndex(log => log.date === logData.date); // Prefer ID if provided, else check date for upsert
+    const { id, ...dataToSave } = logData; // Separate id from the rest of the data
 
-    let savedLog: DailyWorkLog;
+    try {
+        let savedLog: DailyWorkLog;
+        if (id) {
+            // Update existing log
+            const logRef = workLogsCollection.doc(id);
+            await logRef.set(dataToSave, { merge: true }); // Use set with merge:true to update or create if missing
+            savedLog = { id, ...dataToSave };
+            console.log('[Action] Updated log with ID:', id);
+        } else {
+            // Add new log - Firestore generates the ID
+            const docRef = await workLogsCollection.add(dataToSave);
+            savedLog = { id: docRef.id, ...dataToSave };
+            console.log('[Action] Added new log with ID:', docRef.id);
+        }
 
-    if (existingIndex > -1) {
-        // Update existing log
-        const logToUpdate = workLogStore[existingIndex];
-        savedLog = {
-            ...logToUpdate, // Keep original ID and other fields
-            ...logData, // Apply updates from payload (includes calculated hoursWorked)
-             // Ensure ID from payload (if present) matches or use original ID
-            id: logData.id || logToUpdate.id
-        };
-        workLogStore[existingIndex] = savedLog;
-        console.log('[Action] Updated log:', savedLog);
-    } else {
-        // Add new log
-        const newLog: DailyWorkLog = {
-            ...logData,
-            id: generateId('log'), // Generate a unique ID for new logs
-            // hoursWorked is already provided in logData
-        };
-        workLogStore.push(newLog);
-        savedLog = newLog;
-        console.log('[Action] Added new log:', savedLog);
+        revalidatePath('/'); // Revalidate the page after saving
+        return savedLog; // Return the saved log data (including ID)
+    } catch (error) {
+        console.error("[Action] Error saving work log:", error);
+        throw new Error("Could not save work log.");
     }
-
-    // Sort the store again after modification
-     workLogStore.sort((a, b) => b.date.localeCompare(a.date));
-
-    revalidatePath('/'); // Revalidate the page after saving
-    return JSON.parse(JSON.stringify(savedLog)); // Return a copy
 }
 
 
 /**
  * Exports work log data to Google Sheets using the service.
+ * (No changes needed here as it interacts with an external service)
  */
 export async function exportWorkLogsToSheet(data: GoogleSheetsData[], spreadsheetId: string, sheetName: string): Promise<void> {
   console.log('[Action] exportWorkLogsToSheet called');
   if (!spreadsheetId || spreadsheetId === 'YOUR_SPREADSHEET_ID' || !sheetName) {
     throw new Error("Google Sheet ID or Sheet Name is not configured properly.");
   }
-  // In a real app, you might fetch sensitive info like spreadsheetId from server-side env vars
   try {
-    // Transform data if needed to match GoogleSheetsData structure expected by the service
-     const transformedData = data.map(item => ({
+    const transformedData = data.map(item => ({
         date: item.date,
-        startTime: item.startTime, // Make sure these fields are included in the data passed to this action
+        startTime: item.startTime,
         endTime: item.endTime,
         breakMinutes: item.breakMinutes,
         hoursWorked: item.hoursWorked,
@@ -125,10 +110,8 @@ export async function exportWorkLogsToSheet(data: GoogleSheetsData[], spreadshee
     }));
 
     await exportSheetService(transformedData, spreadsheetId, sheetName);
-     // No revalidation needed for export unless it affects displayed data
   } catch (error) {
      console.error("Export to Google Sheets failed in action:", error);
-     // Re-throw the error so the client component can potentially catch it
      throw error;
   }
 }
@@ -136,112 +119,206 @@ export async function exportWorkLogsToSheet(data: GoogleSheetsData[], spreadshee
 // === UPH Target Actions ===
 
 /**
- * Fetches all UPH targets.
+ * Fetches all UPH targets from Firestore.
  */
 export async function getUPHTargets(): Promise<UPHTarget[]> {
   console.log('[Action] getUPHTargets called');
-  await new Promise(resolve => setTimeout(resolve, 50));
-  return JSON.parse(JSON.stringify(uphTargetStore));
+   try {
+    const snapshot = await uphTargetsCollection.get();
+    if (snapshot.empty) {
+      return [];
+    }
+    const targets = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...(doc.data() as Omit<UPHTarget, 'id'>),
+    }));
+    return targets;
+  } catch (error) {
+    console.error("[Action] Error fetching UPH targets:", error);
+    throw new Error("Could not fetch UPH targets.");
+  }
 }
 
 /**
- * Adds a new UPH target. Defaults to isActive: false.
+ * Adds a new UPH target to Firestore. Defaults to isActive: false.
  */
 export async function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): Promise<UPHTarget> {
   console.log('[Action] addUPHTarget called with:', targetData);
-    // Validate docsPerUnit and videosPerUnit
   if (targetData.docsPerUnit <= 0 || targetData.videosPerUnit <= 0) {
     throw new Error("Items per unit must be positive numbers.");
   }
-  await new Promise(resolve => setTimeout(resolve, 100));
-  const newTarget: UPHTarget = {
-    ...targetData,
-    id: generateId('target'),
-    isActive: false, // New targets are inactive by default
+
+  const newTargetData = {
+      ...targetData,
+      isActive: false, // New targets default to inactive
   };
-  uphTargetStore.push(newTarget);
-  console.log('[Action] Added new target:', newTarget);
-  revalidatePath('/'); // Revalidate after adding
-  return JSON.parse(JSON.stringify(newTarget));
+
+  try {
+    const docRef = await uphTargetsCollection.add(newTargetData);
+    const newTarget: UPHTarget = { id: docRef.id, ...newTargetData };
+    console.log('[Action] Added new target with ID:', docRef.id);
+    revalidatePath('/');
+    return newTarget;
+  } catch (error) {
+     console.error("[Action] Error adding UPH target:", error);
+     throw new Error("Could not add UPH target.");
+  }
 }
 
 /**
- * Updates an existing UPH target. Preserves isActive status unless explicitly changed.
+ * Updates an existing UPH target in Firestore.
  */
 export async function updateUPHTarget(targetData: UPHTarget): Promise<UPHTarget> {
   console.log('[Action] updateUPHTarget called with:', targetData);
-   // Validate docsPerUnit and videosPerUnit
   if (targetData.docsPerUnit <= 0 || targetData.videosPerUnit <= 0) {
     throw new Error("Items per unit must be positive numbers.");
   }
-  await new Promise(resolve => setTimeout(resolve, 100));
-  const index = uphTargetStore.findIndex(t => t.id === targetData.id);
-  if (index === -1) {
-    throw new Error(`Target with ID ${targetData.id} not found.`);
+  if (!targetData.id) {
+    throw new Error("Target ID is required for update.");
   }
-  // Ensure we don't accidentally change isActive unless intended (though UI passes the full object)
-  uphTargetStore[index] = { ...uphTargetStore[index], ...targetData };
-   console.log('[Action] Updated target:', uphTargetStore[index]);
-   revalidatePath('/'); // Revalidate after updating
-  return JSON.parse(JSON.stringify(uphTargetStore[index]));
+
+  const { id, ...dataToUpdate } = targetData;
+  const targetRef = uphTargetsCollection.doc(id);
+
+  try {
+    // Check if document exists before update (optional, set overwrites)
+    // const docSnap = await targetRef.get();
+    // if (!docSnap.exists) {
+    //   throw new Error(`Target with ID ${id} not found.`);
+    // }
+    await targetRef.set(dataToUpdate, { merge: true }); // Use set with merge to update
+    console.log('[Action] Updated target with ID:', id);
+    revalidatePath('/');
+    return targetData; // Return the data that was passed in (now saved)
+  } catch (error) {
+      console.error("[Action] Error updating UPH target:", error);
+      throw new Error("Could not update UPH target.");
+  }
 }
 
 /**
- * Deletes a UPH target. Cannot delete the active target.
+ * Deletes a UPH target from Firestore. Cannot delete the active target.
  */
 export async function deleteUPHTarget(id: string): Promise<void> {
   console.log('[Action] deleteUPHTarget called for ID:', id);
-  await new Promise(resolve => setTimeout(resolve, 100));
-  const index = uphTargetStore.findIndex(t => t.id === id);
-  if (index === -1) {
-    // Consider just returning if not found, or throwing based on requirements
-    console.warn(`[Action] Target with ID ${id} not found for deletion.`);
-    return;
-    // throw new Error(`Target with ID ${id} not found.`);
+  const targetRef = uphTargetsCollection.doc(id);
+
+  try {
+    const docSnap = await targetRef.get();
+    if (!docSnap.exists) {
+      console.warn(`[Action] Target with ID ${id} not found for deletion.`);
+      return; // Or throw if needed
+    }
+
+    const targetData = docSnap.data() as UPHTarget;
+    if (targetData.isActive) {
+      throw new Error("Cannot delete the currently active target.");
+    }
+
+    await targetRef.delete();
+    console.log('[Action] Deleted target with ID:', id);
+    revalidatePath('/');
+  } catch (error) {
+    console.error("[Action] Error deleting UPH target:", error);
+    // Don't rethrow the "cannot delete active" error, let the client handle it via toast
+    if (error instanceof Error && error.message === "Cannot delete the currently active target.") {
+       throw error;
+    }
+    throw new Error("Could not delete UPH target.");
   }
-  if (uphTargetStore[index].isActive) {
-    throw new Error("Cannot delete the currently active target.");
-  }
-  uphTargetStore.splice(index, 1);
-  console.log('[Action] Deleted target with ID:', id);
-  revalidatePath('/'); // Revalidate after deleting
 }
 
 /**
- * Sets a specific target as active and deactivates all others.
+ * Sets a specific target as active in Firestore and deactivates all others using a transaction.
  */
 export async function setActiveUPHTarget(id: string): Promise<UPHTarget> {
   console.log('[Action] setActiveUPHTarget called for ID:', id);
-  await new Promise(resolve => setTimeout(resolve, 100));
-  const targetIndex = uphTargetStore.findIndex(t => t.id === id);
-  if (targetIndex === -1) {
-    throw new Error(`Target with ID ${id} not found.`);
+  const targetToActivateRef = uphTargetsCollection.doc(id);
+
+  try {
+    let activeTargetData: UPHTarget | null = null;
+
+    await db.runTransaction(async (transaction) => {
+      // 1. Verify the target to activate exists
+      const targetSnap = await transaction.get(targetToActivateRef);
+      if (!targetSnap.exists) {
+        throw new Error(`Target with ID ${id} not found.`);
+      }
+      const currentTargetData = { id: targetSnap.id, ...targetSnap.data() } as UPHTarget;
+
+        // If already active, no need to proceed with transaction
+        if (currentTargetData.isActive) {
+             console.log('[Action] Target already active:', id);
+             activeTargetData = currentTargetData;
+             return; // Exit transaction early
+        }
+
+
+      // 2. Find the currently active target (if any)
+      const activeQuery = uphTargetsCollection.where('isActive', '==', true).limit(1);
+      const activeSnapshot = await transaction.get(activeQuery);
+
+      // 3. Deactivate the current active target
+      if (!activeSnapshot.empty) {
+        const currentActiveRef = activeSnapshot.docs[0].ref;
+         // Avoid deactivating the target if it's the one we're activating
+        if (currentActiveRef.id !== id) {
+            transaction.update(currentActiveRef, { isActive: false });
+             console.log('[Action] Deactivating previous target:', currentActiveRef.id);
+        }
+      }
+
+      // 4. Activate the new target
+      transaction.update(targetToActivateRef, { isActive: true });
+      activeTargetData = { ...currentTargetData, isActive: true }; // Prepare the return data
+       console.log('[Action] Activating target:', id);
+    });
+
+     if (!activeTargetData) {
+       // This should only happen if the target was already active and the transaction exited early
+        const snap = await targetToActivateRef.get(); // Re-fetch to be sure
+        if (!snap.exists) throw new Error(`Target with ID ${id} disappeared.`);
+        activeTargetData = { id: snap.id, ...snap.data() } as UPHTarget;
+     }
+
+
+    console.log('[Action] Set active target completed for:', id);
+    revalidatePath('/');
+    return activeTargetData;
+
+  } catch (error) {
+    console.error("[Action] Error setting active UPH target:", error);
+     if (error instanceof Error && error.message.startsWith("Target with ID")) {
+        throw error; // Rethrow specific known errors
+     }
+    throw new Error("Could not set active UPH target.");
   }
-
-  // Only proceed if the target isn't already active
-  if (uphTargetStore[targetIndex].isActive) {
-      console.log('[Action] Target already active:', id);
-      return JSON.parse(JSON.stringify(uphTargetStore[targetIndex]));
-  }
-
-
-  uphTargetStore = uphTargetStore.map((target, index) => ({
-    ...target,
-    isActive: index === targetIndex,
-  }));
-
-  const activeTarget = uphTargetStore[targetIndex];
-  console.log('[Action] Set active target:', activeTarget);
-  revalidatePath('/'); // Revalidate after setting active
-  return JSON.parse(JSON.stringify(activeTarget));
 }
 
+
 /**
- * Fetches the currently active UPH target.
+ * Fetches the currently active UPH target from Firestore.
  */
 export async function getActiveUPHTarget(): Promise<UPHTarget | null> {
   console.log('[Action] getActiveUPHTarget called');
-  await new Promise(resolve => setTimeout(resolve, 50));
-  const activeTarget = uphTargetStore.find(t => t.isActive);
-  return activeTarget ? JSON.parse(JSON.stringify(activeTarget)) : null;
+  try {
+    const query = uphTargetsCollection.where('isActive', '==', true).limit(1);
+    const snapshot = await query.get();
+
+    if (snapshot.empty) {
+      return null; // No active target found
+    }
+
+    const doc = snapshot.docs[0];
+    const activeTarget = {
+      id: doc.id,
+      ...(doc.data() as Omit<UPHTarget, 'id'>),
+    };
+    return activeTarget;
+  } catch (error) {
+     console.error("[Action] Error fetching active UPH target:", error);
+     // It might be acceptable to return null on error, depending on how the UI handles it
+     // throw new Error("Could not fetch active UPH target.");
+     return null;
+  }
 }

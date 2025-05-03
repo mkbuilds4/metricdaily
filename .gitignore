@@ -4,13 +4,14 @@
 /node_modules
 /.pnp
 .pnp.js
+.yarn/install-state.gz
 
 # Testing
 /coverage
 
-# Next.js
-/.next/
-/out/
+# Next.js build output
+/.next
+/out
 
 # Production
 /build
@@ -19,36 +20,32 @@
 .DS_Store
 *.pem
 
-# Debug
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*debug.log*
+*debug.*.log*
 
-# Local Environment Variables
+# Local env files
 .env*.local
+!.env.example
+
+# Firebase Service Account Key (Important!)
+# Add the specific name of your service account key file if not covered by .env*.local
+# Example: service-account-key.json
+*.json
 
 # Editor directories and files
 .vscode
-.idea
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-# Firebase Emulators
-*.log
-firebase-debug.log
-*.jar
-firestore.indexes.json
-database-debug.log
-pubsub-debug.log
-storage-debug.log
-ui-debug.log
+# Patch Package
+patches/
 
-# Genkit
-.genkit/cache
-.genkit-env.json
-
-# TypeScript cache
-*.tsbuildinfo
+# Turbopack
+.turbo/
