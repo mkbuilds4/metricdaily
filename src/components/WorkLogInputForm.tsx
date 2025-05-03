@@ -314,7 +314,8 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                     <FormItem>
                     <FormLabel>Break (Minutes)</FormLabel>
                     <FormControl>
-                        <Input type="number" placeholder="e.g., 30" {...field} min="0" step="1" />
+                        {/* Ensure value passed is never undefined */}
+                        <Input type="number" placeholder="e.g., 30" {...field} value={field.value ?? 0} onChange={field.onChange} min="0" step="1" />
                     </FormControl>
                     <FormMessage />
                     </FormItem>
@@ -333,7 +334,8 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                     <FormItem>
                     <FormLabel>Documents Completed</FormLabel>
                     <FormControl>
-                        <Input type="number" placeholder="0" {...field} min="0" />
+                         {/* Ensure value passed is never undefined */}
+                        <Input type="number" placeholder="0" {...field} value={field.value ?? 0} onChange={field.onChange} min="0" />
                     </FormControl>
                     <FormMessage />
                     </FormItem>
@@ -348,7 +350,8 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                     <FormItem>
                     <FormLabel>Video Sessions Completed</FormLabel>
                     <FormControl>
-                        <Input type="number" placeholder="0" {...field} min="0" />
+                         {/* Ensure value passed is never undefined */}
+                        <Input type="number" placeholder="0" {...field} value={field.value ?? 0} onChange={field.onChange} min="0" />
                     </FormControl>
                     <FormMessage />
                     </FormItem>

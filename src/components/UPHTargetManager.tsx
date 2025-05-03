@@ -76,7 +76,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     resolver: zodResolver(targetFormSchema),
     defaultValues: {
       name: '',
-      targetUPH: undefined,
+      targetUPH: 0, // Initialize with 0 to avoid undefined -> controlled error
       docsPerUnit: 1,
       videosPerUnit: 1,
     },
@@ -98,7 +98,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     setEditingTarget(null);
     form.reset({ // Reset to defaults for adding
       name: '',
-      targetUPH: undefined,
+      targetUPH: 0, // Initialize with 0
       docsPerUnit: 1,
       videosPerUnit: 1,
     });
@@ -257,7 +257,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         <FormItem>
                         <FormLabel>Target UPH</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 15.5" {...field} step="0.1" min="0.1" />
+                            {/* Ensure value passed is never undefined */}
+                            <Input type="number" placeholder="e.g., 15.5" {...field} value={field.value ?? 0} onChange={field.onChange} step="0.1" min="0.1" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -270,7 +271,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         <FormItem>
                         <FormLabel>Documents per Unit</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 5" {...field} step="0.1" min="0.1" />
+                             {/* Ensure value passed is never undefined */}
+                            <Input type="number" placeholder="e.g., 5" {...field} value={field.value ?? 0} onChange={field.onChange} step="0.1" min="0.1" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -283,7 +285,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         <FormItem>
                         <FormLabel>Video Sessions per Unit</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 2.5" {...field} step="0.1" min="0.1" />
+                             {/* Ensure value passed is never undefined */}
+                            <Input type="number" placeholder="e.g., 2.5" {...field} value={field.value ?? 0} onChange={field.onChange} step="0.1" min="0.1" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
