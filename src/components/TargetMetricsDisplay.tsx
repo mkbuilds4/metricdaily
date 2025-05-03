@@ -4,9 +4,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Trash2, Clock, Calendar, BookOpen, Video, ChevronDown, Target, Gauge } from 'lucide-react'; // Import ChevronDown, Target, Gauge
+import { Trash2, Clock, Calendar, BookOpen, Video, ChevronDown, Target, Gauge } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { isValid, differenceInMinutes, parse, addDays } from 'date-fns'; // Import date-fns functions
+import { isValid, differenceInMinutes, parse, addDays, addHours, format } from 'date-fns';
 import {
     Accordion,
     AccordionContent,
@@ -32,7 +32,7 @@ import {
     calculateRemainingUnits,
 } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
-import PreviousLogTriggerSummary from './PreviousLogTriggerSummary'; // Import the new component
+import PreviousLogTriggerSummary from './PreviousLogTriggerSummary'; // Import the component for previous log triggers
 
 interface TargetMetricsDisplayProps {
   allWorkLogs: DailyWorkLog[]; // Receive all logs
@@ -72,25 +72,27 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                 if (!prevLogsMap[log.date]) {
                     prevLogsMap[log.date] = [];
                 }
+                 // Only keep the first unique log for each previous date for the summary accordion
                  if (prevLogsMap[log.date].length === 0) {
                    prevLogsMap[log.date].push(log);
-                }
+                 }
             }
         } else {
             console.warn("Skipping log due to invalid date format:", log);
         }
     });
 
+    // Use only the first log found for each previous date for the accordion trigger/content
     const prevLogsGrouped = Object.entries(prevLogsMap)
-                                .map(([date, logs]) => ({ date, log: logs[0] }))
-                                .sort((a, b) => b.date.localeCompare(a.date));
+                                .map(([date, logs]) => ({ date, log: logs[0] })) // Take the first (and only) log per date
+                                .sort((a, b) => b.date.localeCompare(a.date)); // Sort dates descending
 
     return { todayLog: foundTodayLog, previousLogsByDate: prevLogsGrouped };
   }, [allWorkLogs]);
 
 
-  const sortedTargets = [...targets].sort((a, b) => a.targetUPH - b.targetUPH);
-  const activeTarget = targets.find(t => t.isActive) ?? (targets.length > 0 ? targets[0] : null);
+  const sortedTargets = useMemo(() => [...targets].sort((a, b) => a.targetUPH - b.targetUPH), [targets]);
+  const activeTarget = useMemo(() => targets.find(t => t.isActive) ?? (targets.length > 0 ? targets[0] : null), [targets]);
 
 
   const handleDeleteLog = (log: DailyWorkLog) => {
@@ -164,7 +166,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   };
 
 
-  // --- Helper Function to Render a Metric Card (Used for Targets) ---
+  // --- Helper Function to Render a Metric Card (Used for Targets Breakdown) ---
   const renderTargetMetricCard = (log: DailyWorkLog, target: UPHTarget, isToday: boolean) => {
       // Calculate metrics based on TOTAL logged hours for historical/comparison
       const totalActualUnits = calculateDailyUnits(log, target);
@@ -186,17 +188,19 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
             <CardHeader className="pb-2">
                  <div className="flex justify-between items-start">
                     <CardTitle className="text-lg font-semibold">{target.name}</CardTitle>
-                    <span className={`text-lg font-bold ${isBehind ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
-                        {(totalDifferenceUnits >= 0 ? '+' : '') + totalDifferenceUnits.toFixed(2)} Units
-                         <span className="text-xs text-muted-foreground font-normal"> (vs Total Goal)</span>
-                    </span>
+                    {/* Show +/- vs Goal only for previous logs, not today */}
+                    {!isToday && (
+                         <span className={`text-lg font-bold ${isBehind ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
+                            {(totalDifferenceUnits >= 0 ? '+' : '') + totalDifferenceUnits.toFixed(2)} Units
+                         </span>
+                     )}
                  </div>
                 <CardDescription>Goal UPH: {target.targetUPH.toFixed(1)}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                 {/* Show total metrics for comparison */}
+                 {/* Show total metrics for comparison (shown for both today and previous) */}
                  <div>
-                    <p className="text-muted-foreground">Actual Units (Total)</p>
+                    <p className="text-muted-foreground">Units (Total)</p>
                     <p className="font-medium">{totalActualUnits.toFixed(2)}</p>
                 </div>
                  <div>
@@ -204,7 +208,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     <p className="font-medium">{totalRequiredUnits.toFixed(2)}</p>
                 </div>
 
-                 {/* Show current metrics for today */}
+                 {/* Show current metrics only for today */}
                 {isToday && (
                     <>
                         <div>
@@ -226,16 +230,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       );
   };
 
-   // --- Helper Function to Render a Summary Card for a Log (Used for Today & Expanded Previous) ---
-   const renderLogSummaryCard = (log: DailyWorkLog, isToday: boolean) => {
-        // UPH based on total hours logged
-        const summaryUPH = activeTarget && log.hoursWorked > 0 ? calculateDailyUPH(log, activeTarget) : 0;
-        const summaryTargetName = activeTarget ? activeTarget.name : (targets.length > 0 ? 'First Target' : 'N/A');
+   // --- Helper Function to Render a Summary Card for a Log (Used for Today) ---
+   const renderLogSummaryCard = (log: DailyWorkLog, isToday: boolean, allTargets: UPHTarget[]) => {
         const logDate = new Date(log.date + 'T00:00:00'); // Add time component for parsing
         const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date; // Fallback to raw string if invalid
 
         return (
-            <Card className={`mb-4 relative group w-full ${!isToday ? 'shadow-none border-none bg-transparent' : ''}`}> {/* Transparent background if not today */}
+            <Card className={`mb-4 relative ${!isToday ? 'shadow-none border-none bg-transparent' : ''}`}>
                  <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                          <div>
@@ -246,8 +247,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 {log.hoursWorked.toFixed(2)} hrs ({log.startTime} - {log.endTime}, {log.breakDurationMinutes} min break)
                             </CardDescription>
                          </div>
-                           {/* Delete Button - Only visible on hover */}
-                           {!isToday && ( // Only show delete on previous log summary card for now
+                           {/* Delete Button - Show only for *previous* logs in their summary */}
+                           {!isToday && (
                              <Button
                                 variant="ghost"
                                 size="icon"
@@ -264,7 +265,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                            )}
                     </div>
                 </CardHeader>
-                 <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                 <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                     {/* Basic Info */}
                      <div className="flex items-center space-x-2">
                         <BookOpen className="h-5 w-5 text-muted-foreground" />
                         <div>
@@ -279,22 +281,20 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                              <p className="text-lg font-semibold">{log.videoSessionsCompleted}</p>
                          </div>
                      </div>
-                    <div className="flex items-center space-x-2">
-                        <Clock className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                             {/* Label depends on context */}
-                            <p className="text-sm text-muted-foreground">Avg UPH (Total)</p>
-                            <p className="text-lg font-semibold">{summaryUPH.toFixed(2)}</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                         <Target className="h-5 w-5 text-muted-foreground" />
-                         <div>
-                             <p className="text-sm text-muted-foreground">vs. Target</p>
-                              {/* Show active target name or N/A */}
-                             <p className="text-lg font-semibold">{activeTarget?.name ?? 'N/A'}</p>
-                         </div>
-                    </div>
+
+                     {/* UPH per Target */}
+                     {allTargets.map(target => {
+                         const uphForTarget = calculateDailyUPH(log, target);
+                         return (
+                             <div key={target.id} className="flex items-center space-x-2">
+                                <Clock className="h-5 w-5 text-muted-foreground" />
+                                <div>
+                                    <p className="text-sm text-muted-foreground">UPH ({target.name})</p>
+                                    <p className="text-lg font-semibold">{uphForTarget.toFixed(2)}</p>
+                                </div>
+                             </div>
+                         );
+                     })}
                  </CardContent>
                  {log.notes && (
                     <CardFooter className="pt-3">
@@ -311,10 +311,12 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       {/* --- Today's Metrics Section --- */}
       {todayLog && (
         <div>
-          {renderLogSummaryCard(todayLog, true)}
+           {/* Pass all targets to the summary card */}
+          {renderLogSummaryCard(todayLog, true, sortedTargets)}
 
            {sortedTargets.length > 0 ? (
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Render breakdown cards for today */}
                 {sortedTargets.map((target) => renderTargetMetricCard(todayLog, target, true))}
              </div>
             ) : (
@@ -333,28 +335,30 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
            <Accordion type="multiple" className="w-full space-y-1">
                {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date} className="border-none">
+                         {/* Previous Log Summary Component used as the trigger */}
                          <AccordionTrigger asChild className="p-0 hover:no-underline focus-visible:ring-1 focus-visible:ring-ring rounded-md data-[state=open]:bg-muted/50">
-                            {/* Use Summary Card as the trigger */}
                             <div className="p-4 cursor-pointer hover:bg-muted/30 rounded-md transition-colors w-full relative group">
-                                {/* Pass false for isToday */}
-                                {renderLogSummaryCard(log, false)}
+                                <PreviousLogTriggerSummary log={log} activeTarget={activeTarget} /> {/* Use the dedicated trigger component */}
                                 <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 absolute top-4 right-4 group-data-[state=open]:rotate-180" />
-                            </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="p-4 border-t bg-muted/10 mt-1 rounded-b-md">
-                             <div className="flex justify-between items-center mb-4">
-                                <h4 className="text-md font-semibold">Target Breakdown for {formatFriendlyDate(new Date(date + 'T00:00:00'))}</h4>
-                                  {/* Delete Button inside content */}
+                                 {/* Delete Button specific to previous logs trigger */}
                                  <Button
                                     variant="ghost"
-                                    size="sm"
-                                    className="text-destructive hover:text-destructive"
-                                    onClick={() => handleDeleteLog(log)}
+                                    size="icon"
+                                    className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-10 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10" // Adjust position if needed
+                                    onClick={(e) => {
+                                        e.stopPropagation(); // Prevent accordion trigger
+                                        handleDeleteLog(log);
+                                    }}
                                     title="Delete This Log"
                                     aria-label="Delete This Log"
                                 >
-                                    <Trash2 className="h-4 w-4 mr-1" /> Delete Log
+                                    <Trash2 className="h-4 w-4" />
                                 </Button>
+                            </div>
+                         </AccordionTrigger>
+                        <AccordionContent className="p-4 border-t bg-muted/10 mt-1 rounded-b-md">
+                             <div className="flex justify-between items-center mb-4">
+                                <h4 className="text-md font-semibold">Target Breakdown for {formatFriendlyDate(new Date(date + 'T00:00:00'))}</h4>
                             </div>
                              {sortedTargets.length > 0 ? (
                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
