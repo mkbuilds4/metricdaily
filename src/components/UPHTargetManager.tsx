@@ -43,17 +43,17 @@ type TargetFormData = z.infer<typeof targetFormSchema>;
 
 // --- Component Props ---
 interface UPHTargetManagerProps {
+  // Receive initial data and client-side action functions as props
   targets: UPHTarget[];
-  // Accept specific server actions as props
-  addUPHTargetAction: (data: Omit<UPHTarget, 'id' | 'isActive'>) => Promise<UPHTarget>;
-  updateUPHTargetAction: (data: UPHTarget) => Promise<UPHTarget>;
-  deleteUPHTargetAction: (id: string) => Promise<void>;
-  setActiveUPHTargetAction: (id: string) => Promise<UPHTarget>;
+  addUPHTargetAction: (data: Omit<UPHTarget, 'id' | 'isActive'>) => UPHTarget; // Now returns the new target synchronously
+  updateUPHTargetAction: (data: UPHTarget) => UPHTarget; // Returns updated target synchronously
+  deleteUPHTargetAction: (id: string) => void; // Synchronous delete
+  setActiveUPHTargetAction: (id: string) => UPHTarget; // Returns the activated target
 }
 
 // --- Component ---
 const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
-    targets: initialTargets = [], // Rename prop to avoid conflict
+    targets: initialTargets = [],
     addUPHTargetAction,
     updateUPHTargetAction,
     deleteUPHTargetAction,
@@ -62,12 +62,12 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTarget, setEditingTarget] = useState<UPHTarget | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  // Use local state for targets to enable optimistic updates
+  const [isLoading, setIsLoading] = useState(false); // Keep for visual feedback during sync operations
+  // Use local state for targets to enable immediate UI updates
   const [localTargets, setLocalTargets] = useState<UPHTarget[]>(initialTargets);
 
-  // Sync local state when the initial prop changes (e.g., after server revalidation)
-   useEffect(() => {
+  // Sync local state when the initial prop changes (e.g., after parent reloads data)
+  useEffect(() => {
     setLocalTargets(initialTargets);
   }, [initialTargets]);
 
@@ -77,8 +77,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     defaultValues: {
       name: '',
       targetUPH: undefined,
-      docsPerUnit: 1, // Default to 1 item per unit
-      videosPerUnit: 1, // Default to 1 item per unit
+      docsPerUnit: 1,
+      videosPerUnit: 1,
     },
   });
 
@@ -105,56 +105,45 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     setIsDialogOpen(true);
   };
 
- const handleFormSubmit = async (values: TargetFormData) => {
+ const handleFormSubmit = (values: TargetFormData) => {
     setIsLoading(true);
-    const previousTargets = [...localTargets]; // Store previous state for rollback
+    // No need for previous state rollback with sync localStorage
 
     try {
       if (editingTarget) {
-        // === Optimistic Update (Edit) ===
+        // === Call Client Action (Update) ===
         const updatedTargetData: UPHTarget = {
           ...editingTarget,
-          ...values, // Values from form now contain docsPerUnit, videosPerUnit
+          ...values,
         };
+        const updatedTarget = updateUPHTargetAction(updatedTargetData); // Call sync action
+        // === Update Local State ===
         setLocalTargets(prev =>
-          prev.map(t => (t.id === editingTarget.id ? updatedTargetData : t))
+          prev.map(t => (t.id === editingTarget.id ? updatedTarget : t))
         );
-        setIsDialogOpen(false); // Close dialog optimistically
-        // === Call Server Action ===
-        await updateUPHTargetAction(updatedTargetData);
         toast({ title: "Target Updated", description: `"${values.name}" has been updated.` });
-        // Server action revalidates, props will eventually update, local state is already updated
+
       } else {
-        // === Optimistic Update (Add) ===
-        // Create a temporary ID for the optimistic update
-        const tempId = `temp-${Date.now()}`;
-        const optimisticNewTarget: UPHTarget = {
-          ...values, // Values from form now contain docsPerUnit, videosPerUnit
-          id: tempId,
-          isActive: false, // New targets are inactive
-        };
-        setLocalTargets(prev => [...prev, optimisticNewTarget]);
-        setIsDialogOpen(false); // Close dialog optimistically
-         // === Call Server Action ===
+        // === Call Client Action (Add) ===
         const newTargetData: Omit<UPHTarget, 'id' | 'isActive'> = values;
-        const actualNewTarget = await addUPHTargetAction(newTargetData);
-        // === Replace temporary target with actual data from server ===
-        setLocalTargets(prev =>
-          prev.map(t => (t.id === tempId ? actualNewTarget : t))
-        );
+        const actualNewTarget = addUPHTargetAction(newTargetData); // Call sync action
+        // === Update Local State ===
+        setLocalTargets(prev => [...prev, actualNewTarget]);
         toast({ title: "Target Added", description: `"${values.name}" has been added.` });
-         // Server action revalidates
       }
+      setIsDialogOpen(false); // Close dialog on success
+      form.reset(); // Reset form fields
+      setEditingTarget(null); // Clear editing state
     } catch (error) {
       console.error("Failed to save target:", error);
-      // === Rollback ===
-      setLocalTargets(previousTargets);
-      setIsDialogOpen(true); // Re-open dialog on error? Or just show toast?
+      // No rollback needed, but show error
       toast({
         variant: "destructive",
         title: "Save Failed",
         description: error instanceof Error ? error.message : "Could not save the UPH target.",
       });
+      // Keep dialog open on error?
+      // setIsDialogOpen(true);
     } finally {
       setIsLoading(false);
     }
@@ -162,24 +151,22 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
 
 
   // --- Action Handlers ---
- const handleSetActive = async (id: string) => {
+ const handleSetActive = (id: string) => {
     setIsLoading(true);
-    const previousTargets = [...localTargets];
-
-    // === Optimistic Update ===
-    setLocalTargets(prev =>
-      prev.map(t => ({ ...t, isActive: t.id === id }))
-    );
 
     try {
-      // === Call Server Action ===
-      await setActiveUPHTargetAction(id);
+      // === Call Client Action ===
+      const newActiveTarget = setActiveUPHTargetAction(id);
+      // === Update Local State ===
+      // Update based on the result of the action which handles logic
+      setLocalTargets(prev =>
+          prev.map(t => ({ ...t, isActive: t.id === newActiveTarget.id }))
+      );
       toast({ title: "Target Activated", description: "The selected target is now active." });
-      // Server action revalidates
+
     } catch (error) {
       console.error("Failed to set active target:", error);
-      // === Rollback ===
-      setLocalTargets(previousTargets);
+      // No rollback needed
       toast({
         variant: "destructive",
         title: "Activation Failed",
@@ -191,9 +178,11 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
   };
 
 
- const handleDelete = async (id: string, name: string) => {
+ const handleDelete = (id: string, name: string) => {
     const targetToDelete = localTargets.find(t => t.id === id);
-    if (targetToDelete?.isActive) {
+    if (!targetToDelete) return; // Should not happen if UI is synced
+
+    if (targetToDelete.isActive) {
         toast({
             variant: "destructive",
             title: "Deletion Blocked",
@@ -202,27 +191,23 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
         return;
     }
 
-    // Use browser confirm for simplicity, consider a confirmation dialog component for better UX
+    // Use browser confirm for simplicity
     if (!confirm(`Are you sure you want to delete the target "${name}"?`)) {
         return;
     }
 
     setIsLoading(true);
-    const previousTargets = [...localTargets];
-
-     // === Optimistic Update ===
-    setLocalTargets(prev => prev.filter(t => t.id !== id));
-
 
     try {
-      // === Call Server Action ===
-      await deleteUPHTargetAction(id);
+      // === Call Client Action ===
+      deleteUPHTargetAction(id);
+      // === Update Local State ===
+      setLocalTargets(prev => prev.filter(t => t.id !== id));
       toast({ title: "Target Deleted", description: `"${name}" has been deleted.` });
-       // Server action revalidates
+
     } catch (error) {
        console.error("Failed to delete target:", error);
-        // === Rollback ===
-       setLocalTargets(previousTargets);
+       // No rollback needed
        toast({
             variant: "destructive",
             title: "Deletion Failed",
@@ -280,10 +265,10 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                     />
                  <FormField
                     control={form.control}
-                    name="docsPerUnit" // Updated field name
+                    name="docsPerUnit"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Documents per Unit</FormLabel> {/* Updated label */}
+                        <FormLabel>Documents per Unit</FormLabel>
                         <FormControl>
                             <Input type="number" placeholder="e.g., 5" {...field} step="0.1" min="0.1" />
                         </FormControl>
@@ -293,10 +278,10 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                     />
                 <FormField
                     control={form.control}
-                    name="videosPerUnit" // Updated field name
+                    name="videosPerUnit"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Video Sessions per Unit</FormLabel> {/* Updated label */}
+                        <FormLabel>Video Sessions per Unit</FormLabel>
                         <FormControl>
                             <Input type="number" placeholder="e.g., 2.5" {...field} step="0.1" min="0.1" />
                         </FormControl>
@@ -306,7 +291,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                     />
                 <DialogFooter>
                     <DialogClose asChild>
-                        <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                        <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); form.reset(); setEditingTarget(null); }}>Cancel</Button>
                     </DialogClose>
                     <Button type="submit" disabled={isLoading}>
                          {isLoading ? 'Saving...' : (editingTarget ? 'Save Changes' : 'Add Target')}
@@ -325,8 +310,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
               <TableHead>Active</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Target UPH</TableHead>
-              <TableHead>Docs / Unit</TableHead> {/* Updated header */}
-              <TableHead>Videos / Unit</TableHead> {/* Updated header */}
+              <TableHead>Docs / Unit</TableHead>
+              <TableHead>Videos / Unit</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -349,7 +334,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         disabled={isLoading}
                         title="Set as Active"
                         aria-label="Set as Active"
-                        className="p-1 h-auto" // Adjust padding/height
+                        className="p-1 h-auto"
                         >
                        <XCircle className="h-5 w-5 text-muted-foreground hover:text-foreground" />
                     </Button>
@@ -357,8 +342,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                 </TableCell>
                 <TableCell>{target.name}</TableCell>
                 <TableCell>{target.targetUPH}</TableCell>
-                <TableCell>{target.docsPerUnit}</TableCell> {/* Display new field */}
-                <TableCell>{target.videosPerUnit}</TableCell> {/* Display new field */}
+                <TableCell>{target.docsPerUnit}</TableCell>
+                <TableCell>{target.videosPerUnit}</TableCell>
                 <TableCell className="space-x-1">
                    <Button
                     variant="ghost"
@@ -376,8 +361,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                     size="icon"
                     className="text-destructive hover:text-destructive h-8 w-8"
                     onClick={() => handleDelete(target.id, target.name)}
-                    disabled={isLoading || target.isActive} // Explicitly disable if target is active
-                    title={target.isActive ? "Cannot delete the active target" : "Delete Target"} // Updated tooltip message
+                    disabled={isLoading || target.isActive}
+                    title={target.isActive ? "Cannot delete the active target" : "Delete Target"}
                     aria-label={target.isActive ? "Cannot delete the active target" : "Delete Target"}
                   >
                     <Trash2 className="h-4 w-4" />

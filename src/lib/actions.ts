@@ -1,413 +1,263 @@
 // src/lib/actions.ts
-'use server';
+// IMPORTANT: These functions now run CLIENT-SIDE and interact with localStorage.
 
-import { revalidatePath } from 'next/cache';
-import type { DailyWorkLog, UPHTarget, GoogleSheetsData } from '@/types';
-import { db } from './firebase'; // Import the initialized Firestore instance
-import { exportToGoogleSheets as exportSheetService } from '@/services/google-sheets';
-import { FieldValue } from 'firebase-admin/firestore'; // Needed for transactions/updates
+import type { DailyWorkLog, UPHTarget } from '@/types';
 
-// Firestore Collection References
-const workLogsCollection = db.collection('worklogs');
-const uphTargetsCollection = db.collection('uphtargets');
+// --- Constants for localStorage keys ---
+const WORK_LOGS_KEY = 'workLogs';
+const UPH_TARGETS_KEY = 'uphTargets';
 
-// === Work Log Actions ===
+// --- Helper Functions ---
 
 /**
- * Fetches all work logs from Firestore, sorted by date descending.
- * Returns an empty array on error, especially authentication errors.
+ * Generates a simple pseudo-UUID for local IDs.
+ * IMPORTANT: Not cryptographically secure or guaranteed unique like a real UUID v4.
+ * Suitable for simple local storage IDs where collisions are highly unlikely.
  */
-export async function getWorkLogs(): Promise<DailyWorkLog[]> {
-  console.log('[Action] getWorkLogs called');
+function generateLocalId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+}
+
+/**
+ * Safely retrieves and parses JSON data from localStorage.
+ * @param key The localStorage key.
+ * @param defaultValue The value to return if the key is not found or parsing fails.
+ */
+function getFromLocalStorage<T>(key: string, defaultValue: T): T {
+  if (typeof window === 'undefined') {
+    // Cannot access localStorage on the server
+    return defaultValue;
+  }
   try {
-    const snapshot = await workLogsCollection.orderBy('date', 'desc').get();
-    if (snapshot.empty) {
-      console.log('[Action] No work logs found.');
-      return [];
-    }
-    // Map Firestore documents to DailyWorkLog type
-    const logs = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...(doc.data() as Omit<DailyWorkLog, 'id'>), // Assert type after getting data
-    }));
-     console.log(`[Action] Fetched ${logs.length} work logs.`);
-    return logs;
-  } catch (error: any) {
-    console.error("[Action] Error fetching work logs:", error);
-    console.error("[Action] Error Details:", {
-        code: error.code,
-        message: error.message,
-        // stack: error.stack, // Stack trace can be very long, log conditionally if needed
-    });
-    // Specific check for the token refresh error - log and return empty instead of throwing
-    if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) { // Added common gRPC/Auth error codes
-         console.error("[Action] Authentication/Permission Error: Could not fetch work logs. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
-         return []; // Return empty array on auth errors during read
-    }
-    console.error("[Action] Unknown error fetching work logs, returning empty array.");
-    // For other unexpected errors during read, return empty array to prevent page crash
-    return [];
-    // throw new Error(`Could not fetch work logs. Reason: ${error.message || 'Unknown Firestore error'}`);
+    const item = window.localStorage.getItem(key);
+    return item ? (JSON.parse(item) as T) : defaultValue;
+  } catch (error) {
+    console.error(`Error reading localStorage key “${key}”:`, error);
+    return defaultValue;
   }
 }
 
 /**
- * Saves (adds or updates) a work log entry in Firestore.
+ * Safely stringifies and saves data to localStorage.
+ * @param key The localStorage key.
+ * @param value The value to save.
+ */
+function saveToLocalStorage<T>(key: string, value: T): void {
+  if (typeof window === 'undefined') {
+    console.error('Attempted to save to localStorage on the server.');
+    return;
+  }
+  try {
+    const item = JSON.stringify(value);
+    window.localStorage.setItem(key, item);
+  } catch (error) {
+    console.error(`Error writing to localStorage key “${key}”:`, error);
+  }
+}
+
+// === Work Log Actions (Client-Side) ===
+
+/**
+ * Fetches all work logs from localStorage, sorted by date descending.
+ */
+export function getWorkLogs(): DailyWorkLog[] {
+  console.log('[Client Action] getWorkLogs called');
+  const logs = getFromLocalStorage<DailyWorkLog[]>(WORK_LOGS_KEY, []);
+  // Sort logs by date descending (most recent first)
+  logs.sort((a, b) => b.date.localeCompare(a.date));
+  console.log(`[Client Action] Fetched ${logs.length} work logs from localStorage.`);
+  return logs;
+}
+
+/**
+ * Saves (adds or updates) a work log entry in localStorage.
  * Expects `hoursWorked` to be pre-calculated.
- * If `logData.id` is provided, it updates the existing document.
- * Otherwise, it adds a new document and Firestore generates the ID.
- * Throws errors on failure.
+ * If `logData.id` is provided, it updates the existing entry.
+ * Otherwise, it adds a new entry with a generated local ID.
  */
-export async function saveWorkLog(
-    logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }
-): Promise<DailyWorkLog> {
-    console.log('[Action] saveWorkLog called with:', logData);
+export function saveWorkLog(
+  logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }
+): DailyWorkLog {
+  console.log('[Client Action] saveWorkLog called with:', logData);
 
-    // Basic validation
-    if (logData.hoursWorked < 0) {
-        throw new Error("Hours worked cannot be negative.");
-    }
-
-    const { id, ...dataToSave } = logData; // Separate id from the rest of the data
-
-    try {
-        let savedLog: DailyWorkLog;
-        if (id) {
-            // Update existing log
-            const logRef = workLogsCollection.doc(id);
-            await logRef.set(dataToSave, { merge: true }); // Use set with merge:true to update or create if missing
-            savedLog = { id, ...dataToSave };
-            console.log('[Action] Updated log with ID:', id);
-        } else {
-            // Add new log - Firestore generates the ID
-            const docRef = await workLogsCollection.add(dataToSave);
-            savedLog = { id: docRef.id, ...dataToSave };
-            console.log('[Action] Added new log with ID:', docRef.id);
-        }
-
-        revalidatePath('/'); // Revalidate the page after saving
-        return savedLog; // Return the saved log data (including ID)
-    } catch (error: any) {
-        console.error("[Action] Error saving work log:", error);
-        console.error("[Action] Error Details:", {
-            code: error.code,
-            message: error.message,
-            // stack: error.stack,
-        });
-         // Specific check for the token refresh error - throw specific error
-        if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
-             console.error("[Action] Authentication/Permission Error: Could not save work log. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
-             throw new Error("Authentication failed. Could not save work log. Please check server configuration and credentials.");
-        }
-        throw new Error(`Could not save work log. Reason: ${error.message || 'Unknown Firestore error'}`);
-    }
-}
-
-
-/**
- * Exports work log data to Google Sheets using the service.
- * (No changes needed here as it interacts with an external service)
- */
-export async function exportWorkLogsToSheet(data: GoogleSheetsData[], spreadsheetId: string, sheetName: string): Promise<void> {
-  console.log('[Action] exportWorkLogsToSheet called');
-  if (!spreadsheetId || spreadsheetId === 'YOUR_SPREADSHEET_ID' || !sheetName) {
-    throw new Error("Google Sheet ID or Sheet Name is not configured properly.");
+  if (logData.hoursWorked < 0) {
+    throw new Error('Hours worked cannot be negative.');
   }
-  try {
-    const transformedData = data.map(item => ({
-        date: item.date,
-        startTime: item.startTime,
-        endTime: item.endTime,
-        breakMinutes: item.breakMinutes,
-        hoursWorked: item.hoursWorked,
-        docs: item.docs,
-        videos: item.videos,
-        calculatedUnits: item.calculatedUnits,
-        calculatedUPH: item.calculatedUPH,
-        targetUnits: item.targetUnits,
-        remainingUnits: item.remainingUnits,
-        notes: item.notes || '',
-    }));
 
-    await exportSheetService(transformedData, spreadsheetId, sheetName);
-  } catch (error: any) {
-     console.error("Export to Google Sheets failed in action:", error);
-      console.error("[Action] Google Sheets Export Error Details:", {
-            message: error.message,
-            // stack: error.stack,
-            // Include specific Google API error details if available
-            ...(error.response?.data?.error && { googleError: error.response.data.error }),
-      });
-     throw new Error(`Could not export to Google Sheet. Reason: ${error.message || 'Unknown export error'}`);
-  }
-}
+  const logs = getWorkLogs(); // Get current logs
+  let savedLog: DailyWorkLog;
 
-// === UPH Target Actions ===
-
-/**
- * Fetches all UPH targets from Firestore.
- * Returns an empty array on error, especially authentication errors.
- */
-export async function getUPHTargets(): Promise<UPHTarget[]> {
-  console.log('[Action] getUPHTargets called');
-   try {
-    const snapshot = await uphTargetsCollection.get();
-    if (snapshot.empty) {
-       console.log('[Action] No UPH targets found.');
-      return [];
+  if (logData.id) {
+    // Update existing log
+    const index = logs.findIndex((log) => log.id === logData.id);
+    if (index > -1) {
+      savedLog = { ...logs[index], ...logData }; // Merge updates
+      logs[index] = savedLog;
+      console.log('[Client Action] Updated log with ID:', logData.id);
+    } else {
+      // If ID provided but not found, treat as new add (should ideally not happen with UUIDs)
+      savedLog = { ...logData, id: generateLocalId() }; // Generate new ID just in case
+      logs.push(savedLog);
+      console.warn('[Client Action] Log ID provided but not found, adding as new:', logData.id);
     }
-    const targets = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...(doc.data() as Omit<UPHTarget, 'id'>),
-    }));
-    console.log(`[Action] Fetched ${targets.length} UPH targets.`);
-    return targets;
-  } catch (error: any) {
-    console.error("[Action] Error fetching UPH targets:", error);
-     console.error("[Action] Error Details:", {
-        code: error.code, // Firestore error code (e.g., 'permission-denied', 'unauthenticated')
-        message: error.message,
-        // stack: error.stack,
-    });
-    // Specific check for the token refresh error - log and return empty
-    if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
-         console.error("[Action] Authentication/Permission Error: Could not fetch UPH targets. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
-         return []; // Return empty array on auth errors during read
-    }
-    console.error("[Action] Unknown error fetching UPH targets, returning empty array.");
-    // For other unexpected errors during read, return empty array
-    return [];
-    // throw new Error(`Could not fetch UPH targets. Reason: ${error.message || 'Unknown Firestore error'}`);
+  } else {
+    // Add new log
+    savedLog = { ...logData, id: generateLocalId() }; // Generate a local ID
+    logs.push(savedLog);
+    console.log('[Client Action] Added new log with ID:', savedLog.id);
   }
+
+  saveToLocalStorage(WORK_LOGS_KEY, logs);
+  // Revalidation is handled by components re-fetching or state updates
+  return savedLog;
 }
 
 /**
- * Adds a new UPH target to Firestore. Defaults to isActive: false.
- * Throws errors on failure.
+ * Deletes a work log entry from localStorage by ID.
  */
-export async function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): Promise<UPHTarget> {
-  console.log('[Action] addUPHTarget called with:', targetData);
+export function deleteWorkLog(id: string): void {
+    console.log('[Client Action] deleteWorkLog called for ID:', id);
+    let logs = getWorkLogs();
+    const initialLength = logs.length;
+    logs = logs.filter(log => log.id !== id);
+
+    if (logs.length < initialLength) {
+        saveToLocalStorage(WORK_LOGS_KEY, logs);
+        console.log('[Client Action] Deleted log with ID:', id);
+    } else {
+        console.warn('[Client Action] Log ID not found for deletion:', id);
+    }
+}
+
+// === UPH Target Actions (Client-Side) ===
+
+/**
+ * Fetches all UPH targets from localStorage.
+ */
+export function getUPHTargets(): UPHTarget[] {
+  console.log('[Client Action] getUPHTargets called');
+  const targets = getFromLocalStorage<UPHTarget[]>(UPH_TARGETS_KEY, []);
+  console.log(`[Client Action] Fetched ${targets.length} UPH targets from localStorage.`);
+  return targets;
+}
+
+/**
+ * Adds a new UPH target to localStorage. Defaults to isActive: false.
+ */
+export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): UPHTarget {
+  console.log('[Client Action] addUPHTarget called with:', targetData);
   if (targetData.docsPerUnit <= 0 || targetData.videosPerUnit <= 0) {
-    throw new Error("Items per unit must be positive numbers.");
+    throw new Error('Items per unit must be positive numbers.');
   }
 
-  const newTargetData = {
-      ...targetData,
-      isActive: false, // New targets default to inactive
+  const targets = getUPHTargets();
+  const newTarget: UPHTarget = {
+    ...targetData,
+    id: generateLocalId(), // Generate local ID
+    isActive: false, // New targets default to inactive
   };
 
-  try {
-    const docRef = await uphTargetsCollection.add(newTargetData);
-    const newTarget: UPHTarget = { id: docRef.id, ...newTargetData };
-    console.log('[Action] Added new target with ID:', docRef.id);
-    revalidatePath('/');
-    return newTarget;
-  } catch (error: any) {
-     console.error("[Action] Error adding UPH target:", error);
-     console.error("[Action] Error Details:", {
-        code: error.code,
-        message: error.message,
-        // stack: error.stack,
-     });
-     // Specific check for the token refresh error - throw specific error
-    if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
-         console.error("[Action] Authentication/Permission Error: Could not add UPH target. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
-         throw new Error("Authentication failed. Could not add UPH target. Please check server configuration and credentials.");
-    }
-     throw new Error(`Could not add UPH target. Reason: ${error.message || 'Unknown Firestore error'}`);
-  }
+  targets.push(newTarget);
+  saveToLocalStorage(UPH_TARGETS_KEY, targets);
+  console.log('[Client Action] Added new target with ID:', newTarget.id);
+  // Revalidation handled by components
+  return newTarget;
 }
 
 /**
- * Updates an existing UPH target in Firestore.
- * Throws errors on failure.
+ * Updates an existing UPH target in localStorage.
  */
-export async function updateUPHTarget(targetData: UPHTarget): Promise<UPHTarget> {
-  console.log('[Action] updateUPHTarget called with:', targetData);
+export function updateUPHTarget(targetData: UPHTarget): UPHTarget {
+  console.log('[Client Action] updateUPHTarget called with:', targetData);
   if (targetData.docsPerUnit <= 0 || targetData.videosPerUnit <= 0) {
-    throw new Error("Items per unit must be positive numbers.");
+    throw new Error('Items per unit must be positive numbers.');
   }
   if (!targetData.id) {
-    throw new Error("Target ID is required for update.");
+    throw new Error('Target ID is required for update.');
   }
 
-  const { id, ...dataToUpdate } = targetData;
-  const targetRef = uphTargetsCollection.doc(id);
+  const targets = getUPHTargets();
+  const index = targets.findIndex((t) => t.id === targetData.id);
 
-  try {
-    await targetRef.set(dataToUpdate, { merge: true }); // Use set with merge to update
-    console.log('[Action] Updated target with ID:', id);
-    revalidatePath('/');
-    return targetData; // Return the data that was passed in (now saved)
-  } catch (error: any) {
-      console.error("[Action] Error updating UPH target:", error);
-      console.error("[Action] Error Details:", {
-        code: error.code,
-        message: error.message,
-        // stack: error.stack,
-     });
-     // Specific check for the token refresh error - throw specific error
-    if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
-         console.error("[Action] Authentication/Permission Error: Could not update UPH target. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
-         throw new Error("Authentication failed. Could not update UPH target. Please check server configuration and credentials.");
-    }
-      throw new Error(`Could not update UPH target. Reason: ${error.message || 'Unknown Firestore error'}`);
+  if (index > -1) {
+    targets[index] = targetData; // Overwrite with new data
+    saveToLocalStorage(UPH_TARGETS_KEY, targets);
+    console.log('[Client Action] Updated target with ID:', targetData.id);
+  } else {
+    console.warn('[Client Action] Target ID not found for update:', targetData.id);
+    // Optionally, could add it here if desired, but update implies existence
+    throw new Error(`Target with ID ${targetData.id} not found for update.`);
   }
+  // Revalidation handled by components
+  return targetData;
 }
 
 /**
- * Deletes a UPH target from Firestore. Cannot delete the active target.
- * Throws errors on failure (except for "not found" which is handled gracefully).
+ * Deletes a UPH target from localStorage. Cannot delete the active target.
  */
-export async function deleteUPHTarget(id: string): Promise<void> {
-  console.log('[Action] deleteUPHTarget called for ID:', id);
-  const targetRef = uphTargetsCollection.doc(id);
+export function deleteUPHTarget(id: string): void {
+  console.log('[Client Action] deleteUPHTarget called for ID:', id);
+  let targets = getUPHTargets();
+  const targetToDelete = targets.find((t) => t.id === id);
 
-  try {
-    const docSnap = await targetRef.get();
-    if (!docSnap.exists) {
-      console.warn(`[Action] Target with ID ${id} not found for deletion.`);
-      return; // Gracefully handle not found
-    }
-
-    const targetData = docSnap.data() as UPHTarget;
-    if (targetData.isActive) {
-      throw new Error("Cannot delete the currently active target.");
-    }
-
-    await targetRef.delete();
-    console.log('[Action] Deleted target with ID:', id);
-    revalidatePath('/');
-  } catch (error: any) {
-    console.error("[Action] Error deleting UPH target:", error);
-     console.error("[Action] Error Details:", {
-        code: error.code,
-        message: error.message,
-        // stack: error.stack,
-     });
-     // Specific check for the token refresh error - throw specific error
-    if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
-         console.error("[Action] Authentication/Permission Error: Could not delete UPH target. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
-         throw new Error("Authentication failed. Could not delete UPH target. Please check server configuration and credentials.");
-    }
-    // Rethrow other errors, including the "cannot delete active" one
-    throw new Error(`Could not delete UPH target. Reason: ${error.message || 'Unknown Firestore error'}`);
+  if (!targetToDelete) {
+    console.warn(`[Client Action] Target with ID ${id} not found for deletion.`);
+    return; // Target doesn't exist
   }
+
+  if (targetToDelete.isActive) {
+    throw new Error('Cannot delete the currently active target.');
+  }
+
+  targets = targets.filter((t) => t.id !== id);
+  saveToLocalStorage(UPH_TARGETS_KEY, targets);
+  console.log('[Client Action] Deleted target with ID:', id);
+  // Revalidation handled by components
 }
 
 /**
- * Sets a specific target as active in Firestore and deactivates all others using a transaction.
- * Throws errors on failure.
+ * Sets a specific target as active in localStorage and deactivates all others.
  */
-export async function setActiveUPHTarget(id: string): Promise<UPHTarget> {
-  console.log('[Action] setActiveUPHTarget called for ID:', id);
-  const targetToActivateRef = uphTargetsCollection.doc(id);
+export function setActiveUPHTarget(id: string): UPHTarget {
+  console.log('[Client Action] setActiveUPHTarget called for ID:', id);
+  let targets = getUPHTargets();
+  let activatedTarget: UPHTarget | null = null;
 
-  try {
-    let activeTargetData: UPHTarget | null = null;
-
-    await db.runTransaction(async (transaction) => {
-      // 1. Verify the target to activate exists
-      const targetSnap = await transaction.get(targetToActivateRef);
-      if (!targetSnap.exists) {
-        throw new Error(`Target with ID ${id} not found.`);
-      }
-      const currentTargetData = { id: targetSnap.id, ...targetSnap.data() } as UPHTarget;
-
-        // If already active, no need to proceed with transaction
-        if (currentTargetData.isActive) {
-             console.log('[Action] Target already active:', id);
-             activeTargetData = currentTargetData;
-             return; // Exit transaction early
-        }
-
-
-      // 2. Find the currently active target (if any)
-      const activeQuery = uphTargetsCollection.where('isActive', '==', true).limit(1);
-      const activeSnapshot = await transaction.get(activeQuery);
-
-      // 3. Deactivate the current active target
-      if (!activeSnapshot.empty) {
-        const currentActiveRef = activeSnapshot.docs[0].ref;
-         // Avoid deactivating the target if it's the one we're activating
-        if (currentActiveRef.id !== id) {
-            transaction.update(currentActiveRef, { isActive: false });
-             console.log('[Action] Deactivating previous target:', currentActiveRef.id);
-        }
-      }
-
-      // 4. Activate the new target
-      transaction.update(targetToActivateRef, { isActive: true });
-      activeTargetData = { ...currentTargetData, isActive: true }; // Prepare the return data
-       console.log('[Action] Activating target:', id);
-    });
-
-     if (!activeTargetData) {
-       // This should only happen if the target was already active and the transaction exited early
-        const snap = await targetToActivateRef.get(); // Re-fetch to be sure
-        if (!snap.exists) throw new Error(`Target with ID ${id} disappeared during transaction.`);
-        activeTargetData = { id: snap.id, ...snap.data() } as UPHTarget;
-     }
-
-
-    console.log('[Action] Set active target completed for:', id);
-    revalidatePath('/');
-    return activeTargetData;
-
-  } catch (error: any) {
-    console.error("[Action] Error setting active UPH target:", error);
-     console.error("[Action] Error Details:", {
-        code: error.code,
-        message: error.message,
-        // stack: error.stack,
-     });
-     // Specific check for the token refresh error - throw specific error
-    if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
-         console.error("[Action] Authentication/Permission Error: Could not set active UPH target. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
-         throw new Error("Authentication failed. Could not set active target. Please check server configuration and credentials.");
+  const updatedTargets = targets.map((t) => {
+    const shouldBeActive = t.id === id;
+    if (shouldBeActive) {
+      activatedTarget = { ...t, isActive: true };
+      return activatedTarget;
+    } else {
+      // Ensure others are inactive
+      return { ...t, isActive: false };
     }
-     // Rethrow other errors, including "Target not found"
-    throw new Error(`Could not set active UPH target. Reason: ${error.message || 'Unknown Firestore error'}`);
+  });
+
+  if (!activatedTarget) {
+     console.error(`[Client Action] Target with ID ${id} not found to set active.`);
+    throw new Error(`Target with ID ${id} not found.`);
   }
+
+  saveToLocalStorage(UPH_TARGETS_KEY, updatedTargets);
+  console.log('[Client Action] Set active target completed for:', id);
+  // Revalidation handled by components
+  return activatedTarget;
 }
 
-
 /**
- * Fetches the currently active UPH target from Firestore.
- * Returns null if no active target is found or on error (especially authentication errors).
+ * Fetches the currently active UPH target from localStorage.
  */
-export async function getActiveUPHTarget(): Promise<UPHTarget | null> {
-  console.log('[Action] getActiveUPHTarget called');
-  try {
-    const query = uphTargetsCollection.where('isActive', '==', true).limit(1);
-    const snapshot = await query.get();
+export function getActiveUPHTarget(): UPHTarget | null {
+  console.log('[Client Action] getActiveUPHTarget called');
+  const targets = getUPHTargets();
+  const activeTarget = targets.find((t) => t.isActive);
 
-    if (snapshot.empty) {
-       console.log('[Action] No active UPH target found.');
-      return null; // No active target found
-    }
-
-    const doc = snapshot.docs[0];
-    const activeTarget = {
-      id: doc.id,
-      ...(doc.data() as Omit<UPHTarget, 'id'>),
-    };
-    console.log('[Action] Fetched active UPH target:', activeTarget.id);
+  if (activeTarget) {
+    console.log('[Client Action] Found active UPH target:', activeTarget.id);
     return activeTarget;
-  } catch (error: any) {
-     console.error("[Action] Error fetching active UPH target:", error);
-      console.error("[Action] Error Details:", {
-        code: error.code,
-        message: error.message,
-        // stack: error.stack,
-     });
-     // Specific check for the token refresh error - log and return null
-     if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
-         console.error("[Action] Authentication/Permission Error: Could not fetch active UPH target. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
-         return null; // Return null on auth errors during read
-     }
-     console.error("[Action] Unknown error fetching active UPH target, returning null.");
-      // For other unexpected errors during read, return null
-     return null;
+  } else {
+    console.log('[Client Action] No active UPH target found.');
+    return null;
   }
 }
