@@ -70,8 +70,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
           return (
               <TableRow key={`${log.id}-${target.id}`}>
                   {!isToday && <TableCell>{formatFriendlyDate(new Date(log.date + 'T00:00:00'))}</TableCell>} {/* Add Date for previous logs */}
-                  {/* <TableCell>{target.name}</TableCell> */}
                   <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
+                  <TableCell className="text-right">{log.documentsCompleted}</TableCell>
+                  <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>
                   <TableCell className="text-right">-</TableCell>
                   <TableCell className="text-right">-</TableCell>
                   <TableCell className="text-right">-</TableCell>
@@ -105,8 +106,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       return (
           <TableRow key={`${log.id}-${target.id}`}>
                {!isToday && <TableCell>{formatFriendlyDate(new Date(log.date + 'T00:00:00'))}</TableCell>}
-              {/* <TableCell>{target.name}</TableCell> */}
               <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
+              <TableCell className="text-right">{log.documentsCompleted}</TableCell>
+              <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>
               <TableCell className="text-right">{requiredUnits.toFixed(2)}</TableCell>
               <TableCell className="text-right">{actualUPH.toFixed(2)}</TableCell>
               <TableCell className="text-right">{actualUnits.toFixed(2)}</TableCell>
@@ -135,12 +137,12 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
             <Table>
               <TableHeader>
                 <TableRow>
-                  {/* <TableHead>Target Name</TableHead> */}
                   <TableHead className="text-right">Goal UPH</TableHead>
+                  <TableHead className="text-right">Docs Done</TableHead> {/* Added */}
+                  <TableHead className="text-right">Videos Done</TableHead> {/* Added */}
                   <TableHead className="text-right">Total Units Needed</TableHead>
                   <TableHead className="text-right">Actual UPH</TableHead>
                   <TableHead className="text-right">Actual Units</TableHead>
-                  {/* Removed % Completed and % Diff */}
                   <TableHead className="text-right">Time Left to Goal</TableHead>
                   <TableHead className="text-right">Est. Goal Hit Time</TableHead>
                 </TableRow>
@@ -150,7 +152,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     sortedTargets.map((target) => renderMetricsRow(todayLog, target, true))
                 ) : (
                     <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground">No UPH targets defined.</TableCell>
+                        <TableCell colSpan={8} className="text-center text-muted-foreground">No UPH targets defined.</TableCell>
                     </TableRow>
                 )}
               </TableBody>
@@ -171,8 +173,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
               <TableHeader>
                 <TableRow>
                     <TableHead>Date</TableHead> {/* Added Date column */}
-                    {/* <TableHead>Target Name</TableHead> */}
                     <TableHead className="text-right">Goal UPH</TableHead>
+                    <TableHead className="text-right">Docs Done</TableHead> {/* Added */}
+                    <TableHead className="text-right">Videos Done</TableHead> {/* Added */}
                     <TableHead className="text-right">Total Units Needed</TableHead>
                     <TableHead className="text-right">Actual UPH</TableHead>
                     <TableHead className="text-right">Actual Units</TableHead>
@@ -186,7 +189,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     )
                 ) : (
                      <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground">No UPH targets defined.</TableCell>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground">No UPH targets defined.</TableCell>
                     </TableRow>
                 )}
               </TableBody>
