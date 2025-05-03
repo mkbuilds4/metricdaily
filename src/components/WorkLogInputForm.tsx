@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -171,13 +172,6 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
     const formattedDate = format(values.date, 'yyyy-MM-dd');
     const hoursWorked = calculateHoursWorked(formattedDate, values.startTime, values.endTime, values.breakDurationMinutes);
 
-    // Allow saving even if hoursWorked is 0, as user might just be logging time/break
-    // if (hoursWorked <= 0 && (values.documentsCompleted > 0 || values.videoSessionsCompleted > 0)) {
-    //     toast({ variant: "destructive", title: "Invalid Time Entry", description: "Calculated hours worked is zero or negative. Please check start time, end time, and break duration." });
-    //     setIsLoading(false);
-    //     return;
-    // }
-
     // Prepare data payload for the action function
     const payloadToSave: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number } = {
         ...(existingLog?.id && { id: existingLog.id }), // Include ID only if editing
@@ -302,7 +296,8 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                     <FormControl>
                        <div className="relative">
                           <Input type="time" {...field} className="pr-8" />
-                          <Clock className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          {/* Icon positioned at the right edge */}
+                          <Clock className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                        </div>
                     </FormControl>
                     <FormMessage />
@@ -319,7 +314,8 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                     <FormControl>
                        <div className="relative">
                           <Input type="time" {...field} className="pr-8" />
-                           <Clock className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          {/* Icon positioned at the right edge */}
+                          <Clock className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                        </div>
                     </FormControl>
                     <FormMessage />
@@ -449,3 +445,4 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
 };
 
 export default WorkLogInputForm;
+    
