@@ -71,9 +71,9 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
     resolver: zodResolver(formSchema),
     defaultValues: {
         date: new Date(),
-        startTime: '',
-        endTime: '',
-        breakDurationMinutes: 0,
+        startTime: '14:00', // Default start time: 2:00 PM
+        endTime: '22:30', // Default end time: 10:30 PM
+        breakDurationMinutes: 65, // Default break: 65 minutes
         documentsCompleted: 0,
         videoSessionsCompleted: 0,
         notes: '',
@@ -121,7 +121,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
       } else {
          setCalculatedHours(null);
          form.reset({
-            date: new Date(),
+            date: new Date(), // Fallback to today if parse fails
             startTime: existingLog.startTime,
             endTime: existingLog.endTime,
             breakDurationMinutes: existingLog.breakDurationMinutes,
@@ -133,11 +133,12 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
     } else {
        // Reset form for adding a new log if existingLog becomes null/undefined
        setCalculatedHours(null);
+       // Reset to the defined default values
        form.reset({
         date: new Date(),
-        startTime: '',
-        endTime: '',
-        breakDurationMinutes: 0,
+        startTime: '14:00',
+        endTime: '22:30',
+        breakDurationMinutes: 65,
         documentsCompleted: 0,
         videoSessionsCompleted: 0,
         notes: '',
@@ -145,7 +146,17 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
     }
     // Note: Not including form in dependencies to avoid potential loops if form instance changes unexpectedly.
     // Relying on existingLog changing is usually sufficient.
-   }, [existingLog]);
+   }, [existingLog, form.reset]); // Added form.reset to dependency array
+
+   // Calculate initial hours when the component mounts with default values
+   useEffect(() => {
+        const defaultValues = form.getValues();
+        if (isValid(defaultValues.date)) {
+            const formattedDate = format(defaultValues.date, 'yyyy-MM-dd');
+            const hours = calculateHoursWorked(formattedDate, defaultValues.startTime, defaultValues.endTime, defaultValues.breakDurationMinutes);
+            setCalculatedHours(hours);
+        }
+    }, []); // Run only once on mount
 
 
   // Handle form submission
@@ -160,14 +171,15 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
     const formattedDate = format(values.date, 'yyyy-MM-dd');
     const hoursWorked = calculateHoursWorked(formattedDate, values.startTime, values.endTime, values.breakDurationMinutes);
 
-    if (hoursWorked <= 0 && (values.documentsCompleted > 0 || values.videoSessionsCompleted > 0)) {
-        toast({ variant: "destructive", title: "Invalid Time Entry", description: "Calculated hours worked is zero or negative. Please check start time, end time, and break duration." });
-        setIsLoading(false);
-        return;
-    }
+    // Allow saving even if hoursWorked is 0, as user might just be logging time/break
+    // if (hoursWorked <= 0 && (values.documentsCompleted > 0 || values.videoSessionsCompleted > 0)) {
+    //     toast({ variant: "destructive", title: "Invalid Time Entry", description: "Calculated hours worked is zero or negative. Please check start time, end time, and break duration." });
+    //     setIsLoading(false);
+    //     return;
+    // }
 
     // Prepare data payload for the action function
-    const payloadToServer: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number } = {
+    const payloadToSave: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number } = {
         ...(existingLog?.id && { id: existingLog.id }), // Include ID only if editing
         date: formattedDate,
         startTime: values.startTime,
@@ -181,7 +193,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
 
     try {
       // --- Call Client-Side Action ---
-      onWorkLogSaved(payloadToServer); // Parent component handles state update/re-fetch
+      const savedLog = onWorkLogSaved(payloadToSave); // Parent component handles state update/re-fetch
 
       toast({
         title: "Work Log Saved",
@@ -190,16 +202,18 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
 
       // Reset form after successful save, unless it was an edit
       if (!existingLog) {
-        setCalculatedHours(null);
-        form.reset({
+        form.reset({ // Reset to default values
             date: new Date(),
-            startTime: '',
-            endTime: '',
-            breakDurationMinutes: 0,
+            startTime: '14:00',
+            endTime: '22:30',
+            breakDurationMinutes: 65,
             documentsCompleted: 0,
             videoSessionsCompleted: 0,
             notes: '',
         });
+         // Recalculate hours for the new default times
+        const defaultHours = calculateHoursWorked(format(new Date(), 'yyyy-MM-dd'), '14:00', '22:30', 65);
+        setCalculatedHours(defaultHours);
       }
 
     } catch (error) {
@@ -400,6 +414,24 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                         }
                     }} className="ml-2" disabled={isLoading}>
                         Cancel Edit
+                    </Button>
+                )}
+                {/* Button to reset to the component's default values */}
+                {!existingLog && (
+                    <Button type="button" variant="outline" onClick={() => {
+                        form.reset({
+                            date: new Date(),
+                            startTime: '14:00',
+                            endTime: '22:30',
+                            breakDurationMinutes: 65,
+                            documentsCompleted: 0,
+                            videoSessionsCompleted: 0,
+                            notes: '',
+                        });
+                        const defaultHours = calculateHoursWorked(format(new Date(), 'yyyy-MM-dd'), '14:00', '22:30', 65);
+                        setCalculatedHours(defaultHours);
+                    }} className="ml-2" disabled={isLoading}>
+                        Reset Defaults
                     </Button>
                 )}
              </div>
