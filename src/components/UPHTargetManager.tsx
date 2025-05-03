@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogClose, // Import DialogClose
+  DialogClose,
 } from '@/components/ui/dialog';
 import {
   Form,
@@ -31,15 +31,7 @@ import { Trash2, Edit, CheckCircle, XCircle } from 'lucide-react'; // Icons
 import { useToast } from "@/hooks/use-toast";
 import type { UPHTarget } from '@/types'; // Assuming type is defined
 
-// --- Server Action Imports (Replace with actual paths) ---
-import {
-  addUPHTarget,
-  updateUPHTarget,
-  deleteUPHTarget,
-  setActiveUPHTarget,
-} from '@/lib/actions'; // Assuming actions exist in lib/actions.ts
-
-// --- Zod Schema for Target Form ---
+// Zod Schema remains the same
 const targetFormSchema = z.object({
   name: z.string().min(1, { message: 'Target name is required.' }),
   targetUPH: z.coerce.number().positive({ message: 'Target UPH must be positive.' }),
@@ -52,11 +44,21 @@ type TargetFormData = z.infer<typeof targetFormSchema>;
 // --- Component Props ---
 interface UPHTargetManagerProps {
   targets: UPHTarget[];
-  onTargetsUpdate: () => void; // Callback to refresh targets list on the parent page
+  // Accept specific server actions as props
+  addUPHTargetAction: (data: Omit<UPHTarget, 'id' | 'isActive'>) => Promise<UPHTarget>;
+  updateUPHTargetAction: (data: UPHTarget) => Promise<UPHTarget>;
+  deleteUPHTargetAction: (id: string) => Promise<void>;
+  setActiveUPHTargetAction: (id: string) => Promise<UPHTarget>;
 }
 
 // --- Component ---
-const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({ targets = [], onTargetsUpdate }) => {
+const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
+    targets = [],
+    addUPHTargetAction,
+    updateUPHTargetAction,
+    deleteUPHTargetAction,
+    setActiveUPHTargetAction,
+}) => {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTarget, setEditingTarget] = useState<UPHTarget | null>(null);
@@ -67,7 +69,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({ targets = [], onTar
     defaultValues: {
       name: '',
       targetUPH: undefined,
-      docWeight: 1, // Default weights
+      docWeight: 1,
       videoWeight: 1,
     },
   });
@@ -99,21 +101,21 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({ targets = [], onTar
      setIsLoading(true);
     try {
       if (editingTarget) {
-        // Update existing target
+        // Update existing target - use the update action prop
         const updatedTargetData: UPHTarget = {
-          ...editingTarget, // Keep id and isActive status
+          ...editingTarget, // Keep id and isActive status from the original editing target
           ...values, // Include updated form values
         };
-        await updateUPHTarget(updatedTargetData); // Server Action
+        await updateUPHTargetAction(updatedTargetData); // Call server Action prop
         toast({ title: "Target Updated", description: `"${values.name}" has been updated.` });
       } else {
-        // Add new target
+        // Add new target - use the add action prop
         const newTargetData: Omit<UPHTarget, 'id' | 'isActive'> = values;
-        await addUPHTarget(newTargetData); // Server Action
+        await addUPHTargetAction(newTargetData); // Call server Action prop
         toast({ title: "Target Added", description: `"${values.name}" has been added.` });
       }
       setIsDialogOpen(false); // Close dialog on success
-      onTargetsUpdate(); // Refresh list on parent
+      // Revalidation is handled by the server action, no need for onTargetsUpdate callback
     } catch (error) {
         console.error("Failed to save target:", error);
         toast({
@@ -130,9 +132,9 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({ targets = [], onTar
   const handleSetActive = async (id: string) => {
      setIsLoading(true);
     try {
-      await setActiveUPHTarget(id); // Server Action
+      await setActiveUPHTargetAction(id); // Use the set active action prop
       toast({ title: "Target Activated", description: "The selected target is now active." });
-      onTargetsUpdate(); // Refresh list
+      // Revalidation handled by server action
     } catch (error) {
         console.error("Failed to set active target:", error);
          toast({
@@ -146,15 +148,14 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({ targets = [], onTar
   };
 
   const handleDelete = async (id: string, name: string) => {
-    // Optional: Add a confirmation dialog here
     if (!confirm(`Are you sure you want to delete the target "${name}"?`)) {
         return;
     }
      setIsLoading(true);
     try {
-      await deleteUPHTarget(id); // Server Action
+      await deleteUPHTargetAction(id); // Use the delete action prop
       toast({ title: "Target Deleted", description: `"${name}" has been deleted.` });
-      onTargetsUpdate(); // Refresh list
+       // Revalidation handled by server action
     } catch (error) {
        console.error("Failed to delete target:", error);
          toast({
@@ -239,9 +240,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({ targets = [], onTar
                     )}
                     />
                 <DialogFooter>
-                    {/* Use DialogClose for the Cancel button */}
                     <DialogClose asChild>
-                        <Button type="button" variant="outline">Cancel</Button>
+                        <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
                     </DialogClose>
                     <Button type="submit" disabled={isLoading}>
                          {isLoading ? 'Saving...' : (editingTarget ? 'Save Changes' : 'Add Target')}
