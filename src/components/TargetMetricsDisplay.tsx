@@ -1,11 +1,9 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button'; // Import Button
-import { Trash2 } from 'lucide-react'; // Import Trash icon
+import { Trash2, Clock, Calendar, BookOpen, Video } from 'lucide-react'; // Import icons
 import { useToast } from "@/hooks/use-toast"; // Import useToast
 import {
     Accordion,
@@ -13,6 +11,14 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from "@/components/ui/accordion"; // Import Accordion components
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card"; // Import Card components
 import {
     calculateDailyUnits,
     calculateDailyUPH,
@@ -23,7 +29,6 @@ import {
     formatFriendlyDate,
 } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
-import { CardDescription } from '@/components/ui/card'; // Import CardDescription for summary
 
 interface TargetMetricsDisplayProps {
   allWorkLogs: DailyWorkLog[]; // Receive all logs
@@ -37,59 +42,47 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   deleteWorkLogAction, // Destructure delete action
 }) => {
   const { toast } = useToast(); // Initialize toast hook
-  // State to hold the current time, updating periodically
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
-    // Update time immediately on mount to avoid potential hydration issues
     setCurrentTime(new Date());
-    // Set up an interval to update the time every second
     const timerId = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000); // Update every second
-
-    // Clear interval on component unmount
     return () => clearInterval(timerId);
   }, []);
 
-  // Separate logs into today and previous days, grouped by date for previous logs
   const { todayLog, previousLogsByDate } = useMemo(() => {
     const todayDateStr = formatDateISO(new Date());
     let foundTodayLog: DailyWorkLog | null = null;
     const prevLogsMap: Record<string, DailyWorkLog[]> = {};
 
-    // Sort logs by date descending first
     const sortedLogs = [...allWorkLogs].sort((a, b) => b.date.localeCompare(a.date));
 
     sortedLogs.forEach(log => {
-        // Find the SINGLE log matching today's date
       if (log.date === todayDateStr && !foundTodayLog) {
         foundTodayLog = log;
       } else if (log.date !== todayDateStr) {
-          // Group previous logs by date
           if (!prevLogsMap[log.date]) {
               prevLogsMap[log.date] = [];
           }
-          // For simplicity, still assuming one log per previous date after saveWorkLog update
           if (prevLogsMap[log.date].length === 0) {
              prevLogsMap[log.date].push(log);
           }
       }
     });
 
-    // Convert map to array of {date, log} for easier rendering
     const prevLogsGrouped = Object.entries(prevLogsMap)
-                                .map(([date, logs]) => ({ date, log: logs[0] })) // Take the first log for that date
-                                .sort((a, b) => b.date.localeCompare(a.date)); // Ensure dates are descending
+                                .map(([date, logs]) => ({ date, log: logs[0] }))
+                                .sort((a, b) => b.date.localeCompare(a.date));
 
     return { todayLog: foundTodayLog, previousLogsByDate: prevLogsGrouped };
   }, [allWorkLogs]);
 
 
-  // Sort targets by Goal UPH ascending for display consistency
   const sortedTargets = [...targets].sort((a, b) => a.targetUPH - b.targetUPH);
+  const activeTarget = targets.find(t => t.isActive) ?? sortedTargets[0] ?? null; // Find active or fallback to first
 
-  // --- Delete Handler ---
   const handleDeleteLog = (log: DailyWorkLog) => {
     if (!confirm(`Are you sure you want to delete the log for ${formatFriendlyDate(new Date(log.date + 'T00:00:00'))}?`)) {
       return;
@@ -110,72 +103,139 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     }
   };
 
-  // --- Helper Function to Render a Metrics Row (Shared by Today and Previous) ---
-  const renderMetricsRow = (log: DailyWorkLog, target: UPHTarget, isToday: boolean) => {
-      if (log.hoursWorked <= 0 && isToday) {
-          // Display placeholder row only if no valid log data yet *for today*
-          return (
-              <TableRow key={`${log.id}-${target.id}-placeholder`}>
-                  <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
-                  <TableCell className="text-right">{log.documentsCompleted}</TableCell>
-                  <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>
-                  <TableCell className="text-right">-</TableCell>
-                  <TableCell className="text-right">-</TableCell>
-                  <TableCell className="text-right">-</TableCell>
-              </TableRow>
-          );
-      }
-       if (log.hoursWorked <= 0 && !isToday) {
-           // For previous days, just return minimal info if no hours worked
-            return (
-                 <TableRow key={`${log.id}-${target.id}-prev-placeholder`}>
-                    <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
-                    <TableCell className="text-right">{log.documentsCompleted}</TableCell>
-                    <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>
-                    <TableCell className="text-right">-</TableCell>
-                    <TableCell className="text-right">-</TableCell>
-                </TableRow>
-            );
-       }
-
-
-      // Perform calculations for each target based on the log
+  // --- Helper Function to Render a Metric Card (Used for Targets) ---
+  const renderTargetMetricCard = (log: DailyWorkLog, target: UPHTarget, isToday: boolean) => {
       const actualUnits = calculateDailyUnits(log, target);
-      const actualUPH = calculateDailyUPH(log, target); // UPH based on this specific target's unit definition
+      const actualUPH = calculateDailyUPH(log, target);
       const requiredUnits = calculateRequiredUnitsForTarget(log.hoursWorked, target.targetUPH);
       const differenceUnits = parseFloat((actualUnits - requiredUnits).toFixed(2));
 
-      // Only calculate time-related metrics for today's log
       let goalHitTimeFormatted = '-';
       if (isToday && currentTime && actualUPH > 0) {
           const remainingUnits = requiredUnits - actualUnits;
           const remainingWorkHours = (remainingUnits > 0) ? remainingUnits / actualUPH : 0;
           goalHitTimeFormatted = calculateProjectedGoalHitTime(currentTime, remainingWorkHours);
-      } else if (isToday && actualUPH <= 0) {
-          goalHitTimeFormatted = 'N/A';
-      } else if (!isToday && log.hoursWorked > 0) {
-          // If it's a previous day, show N/A for goal hit time
+      } else if (isToday && actualUPH <= 0 && log.hoursWorked > 0) {
+          goalHitTimeFormatted = 'N/A (No Units)';
+      } else if (isToday && log.hoursWorked <= 0) {
           goalHitTimeFormatted = '-';
       }
 
+      const isBehind = differenceUnits < 0;
 
       return (
-          <TableRow key={`${log.id}-${target.id}`}>
-              <TableCell className="text-right font-medium">{target.name}</TableCell>
-              <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
-              {/* Show Actual Units (for this target) */}
-              <TableCell className="text-right">{actualUnits.toFixed(2)}</TableCell>
-              {/* Show Units Needed for this target */}
-              <TableCell className="text-right">{requiredUnits.toFixed(2)}</TableCell>
-              {/* Show +/- Difference */}
-              <TableCell className={`text-right font-medium ${differenceUnits >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
-                   {(differenceUnits >= 0 ? '+' : '') + differenceUnits.toFixed(2)}
-              </TableCell>
-               {/* Show Est. Goal Hit Time only for Today */}
-               {isToday && <TableCell className="text-right">{goalHitTimeFormatted}</TableCell>}
-          </TableRow>
+        <Card key={`${log.id}-${target.id}`} className="flex flex-col justify-between">
+            <CardHeader className="pb-2">
+                 <div className="flex justify-between items-start">
+                    <CardTitle className="text-lg font-semibold">{target.name}</CardTitle>
+                    {/* Display +/- Target in the header */}
+                    <span className={`text-lg font-bold ${isBehind ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
+                        {(differenceUnits >= 0 ? '+' : '') + differenceUnits.toFixed(2)} Units
+                    </span>
+                 </div>
+                <CardDescription>Goal UPH: {target.targetUPH.toFixed(1)}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-grow grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <div>
+                    <p className="text-muted-foreground">Actual Units</p>
+                    <p className="font-medium">{actualUnits.toFixed(2)}</p>
+                </div>
+                 <div>
+                    <p className="text-muted-foreground">Units Needed</p>
+                    <p className="font-medium">{requiredUnits.toFixed(2)}</p>
+                </div>
+                {/* Show Actual UPH here (calculated based on *this* target's unit definition) */}
+                <div>
+                    <p className="text-muted-foreground">Actual UPH (Target)</p>
+                    <p className="font-medium">{actualUPH.toFixed(2)}</p>
+                </div>
+
+                {isToday && (
+                     <div>
+                        <p className="text-muted-foreground">Est. Goal Hit</p>
+                        <p className="font-medium">{goalHitTimeFormatted}</p>
+                    </div>
+                )}
+            </CardContent>
+             {/* <CardFooter className="text-xs text-muted-foreground pt-2">
+                 Calculated vs {target.targetUPH.toFixed(1)} UPH Goal
+            </CardFooter> */}
+        </Card>
       );
   };
+
+   // --- Helper Function to Render a Summary Card for a Log ---
+   const renderLogSummaryCard = (log: DailyWorkLog, isToday: boolean) => {
+        // Calculate Actual UPH using the active target (or first if none active)
+        const summaryUPH = activeTarget && log.hoursWorked > 0 ? calculateDailyUPH(log, activeTarget) : 0;
+        const summaryTargetName = activeTarget ? activeTarget.name : 'Default';
+
+        return (
+            <Card className="mb-4 relative"> {/* Added relative positioning for delete button */}
+                 <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                         <div>
+                            <CardTitle className="text-xl">
+                                {isToday ? `Today (${formatFriendlyDate(new Date(log.date + 'T00:00:00'))})` : formatFriendlyDate(new Date(log.date + 'T00:00:00'))}
+                            </CardTitle>
+                             <CardDescription>
+                                {log.hoursWorked.toFixed(2)} hrs ({log.startTime} - {log.endTime}, {log.breakDurationMinutes} min break)
+                            </CardDescription>
+                         </div>
+                           {/* Delete Button */}
+                         <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2" // Positioned top-right
+                            onClick={(e) => {
+                                e.stopPropagation(); // Prevent accordion toggle if inside trigger
+                                handleDeleteLog(log);
+                            }}
+                            title="Delete This Log"
+                            aria-label="Delete This Log"
+                            >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </CardHeader>
+                 <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                     <div className="flex items-center space-x-2">
+                        <BookOpen className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                            <p className="text-sm text-muted-foreground">Docs</p>
+                            <p className="text-lg font-semibold">{log.documentsCompleted}</p>
+                        </div>
+                    </div>
+                     <div className="flex items-center space-x-2">
+                         <Video className="h-5 w-5 text-muted-foreground" />
+                         <div>
+                             <p className="text-sm text-muted-foreground">Videos</p>
+                             <p className="text-lg font-semibold">{log.videoSessionsCompleted}</p>
+                         </div>
+                     </div>
+                    <div className="flex items-center space-x-2">
+                        <Clock className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                            <p className="text-sm text-muted-foreground">Actual UPH</p>
+                            <p className="text-lg font-semibold">{summaryUPH.toFixed(2)}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                         <Calendar className="h-5 w-5 text-muted-foreground" />
+                         <div>
+                             <p className="text-sm text-muted-foreground">vs. Target</p>
+                             <p className="text-lg font-semibold">{summaryTargetName}</p>
+                         </div>
+                    </div>
+                 </CardContent>
+                 {log.notes && (
+                    <CardFooter className="pt-3">
+                        <p className="text-sm text-muted-foreground italic">Notes: {log.notes}</p>
+                    </CardFooter>
+                 )}
+            </Card>
+        );
+   }
 
 
   return (
@@ -183,49 +243,16 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       {/* --- Today's Metrics Section --- */}
       {todayLog && (
         <div>
-          <div className="flex justify-between items-center mb-2">
-              <h3 className="text-lg font-semibold">Today's Metrics ({formatFriendlyDate(new Date(todayLog.date + 'T00:00:00'))})</h3>
-               <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-destructive hover:text-destructive h-8 w-8"
-                  onClick={() => handleDeleteLog(todayLog)}
-                  title="Delete Today's Log"
-                  aria-label="Delete Today's Log"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-          </div>
-           {/* Summary for Today */}
-           <CardDescription className="mb-3 text-sm px-1">
-                Logged: {todayLog.hoursWorked} hrs (Start: {todayLog.startTime}, End: {todayLog.endTime}, Break: {todayLog.breakDurationMinutes} mins).
-                Completed: {todayLog.documentsCompleted} Docs, {todayLog.videoSessionsCompleted} Videos.
-                {todayLog.hoursWorked > 0 && ` Actual UPH: ${calculateDailyUPH(todayLog, sortedTargets[0]).toFixed(2)} (vs. ${sortedTargets[0]?.name || 'first target'})`}
-                {todayLog.notes && <p className="mt-1 italic">Notes: {todayLog.notes}</p>}
-            </CardDescription>
-          <div className="overflow-x-auto border rounded-md">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-right">Goal Name</TableHead>
-                  <TableHead className="text-right">Goal UPH</TableHead>
-                  <TableHead className="text-right">Actual Units</TableHead>
-                  <TableHead className="text-right">Units Needed</TableHead>
-                  <TableHead className="text-right">+/- Target</TableHead>
-                  <TableHead className="text-right">Est. Goal Hit Time</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedTargets.length > 0 ? (
-                    sortedTargets.map((target) => renderMetricsRow(todayLog, target, true))
-                ) : (
-                    <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground">No UPH targets defined.</TableCell>
-                    </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          {renderLogSummaryCard(todayLog, true)}
+
+           {/* Grid for Target Metric Cards */}
+           {sortedTargets.length > 0 ? (
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {sortedTargets.map((target) => renderTargetMetricCard(todayLog, target, true))}
+             </div>
+            ) : (
+                <p className="text-center text-muted-foreground mt-4">No UPH targets defined to calculate metrics.</p>
+            )}
         </div>
       )}
 
@@ -235,80 +262,40 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       {/* --- Previous Logs Section (Accordion) --- */}
       {previousLogsByDate.length > 0 && (
         <div>
-          <h3 className="text-lg font-semibold mb-2">Previous Logs</h3>
-           <Accordion type="multiple" className="w-full">
-               {previousLogsByDate.map(({ date, log }) => {
-                    // Calculate Actual UPH once per day for display in summary using the first target
-                    const firstTarget = sortedTargets[0]; // Use first target for summary UPH
-                    const dailyActualUPH = firstTarget && log.hoursWorked > 0 ? calculateDailyUPH(log, firstTarget) : 0;
-
-                    return (
-                    <AccordionItem value={date} key={date}>
-                        {/* Header container for Trigger and Delete Button */}
-                         <div className="flex items-center justify-between py-1 border-b data-[state=open]:border-b-0"> {/* Adjust padding/border */}
-                            <AccordionTrigger className="flex-1 text-base hover:no-underline py-3 pr-2"> {/* Adjust padding */}
-                                {formatFriendlyDate(new Date(date + 'T00:00:00'))}
-                            </AccordionTrigger>
-                             {/* Delete Button outside the Trigger */}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive h-8 w-8 shrink-0 mr-2" // Add margin
-                                onClick={(e) => {
-                                    e.stopPropagation(); // Keep stopping propagation if needed
-                                    handleDeleteLog(log);
-                                }}
-                                title="Delete This Log"
-                                aria-label="Delete This Log"
-                                >
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                        </div>
-                        <AccordionContent>
-                            {/* Show more detailed summary */}
-                            <CardDescription className="px-1 py-2 text-sm border-t pt-3"> {/* Add border-t */}
-                                Logged: {log.hoursWorked} hrs (Start: {log.startTime}, End: {log.endTime}, Break: {log.breakDurationMinutes} mins).
-                                Completed: {log.documentsCompleted} Docs, {log.videoSessionsCompleted} Videos.
-                                {log.hoursWorked > 0 && ` Actual UPH (vs. ${firstTarget?.name || 'first target'}): ${dailyActualUPH.toFixed(2)}`}
-                                {log.notes && <p className="mt-1 italic">Notes: {log.notes}</p>}
-                            </CardDescription>
-                             <div className="overflow-x-auto border rounded-md mt-2">
-                                <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                    <TableHead className="text-right">Goal Name</TableHead>
-                                    <TableHead className="text-right">Goal UPH</TableHead>
-                                    <TableHead className="text-right">Actual Units</TableHead>
-                                    <TableHead className="text-right">Units Needed</TableHead>
-                                    <TableHead className="text-right">+/- Target</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {sortedTargets.length > 0 ? (
-                                        sortedTargets.map(target => renderMetricsRow(log, target, false)) // Pass false for isToday
-                                    ) : (
-                                        <TableRow>
-                                            <TableCell colSpan={5} className="text-center text-muted-foreground">No UPH targets defined for this day.</TableCell> {/* Updated colspan */}
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                                </Table>
+          <h3 className="text-xl font-semibold mb-3">Previous Logs</h3>
+           <Accordion type="multiple" className="w-full space-y-4">
+               {previousLogsByDate.map(({ date, log }) => (
+                    <AccordionItem value={date} key={date} className="border rounded-lg overflow-hidden">
+                         {/* Use AccordionTrigger to wrap the summary card for clickability */}
+                        <AccordionTrigger className="hover:no-underline p-0 data-[state=open]:bg-muted/30 transition-colors">
+                             {/* Render summary card inside the trigger */}
+                             <div className="w-full"> {/* Ensure full width */}
+                                {renderLogSummaryCard(log, false)}
                             </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="p-4 border-t bg-muted/10">
+                            <h4 className="text-md font-semibold mb-3">Target Breakdown for {formatFriendlyDate(new Date(date + 'T00:00:00'))}</h4>
+                             {sortedTargets.length > 0 ? (
+                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {sortedTargets.map(target => renderTargetMetricCard(log, target, false))}
+                                 </div>
+                                ) : (
+                                    <p className="text-center text-muted-foreground">No UPH targets were defined at the time of this log.</p>
+                             )}
                         </AccordionContent>
                     </AccordionItem>
-                    );
-                })}
+                ))}
            </Accordion>
         </div>
       )}
 
        {/* Message if no logs exist at all */}
        {!todayLog && previousLogsByDate.length === 0 && targets.length > 0 && (
-           <p className="text-sm text-muted-foreground">No work logs found.</p>
+           <p className="text-center text-muted-foreground">No work logs found.</p>
        )}
        {/* Message if no targets exist */}
        {targets.length === 0 && (
-           <p className="text-sm text-muted-foreground">No UPH targets defined.</p>
+           <p className="text-center text-muted-foreground">No UPH targets defined.</p>
        )}
 
     </div>
@@ -316,4 +303,3 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
-

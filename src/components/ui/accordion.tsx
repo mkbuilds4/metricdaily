@@ -14,7 +14,8 @@ const AccordionItem = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AccordionPrimitive.Item
     ref={ref}
-    className={cn("border-b", className)}
+    // Removed border-b here, apply it on the item or trigger as needed
+    className={cn("", className)} // Keep base class empty or adjust as needed
     {...props}
   />
 ))
@@ -25,16 +26,20 @@ const AccordionTrigger = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger>
 >(({ className, children, ...props }, ref) => (
   <AccordionPrimitive.Header className="flex">
+    {/* Ensure the Trigger itself doesn't introduce unwanted styles like underline */}
     <AccordionPrimitive.Trigger
       ref={ref}
       className={cn(
-        "flex flex-1 items-center justify-between py-4 font-medium transition-all hover:underline [&[data-state=open]>svg]:rotate-180",
+        "flex flex-1 items-center justify-between py-4 font-medium transition-all [&[data-state=open]>svg]:rotate-180",
+        // Remove hover:underline if it conflicts with card styling
+        // "hover:underline",
         className
       )}
       {...props}
     >
       {children}
-      <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+       {/* Chevron is now outside the main children flow if needed, or keep inside if layout demands */}
+       <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ml-2" /> {/* Added margin */}
     </AccordionPrimitive.Trigger>
   </AccordionPrimitive.Header>
 ))
@@ -49,6 +54,7 @@ const AccordionContent = React.forwardRef<
     className="overflow-hidden text-sm transition-all data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
     {...props}
   >
+    {/* Adjust padding as needed */}
     <div className={cn("pb-4 pt-0", className)}>{children}</div>
   </AccordionPrimitive.Content>
 ))

@@ -1,4 +1,3 @@
-
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
@@ -34,7 +33,7 @@ const CardTitle = React.forwardRef<
   HTMLParagraphElement, // Changed to p for semantic correctness
   React.HTMLAttributes<HTMLHeadingElement> // Still accept heading attributes
 >(({ className, ...props }, ref) => (
-  <h3 // Use h3 or appropriate heading level
+  <h4 // Use h4 or appropriate heading level
     ref={ref}
     className={cn(
       "text-2xl font-semibold leading-none tracking-tight", // Standard heading styles
@@ -80,4 +79,3 @@ const CardFooter = React.forwardRef<
 CardFooter.displayName = "CardFooter"
 
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
-
