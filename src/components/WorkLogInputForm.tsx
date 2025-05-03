@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -21,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon, Clock } from 'lucide-react'; // Import Clock icon
+import { CalendarIcon } from 'lucide-react'; // Removed Clock icon import
 import { cn, calculateHoursWorked } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 import type { DailyWorkLog } from '@/types';
@@ -294,11 +293,8 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                     <FormItem>
                     <FormLabel>Start Time (HH:mm)</FormLabel>
                     <FormControl>
-                       <div className="relative">
-                          <Input type="time" {...field} className="pr-8" />
-                          {/* Icon positioned at the right edge */}
-                          <Clock className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                       </div>
+                       {/* Removed the wrapper div and the absolute positioned icon */}
+                       <Input type="time" {...field} />
                     </FormControl>
                     <FormMessage />
                     </FormItem>
@@ -312,11 +308,8 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                     <FormItem>
                     <FormLabel>End Time (HH:mm)</FormLabel>
                     <FormControl>
-                       <div className="relative">
-                          <Input type="time" {...field} className="pr-8" />
-                          {/* Icon positioned at the right edge */}
-                          <Clock className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                       </div>
+                        {/* Removed the wrapper div and the absolute positioned icon */}
+                       <Input type="time" {...field} />
                     </FormControl>
                     <FormMessage />
                     </FormItem>
@@ -445,4 +438,3 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
 };
 
 export default WorkLogInputForm;
-    
