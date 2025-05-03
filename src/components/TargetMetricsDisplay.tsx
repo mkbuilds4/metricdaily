@@ -41,7 +41,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
-    // Update time immediately on mount to avoid potential hydration mismatch if possible
+    // Update time immediately on mount to avoid potential hydration issues
     setCurrentTime(new Date());
     // Set up an interval to update the time every second
     const timerId = setInterval(() => {
@@ -127,12 +127,14 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
           );
       }
        if (log.hoursWorked <= 0 && !isToday) {
-           // For previous days, just return null if no hours worked (or display minimal info)
+           // For previous days, just return minimal info if no hours worked
             return (
                  <TableRow key={`${log.id}-${target.id}-prev-placeholder`}>
                     <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
+                    <TableCell className="text-right">{log.documentsCompleted}</TableCell>
+                    <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>
                     <TableCell className="text-right">-</TableCell>
-                    {/* Actual UPH removed from previous rows */}
+                    <TableCell className="text-right">-</TableCell>
                     <TableCell className="text-right">-</TableCell>
                 </TableRow>
             );
@@ -158,14 +160,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       return (
           <TableRow key={`${log.id}-${target.id}`}>
               <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
-              {/* Show Docs/Videos/Units Needed for both */}
               <TableCell className="text-right">{log.documentsCompleted}</TableCell>
               <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>
               <TableCell className="text-right">{requiredUnits.toFixed(2)}</TableCell>
               {/* Show Actual UPH only for Today */}
               {isToday && <TableCell className="text-right">{actualUPH.toFixed(2)}</TableCell>}
-              {/* Show Actual Units only for Today */}
-              {isToday && <TableCell className="text-right">{actualUnits.toFixed(2)}</TableCell>}
+              {/* Show Actual Units (for this target) for both Today and Previous */}
+              <TableCell className="text-right">{actualUnits.toFixed(2)}</TableCell>
               {/* Show Est. Goal Hit Time only for Today */}
               {isToday && <TableCell className="text-right">{goalHitTimeFormatted}</TableCell>}
               {/* Show +/- Difference only for Previous Days */}
@@ -197,6 +198,12 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                   <Trash2 className="h-4 w-4" />
                 </Button>
           </div>
+           {/* Summary for Today */}
+           <CardDescription className="mb-3 text-sm px-1">
+                Logged: {todayLog.hoursWorked} hrs (Start: {todayLog.startTime}, End: {todayLog.endTime}, Break: {todayLog.breakDurationMinutes} mins).
+                Completed: {todayLog.documentsCompleted} Docs, {todayLog.videoSessionsCompleted} Videos.
+                {todayLog.notes && <p className="mt-1 italic">Notes: {todayLog.notes}</p>}
+            </CardDescription>
           <div className="overflow-x-auto border rounded-md">
             <Table>
               <TableHeader>
@@ -233,8 +240,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
           <h3 className="text-lg font-semibold mb-2">Previous Logs</h3>
            <Accordion type="multiple" className="w-full">
                {previousLogsByDate.map(({ date, log }) => {
-                    // Calculate Actual UPH once per day for display in summary
-                    // Assuming we need a target context for UPH, let's pick the first one or default
+                    // Calculate Actual UPH once per day for display in summary using the first target
                     const firstTarget = sortedTargets[0];
                     const dailyActualUPH = firstTarget ? calculateDailyUPH(log, firstTarget) : 0;
 
@@ -243,6 +249,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                         <AccordionTrigger className="text-base hover:no-underline">
                             <div className="flex justify-between items-center w-full pr-2"> {/* Use full width and padding for spacing */}
                                 <span>{formatFriendlyDate(new Date(date + 'T00:00:00'))}</span>
+                                {/* Keep delete button accessible when closed */}
                                 <Button
                                     variant="ghost"
                                     size="icon"
@@ -259,10 +266,12 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             </div>
                         </AccordionTrigger>
                         <AccordionContent>
-                            {/* Show Docs/Videos/Hours/Actual UPH completed once for the day */}
+                            {/* Show more detailed summary */}
                             <CardDescription className="px-1 py-2 text-sm">
-                                Completed: {log.documentsCompleted} Docs, {log.videoSessionsCompleted} Videos ({log.hoursWorked} hrs).
-                                {log.hoursWorked > 0 && ` Actual UPH: ${dailyActualUPH.toFixed(2)}`}{/* Display Actual UPH here */}
+                                Logged: {log.hoursWorked} hrs (Start: {log.startTime}, End: {log.endTime}, Break: {log.breakDurationMinutes} mins).
+                                Completed: {log.documentsCompleted} Docs, {log.videoSessionsCompleted} Videos.
+                                {log.hoursWorked > 0 && ` Actual UPH (vs. ${firstTarget?.name || 'first target'}): ${dailyActualUPH.toFixed(2)}`}
+                                {log.notes && <p className="mt-1 italic">Notes: {log.notes}</p>}
                             </CardDescription>
                              <div className="overflow-x-auto border rounded-md mt-2">
                                 <Table>
@@ -272,7 +281,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                     <TableHead className="text-right">Docs Done</TableHead>
                                     <TableHead className="text-right">Videos Done</TableHead>
                                     <TableHead className="text-right">Units Needed</TableHead>
-                                    {/* Actual UPH removed from previous logs table columns */}
+                                    <TableHead className="text-right">Actual Units</TableHead> {/* Added Actual Units */}
                                     <TableHead className="text-right">+/- Target</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -281,7 +290,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                         sortedTargets.map(target => renderMetricsRow(log, target, false)) // Pass false for isToday
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={5} className="text-center text-muted-foreground">No UPH targets defined for this day.</TableCell> {/* Updated colspan */}
+                                            <TableCell colSpan={6} className="text-center text-muted-foreground">No UPH targets defined for this day.</TableCell> {/* Updated colspan */}
                                         </TableRow>
                                     )}
                                 </TableBody>
@@ -309,3 +318,4 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
+
