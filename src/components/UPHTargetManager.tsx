@@ -148,10 +148,22 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
   };
 
   const handleDelete = async (id: string, name: string) => {
+    // Find the target to ensure it's not active before confirming
+    const targetToDelete = targets.find(t => t.id === id);
+    if (targetToDelete?.isActive) {
+        toast({
+            variant: "destructive",
+            title: "Deletion Blocked",
+            description: "Cannot delete the currently active target. Set another target as active first.",
+        });
+        return; // Prevent deletion if it's active
+    }
+
     if (!confirm(`Are you sure you want to delete the target "${name}"?`)) {
         return;
     }
-     setIsLoading(true);
+
+    setIsLoading(true);
     try {
       await deleteUPHTargetAction(id); // Use the delete action prop
       toast({ title: "Target Deleted", description: `"${name}" has been deleted.` });
@@ -311,9 +323,9 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                     size="icon"
                     className="text-destructive hover:text-destructive h-8 w-8"
                     onClick={() => handleDelete(target.id, target.name)}
-                    disabled={isLoading || target.isActive} // Cannot delete active target
-                    title={target.isActive ? "Cannot delete active target" : "Delete Target"}
-                    aria-label="Delete Target"
+                    disabled={isLoading || target.isActive} // Explicitly disable if target is active
+                    title={target.isActive ? "Cannot delete the active target" : "Delete Target"} // Updated tooltip message
+                    aria-label={target.isActive ? "Cannot delete the active target" : "Delete Target"}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
