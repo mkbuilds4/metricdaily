@@ -10,7 +10,7 @@ import {
   getWorkLogs,
   getActiveUPHTarget,
   saveWorkLog,
-  deleteWorkLog, // Assuming deleteWorkLog exists for future use
+  deleteWorkLog, // Import deleteWorkLog action
   getUPHTargets,
   addUPHTarget,
   updateUPHTarget,
@@ -66,8 +66,23 @@ export default function Home() {
   const handleSaveWorkLog = (logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }) => {
     try {
       const savedLog = saveWorkLog(logData); // Calls the client-side action
-      // Re-fetch all data to ensure consistency - simplest approach for now
-      loadData();
+      // Instead of full reload, update state directly (optimistic)
+      if (logData.id) {
+         // Update existing log in state
+         setWorkLogs(prev => prev.map(log => log.id === savedLog.id ? savedLog : log));
+      } else {
+        // Check if it updated an existing log for the date or added a new one
+        const existingIndex = workLogs.findIndex(log => log.id === savedLog.id);
+        if (existingIndex > -1) {
+             // It updated an existing log for that date
+             setWorkLogs(prev => prev.map(log => log.id === savedLog.id ? savedLog : log));
+        } else {
+             // It added a truly new log
+             setWorkLogs(prev => [savedLog, ...prev].sort((a, b) => b.date.localeCompare(a.date))); // Add and re-sort
+        }
+
+      }
+      // loadData(); // Re-fetch (safer but less performant)
       return savedLog; // Return the saved log (might have new ID)
     } catch (error) {
       console.error('[Home] Error saving work log:', error);
@@ -75,6 +90,20 @@ export default function Home() {
       throw error; // Re-throw for the form to catch if needed
     }
   };
+
+  const handleDeleteWorkLog = (id: string) => {
+    try {
+        deleteWorkLog(id); // Call client-side action
+        // Optimistic update: Remove log from state
+        setWorkLogs(prev => prev.filter(log => log.id !== id));
+        // Optionally show a success toast
+    } catch (error) {
+        console.error('[Home] Error deleting work log:', error);
+        // Optionally show an error toast
+        throw error; // Re-throw for potential handling in calling component
+    }
+  };
+
 
   const handleAddTarget = (targetData: Omit<UPHTarget, 'id' | 'isActive'>) => {
     try {
@@ -111,15 +140,17 @@ export default function Home() {
   const handleDeleteTarget = (id: string) => {
     try {
        // Check if the target being deleted is the active one
-       if (activeTarget && activeTarget.id === id) {
-            // Optionally: Prevent deletion or set another target active first
-            // For now, we allow deletion but clear the active target state
-            setActiveTarget(null);
-            // Note: deleteUPHTarget action itself should prevent deletion of active target
+       const targetToDelete = uphTargets.find(t => t.id === id);
+       if (targetToDelete?.isActive) {
+           throw new Error("Cannot delete the currently active target. Set another target as active first.");
        }
       deleteUPHTarget(id);
       // Optimistic update
       setUphTargets(prev => prev.filter(t => t.id !== id));
+      // If the deleted target was active (though prevented above, check again just in case)
+      if (activeTarget && activeTarget.id === id) {
+         setActiveTarget(null);
+      }
       // loadData(); // Re-fetch
     } catch (error) {
       console.error('[Home] Error deleting target:', error);
@@ -144,7 +175,7 @@ export default function Home() {
 
   // --- Render Logic ---
 
-   if (isLoading && typeof window !== 'undefined' && !localStorage.getItem('workLogs')) {
+   if (isLoading && typeof window !== 'undefined' && !localStorage.getItem('workLogs') && !localStorage.getItem('uphTargets')) {
      // Show loading only on the very first load before localStorage is populated
      return (
         <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8 lg:p-12">
@@ -162,7 +193,8 @@ export default function Home() {
         {/* Pass the client-side save function */}
         <WorkLogInputForm
           onWorkLogSaved={handleSaveWorkLog}
-          // No initial data needed from props, form manages its state
+          // Check if a log for today already exists to pass as existingLog
+          existingLog={workLogs.find(log => log.date === new Date().toISOString().split('T')[0])}
         />
 
         {/* Pass client-side action functions and current state */}
@@ -174,13 +206,15 @@ export default function Home() {
           setActiveUPHTargetAction={handleSetActiveTarget}
         />
 
-        {/* Pass current state */}
+        {/* Pass current state and delete handler */}
         <ProductivityDashboard
           initialWorkLogs={workLogs} // Pass current logs state
           initialUphTargets={uphTargets} // Pass ALL targets
           initialActiveTarget={activeTarget} // Pass current active target state
+          deleteWorkLogAction={handleDeleteWorkLog} // Pass delete function
         />
       </div>
     </main>
   );
 }
+

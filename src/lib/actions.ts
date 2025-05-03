@@ -15,8 +15,10 @@ const UPH_TARGETS_KEY = 'uphTargets';
  * Suitable for simple local storage IDs where collisions are highly unlikely.
  */
 function generateLocalId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+  // Simple timestamp + random string
+  return `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}`;
 }
+
 
 /**
  * Safely retrieves and parses JSON data from localStorage.
@@ -95,22 +97,34 @@ export function saveWorkLog(
       logs[index] = savedLog;
       console.log('[Client Action] Updated log with ID:', logData.id);
     } else {
-      // If ID provided but not found, treat as new add (should ideally not happen with UUIDs)
-      savedLog = { ...logData, id: generateLocalId() }; // Generate new ID just in case
+      // If ID provided but not found, treat as new add
+      // This shouldn't happen if IDs are managed correctly, but handles edge cases.
+      savedLog = { ...logData, id: generateLocalId() }; // Generate new ID
       logs.push(savedLog);
       console.warn('[Client Action] Log ID provided but not found, adding as new:', logData.id);
     }
   } else {
-    // Add new log
-    savedLog = { ...logData, id: generateLocalId() }; // Generate a local ID
-    logs.push(savedLog);
-    console.log('[Client Action] Added new log with ID:', savedLog.id);
+    // Add new log - Check if a log for this date already exists
+    const existingLogIndex = logs.findIndex(log => log.date === logData.date);
+    if (existingLogIndex > -1) {
+        // Update the existing log for that date instead of adding a new one
+        const existingId = logs[existingLogIndex].id;
+        savedLog = { ...logs[existingLogIndex], ...logData, id: existingId };
+        logs[existingLogIndex] = savedLog;
+        console.log('[Client Action] Updated existing log for date:', logData.date, ' ID:', existingId);
+    } else {
+        // Truly a new log for a new date
+        savedLog = { ...logData, id: generateLocalId() }; // Generate a local ID
+        logs.push(savedLog);
+        console.log('[Client Action] Added new log with ID:', savedLog.id);
+    }
   }
 
   saveToLocalStorage(WORK_LOGS_KEY, logs);
   // Revalidation is handled by components re-fetching or state updates
   return savedLog;
 }
+
 
 /**
  * Deletes a work log entry from localStorage by ID.
@@ -124,10 +138,13 @@ export function deleteWorkLog(id: string): void {
     if (logs.length < initialLength) {
         saveToLocalStorage(WORK_LOGS_KEY, logs);
         console.log('[Client Action] Deleted log with ID:', id);
+        // Revalidation handled by component state update
     } else {
         console.warn('[Client Action] Log ID not found for deletion:', id);
+        throw new Error(`Work log with ID ${id} not found for deletion.`);
     }
 }
+
 
 // === UPH Target Actions (Client-Side) ===
 
@@ -148,6 +165,9 @@ export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): UP
   console.log('[Client Action] addUPHTarget called with:', targetData);
   if (targetData.docsPerUnit <= 0 || targetData.videosPerUnit <= 0) {
     throw new Error('Items per unit must be positive numbers.');
+  }
+  if (targetData.targetUPH <= 0) {
+    throw new Error('Target UPH must be positive.');
   }
 
   const targets = getUPHTargets();
@@ -171,6 +191,9 @@ export function updateUPHTarget(targetData: UPHTarget): UPHTarget {
   console.log('[Client Action] updateUPHTarget called with:', targetData);
   if (targetData.docsPerUnit <= 0 || targetData.videosPerUnit <= 0) {
     throw new Error('Items per unit must be positive numbers.');
+  }
+   if (targetData.targetUPH <= 0) {
+    throw new Error('Target UPH must be positive.');
   }
   if (!targetData.id) {
     throw new Error('Target ID is required for update.');
@@ -202,11 +225,11 @@ export function deleteUPHTarget(id: string): void {
 
   if (!targetToDelete) {
     console.warn(`[Client Action] Target with ID ${id} not found for deletion.`);
-    return; // Target doesn't exist
+    throw new Error(`Target with ID ${id} not found for deletion.`);
   }
 
   if (targetToDelete.isActive) {
-    throw new Error('Cannot delete the currently active target.');
+    throw new Error('Cannot delete the currently active target. Set another target as active first.');
   }
 
   targets = targets.filter((t) => t.id !== id);

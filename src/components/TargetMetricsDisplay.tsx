@@ -1,8 +1,12 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button'; // Import Button
+import { Trash2 } from 'lucide-react'; // Import Trash icon
+import { useToast } from "@/hooks/use-toast"; // Import useToast
 import {
     Accordion,
     AccordionContent,
@@ -23,12 +27,15 @@ import { Separator } from '@/components/ui/separator';
 interface TargetMetricsDisplayProps {
   allWorkLogs: DailyWorkLog[]; // Receive all logs
   targets: UPHTarget[];
+  deleteWorkLogAction: (id: string) => void; // Add delete action prop
 }
 
 const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   allWorkLogs = [],
   targets = [],
+  deleteWorkLogAction, // Destructure delete action
 }) => {
+  const { toast } = useToast(); // Initialize toast hook
   // State to hold the current time, updating periodically
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
@@ -54,17 +61,17 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     const sortedLogs = [...allWorkLogs].sort((a, b) => b.date.localeCompare(a.date));
 
     sortedLogs.forEach(log => {
+        // Find the SINGLE log matching today's date
       if (log.date === todayDateStr && !foundTodayLog) {
-        foundTodayLog = log; // Take the first (most recent) log for today
+        foundTodayLog = log;
       } else if (log.date !== todayDateStr) {
+          // Group previous logs by date
           if (!prevLogsMap[log.date]) {
               prevLogsMap[log.date] = [];
           }
-          // For simplicity, let's assume only one log per previous date for now
-          // If multiple logs per day need merging/handling, logic would go here.
-          // Currently, it will just store the most recent log for that date based on sorting.
+          // For simplicity, still assuming one log per previous date after saveWorkLog update
           if (prevLogsMap[log.date].length === 0) {
-            prevLogsMap[log.date].push(log);
+             prevLogsMap[log.date].push(log);
           }
       }
     });
@@ -80,6 +87,27 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
   // Sort targets by Goal UPH ascending for display consistency
   const sortedTargets = [...targets].sort((a, b) => a.targetUPH - b.targetUPH);
+
+  // --- Delete Handler ---
+  const handleDeleteLog = (log: DailyWorkLog) => {
+    if (!confirm(`Are you sure you want to delete the log for ${formatFriendlyDate(new Date(log.date + 'T00:00:00'))}?`)) {
+      return;
+    }
+    try {
+      deleteWorkLogAction(log.id);
+      toast({
+        title: "Log Deleted",
+        description: `Work log for ${formatFriendlyDate(new Date(log.date + 'T00:00:00'))} deleted successfully.`,
+      });
+    } catch (error) {
+      console.error("Failed to delete work log:", error);
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: error instanceof Error ? error.message : "Could not delete the work log.",
+      });
+    }
+  };
 
   // --- Helper Function to Render a Metrics Row (Shared by Today and Previous) ---
   const renderMetricsRow = (log: DailyWorkLog, target: UPHTarget, isToday: boolean, showDate: boolean = false) => {
@@ -150,7 +178,19 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       {/* --- Today's Metrics Section --- */}
       {todayLog && (
         <div>
-          <h3 className="text-lg font-semibold mb-2">Today's Metrics ({formatFriendlyDate(new Date(todayLog.date + 'T00:00:00'))})</h3>
+          <div className="flex justify-between items-center mb-2">
+              <h3 className="text-lg font-semibold">Today's Metrics ({formatFriendlyDate(new Date(todayLog.date + 'T00:00:00'))})</h3>
+               <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive hover:text-destructive h-8 w-8"
+                  onClick={() => handleDeleteLog(todayLog)}
+                  title="Delete Today's Log"
+                  aria-label="Delete Today's Log"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+          </div>
           <div className="overflow-x-auto border rounded-md">
             <Table>
               <TableHeader>
@@ -190,7 +230,22 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date}>
                         <AccordionTrigger className="text-base hover:no-underline">
-                            {formatFriendlyDate(new Date(date + 'T00:00:00'))}
+                            <div className="flex justify-between items-center w-full pr-2">
+                                <span>{formatFriendlyDate(new Date(date + 'T00:00:00'))}</span>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-destructive hover:text-destructive h-7 w-7 shrink-0 data-[state=open]:opacity-0 data-[state=closed]:opacity-100 transition-opacity" // Hide when open
+                                    onClick={(e) => {
+                                        e.stopPropagation(); // Prevent accordion toggle
+                                        handleDeleteLog(log);
+                                    }}
+                                    title="Delete This Log"
+                                    aria-label="Delete This Log"
+                                    >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </AccordionTrigger>
                         <AccordionContent>
                              <div className="overflow-x-auto border rounded-md mt-2">
