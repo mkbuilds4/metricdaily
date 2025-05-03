@@ -23,6 +23,7 @@ import {
     formatFriendlyDate,
 } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
+import { Card, CardDescription } from '@/components/ui/card'; // Import CardDescription for summary
 
 interface TargetMetricsDisplayProps {
   allWorkLogs: DailyWorkLog[]; // Receive all logs
@@ -40,7 +41,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
-    // Update time immediately on mount
+    // Update time immediately on mount to avoid hydration mismatch if possible
     setCurrentTime(new Date());
     // Set up an interval to update the time every second
     const timerId = setInterval(() => {
@@ -110,60 +111,68 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   };
 
   // --- Helper Function to Render a Metrics Row (Shared by Today and Previous) ---
-  const renderMetricsRow = (log: DailyWorkLog, target: UPHTarget, isToday: boolean, showDate: boolean = false) => {
-      if (log.hoursWorked <= 0) {
-          // Display placeholder row if no valid log data yet for calculations
+  const renderMetricsRow = (log: DailyWorkLog, target: UPHTarget, isToday: boolean) => {
+      if (log.hoursWorked <= 0 && isToday) {
+          // Display placeholder row only if no valid log data yet *for today*
           return (
-              <TableRow key={`${log.id}-${target.id}`}>
-                  {showDate && <TableCell>{formatFriendlyDate(new Date(log.date + 'T00:00:00'))}</TableCell>}
+              <TableRow key={`${log.id}-${target.id}-placeholder`}>
                   <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
                   <TableCell className="text-right">{log.documentsCompleted}</TableCell>
                   <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>
                   <TableCell className="text-right">-</TableCell>
                   <TableCell className="text-right">-</TableCell>
                   <TableCell className="text-right">-</TableCell>
-                  {isToday && <TableCell className="text-right">-</TableCell>}
-                  {isToday && <TableCell className="text-right">-</TableCell>}
+                  <TableCell className="text-right">-</TableCell>
               </TableRow>
           );
       }
+       if (log.hoursWorked <= 0 && !isToday) {
+           // For previous days, just return null if no hours worked (or display minimal info)
+            return (
+                 <TableRow key={`${log.id}-${target.id}-prev-placeholder`}>
+                    <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
+                    <TableCell className="text-right">-</TableCell>
+                    <TableCell className="text-right">-</TableCell>
+                    <TableCell className="text-right">-</TableCell>
+                </TableRow>
+            );
+       }
+
 
       // Perform calculations for each target based on the log
       const actualUnits = calculateDailyUnits(log, target);
       const actualUPH = calculateDailyUPH(log, target); // UPH based on this specific target's unit definition
       const requiredUnits = calculateRequiredUnitsForTarget(log.hoursWorked, target.targetUPH);
+      const differenceUnits = parseFloat((actualUnits - requiredUnits).toFixed(2));
 
       // Only calculate time-related metrics for today's log
-      let timeLeftFormatted = '-';
       let goalHitTimeFormatted = '-';
-      if (isToday && currentTime) {
+      if (isToday && currentTime && actualUPH > 0) {
           const remainingUnits = requiredUnits - actualUnits;
-          // Remaining hours needed AT CURRENT ACTUAL UPH for THIS TARGET'S unit definition
-          const remainingWorkHours = (actualUPH > 0 && remainingUnits > 0) ? remainingUnits / actualUPH : 0;
-
-          // Format remaining time. If goal met (remainingUnits <= 0), show positive indicator or 0.
-          timeLeftFormatted = remainingUnits <= 0
-                              ? `+${formatDurationFromHours(Math.abs(remainingUnits / actualUPH))}` // Show how much ahead
-                              : formatDurationFromHours(remainingWorkHours);
-
+          const remainingWorkHours = (remainingUnits > 0) ? remainingUnits / actualUPH : 0;
           goalHitTimeFormatted = calculateProjectedGoalHitTime(currentTime, remainingWorkHours);
+      } else if (isToday && actualUPH <= 0) {
+          goalHitTimeFormatted = 'N/A';
       }
 
       return (
           <TableRow key={`${log.id}-${target.id}`}>
-               {showDate && <TableCell>{formatFriendlyDate(new Date(log.date + 'T00:00:00'))}</TableCell>}
               <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
-              <TableCell className="text-right">{log.documentsCompleted}</TableCell>
-              <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>
+              {/* Show Docs/Videos only for Today's table rows */}
+              {isToday && <TableCell className="text-right">{log.documentsCompleted}</TableCell>}
+              {isToday && <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>}
               <TableCell className="text-right">{requiredUnits.toFixed(2)}</TableCell>
               <TableCell className="text-right">{actualUPH.toFixed(2)}</TableCell>
-              <TableCell className="text-right">{actualUnits.toFixed(2)}</TableCell>
-              {isToday && (
-                 <TableCell className="text-right">
-                     {actualUPH > 0 ? goalHitTimeFormatted : 'N/A'}
-                 </TableCell>
+              {/* Show Actual Units only for Today */}
+              {isToday && <TableCell className="text-right">{actualUnits.toFixed(2)}</TableCell>}
+              {/* Show Est. Goal Hit Time only for Today */}
+              {isToday && <TableCell className="text-right">{goalHitTimeFormatted}</TableCell>}
+              {/* Show +/- Difference only for Previous Days */}
+              {!isToday && (
+                    <TableCell className={`text-right font-medium ${differenceUnits >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
+                         {(differenceUnits >= 0 ? '+' : '') + differenceUnits.toFixed(2)}
+                    </TableCell>
               )}
-              {/* Removed 'Time Left to Goal' / 'Difference vs Goal' column for both today and previous */}
           </TableRow>
       );
   };
@@ -194,10 +203,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                   <TableHead className="text-right">Goal UPH</TableHead>
                   <TableHead className="text-right">Docs Done</TableHead>
                   <TableHead className="text-right">Videos Done</TableHead>
-                  <TableHead className="text-right">Total Units Needed</TableHead>
+                  <TableHead className="text-right">Units Needed</TableHead>
                   <TableHead className="text-right">Actual UPH</TableHead>
                   <TableHead className="text-right">Actual Units</TableHead>
-                  {/* <TableHead className="text-right">Time Left to Goal</TableHead> // Removed */}
                   <TableHead className="text-right">Est. Goal Hit Time</TableHead>
                 </TableRow>
               </TableHeader>
@@ -206,7 +214,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     sortedTargets.map((target) => renderMetricsRow(todayLog, target, true))
                 ) : (
                     <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground">No UPH targets defined.</TableCell> {/* Updated colspan */}
+                        <TableCell colSpan={7} className="text-center text-muted-foreground">No UPH targets defined.</TableCell>
                     </TableRow>
                 )}
               </TableBody>
@@ -225,11 +233,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
            <Accordion type="multiple" className="w-full">
                {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date}>
-                         {/* Wrap content in a div to prevent button nesting */}
                         <AccordionTrigger className="text-base hover:no-underline">
                             <div className="flex justify-between items-center w-full pr-2"> {/* Use full width and padding for spacing */}
                                 <span>{formatFriendlyDate(new Date(date + 'T00:00:00'))}</span>
-                                 {/* Delete button is now a sibling of the span within the div, not a child of the trigger's button */}
                                 <Button
                                     variant="ghost"
                                     size="icon"
@@ -246,17 +252,20 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             </div>
                         </AccordionTrigger>
                         <AccordionContent>
+                            {/* Show Docs/Videos completed once for the day */}
+                            <CardDescription className="px-1 py-2 text-sm">
+                                Completed: {log.documentsCompleted} Docs, {log.videoSessionsCompleted} Videos ({log.hoursWorked} hrs)
+                            </CardDescription>
                              <div className="overflow-x-auto border rounded-md mt-2">
                                 <Table>
                                 <TableHeader>
                                     <TableRow>
-                                    {/* No Date column needed here */}
                                     <TableHead className="text-right">Goal UPH</TableHead>
-                                    <TableHead className="text-right">Docs Done</TableHead>
-                                    <TableHead className="text-right">Videos Done</TableHead>
-                                    <TableHead className="text-right">Total Units Needed</TableHead>
+                                    {/* Removed Docs/Videos Columns */}
+                                    <TableHead className="text-right">Units Needed</TableHead>
                                     <TableHead className="text-right">Actual UPH</TableHead>
-                                    <TableHead className="text-right">Actual Units</TableHead>
+                                    {/* Removed Actual Units, Added +/- Diff */}
+                                    <TableHead className="text-right">+/- Target</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -264,7 +273,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                         sortedTargets.map(target => renderMetricsRow(log, target, false)) // Pass false for isToday
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="text-center text-muted-foreground">No UPH targets defined for this day.</TableCell>
+                                            <TableCell colSpan={4} className="text-center text-muted-foreground">No UPH targets defined for this day.</TableCell> {/* Updated colspan */}
                                         </TableRow>
                                     )}
                                 </TableBody>
@@ -291,3 +300,4 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
+

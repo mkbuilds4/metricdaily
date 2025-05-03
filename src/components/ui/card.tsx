@@ -1,3 +1,4 @@
+
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
@@ -30,31 +31,33 @@ const CardHeader = React.forwardRef<
 CardHeader.displayName = "CardHeader"
 
 const CardTitle = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
+  HTMLParagraphElement, // Changed to p for semantic correctness
+  React.HTMLAttributes<HTMLHeadingElement> // Still accept heading attributes
 >(({ className, ...props }, ref) => (
-  <div
+  <h3 // Use h3 or appropriate heading level
     ref={ref}
     className={cn(
-      "text-2xl font-semibold leading-none tracking-tight",
+      "text-2xl font-semibold leading-none tracking-tight", // Standard heading styles
       className
     )}
-    {...props}
+    {...props} // Pass props down
   />
 ))
 CardTitle.displayName = "CardTitle"
 
+
 const CardDescription = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
 >(({ className, ...props }, ref) => (
-  <div
+  <p // Use p tag for description
     ref={ref}
-    className={cn("text-sm text-muted-foreground", className)}
-    {...props}
+    className={cn("text-sm text-muted-foreground", className)} // Standard description styles
+    {...props} // Pass props down
   />
 ))
 CardDescription.displayName = "CardDescription"
+
 
 const CardContent = React.forwardRef<
   HTMLDivElement,
@@ -77,3 +80,4 @@ const CardFooter = React.forwardRef<
 CardFooter.displayName = "CardFooter"
 
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+
