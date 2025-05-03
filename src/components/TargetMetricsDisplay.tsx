@@ -133,7 +133,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
                     <TableCell className="text-right">-</TableCell>
                     <TableCell className="text-right">-</TableCell>
-                    <TableCell className="text-right">-</TableCell>
                 </TableRow>
             );
        }
@@ -162,7 +161,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
               {isToday && <TableCell className="text-right">{log.documentsCompleted}</TableCell>}
               {isToday && <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>}
               <TableCell className="text-right">{requiredUnits.toFixed(2)}</TableCell>
-              <TableCell className="text-right">{actualUPH.toFixed(2)}</TableCell>
+              {/* Show Actual UPH only for Today */}
+              {isToday && <TableCell className="text-right">{actualUPH.toFixed(2)}</TableCell>}
               {/* Show Actual Units only for Today */}
               {isToday && <TableCell className="text-right">{actualUnits.toFixed(2)}</TableCell>}
               {/* Show Est. Goal Hit Time only for Today */}
@@ -252,7 +252,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             </div>
                         </AccordionTrigger>
                         <AccordionContent>
-                            {/* Show Docs/Videos completed once for the day */}
+                            {/* Show Docs/Videos/Hours completed once for the day */}
                             <CardDescription className="px-1 py-2 text-sm">
                                 Completed: {log.documentsCompleted} Docs, {log.videoSessionsCompleted} Videos ({log.hoursWorked} hrs)
                             </CardDescription>
@@ -261,10 +261,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 <TableHeader>
                                     <TableRow>
                                     <TableHead className="text-right">Goal UPH</TableHead>
-                                    {/* Removed Docs/Videos Columns */}
                                     <TableHead className="text-right">Units Needed</TableHead>
-                                    <TableHead className="text-right">Actual UPH</TableHead>
-                                    {/* Removed Actual Units, Added +/- Diff */}
+                                    {/* Actual UPH removed from previous logs */}
                                     <TableHead className="text-right">+/- Target</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -273,7 +271,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                         sortedTargets.map(target => renderMetricsRow(log, target, false)) // Pass false for isToday
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={4} className="text-center text-muted-foreground">No UPH targets defined for this day.</TableCell> {/* Updated colspan */}
+                                            <TableCell colSpan={3} className="text-center text-muted-foreground">No UPH targets defined for this day.</TableCell> {/* Updated colspan */}
                                         </TableRow>
                                     )}
                                 </TableBody>
@@ -300,4 +298,3 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
-
