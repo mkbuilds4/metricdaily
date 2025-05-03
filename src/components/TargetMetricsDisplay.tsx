@@ -4,9 +4,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Trash2, Clock, Calendar, BookOpen, Video, ChevronDown } from 'lucide-react'; // Import ChevronDown
+import { Trash2, Clock, Calendar, BookOpen, Video, ChevronDown, Target, Gauge } from 'lucide-react'; // Import ChevronDown, Target, Gauge
 import { useToast } from "@/hooks/use-toast";
-import { isValid } from 'date-fns';
+import { isValid, differenceInMinutes, parse, addDays } from 'date-fns'; // Import date-fns functions
 import {
     Accordion,
     AccordionContent,
@@ -116,18 +116,70 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     }
   };
 
+  // --- Calculate Current Metrics (For Today Only) ---
+  const calculateCurrentMetrics = (log: DailyWorkLog | null, target: UPHTarget | null, now: Date | null) => {
+    if (!log || !target || !now || !isValid(now)) {
+      return { currentUnits: 0, currentUPH: 0 };
+    }
+
+    const currentUnits = calculateDailyUnits(log, target);
+
+    // Calculate net work minutes elapsed so far
+    const dateStr = log.date;
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(log.startTime)) return { currentUnits, currentUPH: 0 }; // Invalid start time
+
+    const shiftStartDate = parse(`${dateStr} ${log.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+    if (!isValid(shiftStartDate)) return { currentUnits, currentUPH: 0 }; // Invalid parsed start date
+
+    let shiftEndDate; // Need end date to calculate total shift duration for break proportion
+    if (timeRegex.test(log.endTime)) {
+        shiftEndDate = parse(`${dateStr} ${log.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+        if (shiftEndDate < shiftStartDate) {
+             shiftEndDate = addDays(shiftEndDate, 1);
+        }
+    }
+    if (!isValid(shiftEndDate)) shiftEndDate = addHours(shiftStartDate, log.hoursWorked + (log.breakDurationMinutes / 60)); // Estimate if end time invalid
+
+    const totalGrossShiftMinutes = differenceInMinutes(shiftEndDate, shiftStartDate);
+    const minutesSinceShiftStart = differenceInMinutes(now, shiftStartDate);
+
+    if (minutesSinceShiftStart <= 0 || totalGrossShiftMinutes <= 0) {
+        return { currentUnits, currentUPH: 0 }; // Shift hasn't started or invalid duration
+    }
+
+    const clampedMinutesSinceStart = Math.min(minutesSinceShiftStart, totalGrossShiftMinutes);
+    const proportionOfShiftElapsed = clampedMinutesSinceStart / totalGrossShiftMinutes;
+    const estimatedBreakTakenSoFar = log.breakDurationMinutes * proportionOfShiftElapsed;
+    const netWorkMinutesElapsed = Math.max(0, clampedMinutesSinceStart - estimatedBreakTakenSoFar);
+
+    if (netWorkMinutesElapsed <= 0) {
+      return { currentUnits, currentUPH: 0 }; // No work time yet
+    }
+
+    const netWorkHoursElapsed = netWorkMinutesElapsed / 60;
+    const currentUPH = parseFloat((currentUnits / netWorkHoursElapsed).toFixed(2));
+
+    return { currentUnits, currentUPH };
+  };
+
+
   // --- Helper Function to Render a Metric Card (Used for Targets) ---
   const renderTargetMetricCard = (log: DailyWorkLog, target: UPHTarget, isToday: boolean) => {
-      const actualUnits = calculateDailyUnits(log, target);
-      const requiredUnits = calculateRequiredUnitsForTarget(log.hoursWorked, target.targetUPH);
-      const differenceUnits = calculateRemainingUnits(log, target);
+      // Calculate metrics based on TOTAL logged hours for historical/comparison
+      const totalActualUnits = calculateDailyUnits(log, target);
+      const totalRequiredUnits = calculateRequiredUnitsForTarget(log.hoursWorked, target.targetUPH);
+      const totalDifferenceUnits = calculateRemainingUnits(log, target);
 
       let goalHitTimeFormatted = '-';
+      let currentMetrics = { currentUnits: 0, currentUPH: 0 };
+
        if (isToday && currentTime) {
            goalHitTimeFormatted = calculateProjectedGoalHitTime(log, target, currentTime);
+           currentMetrics = calculateCurrentMetrics(log, target, currentTime);
        }
 
-      const isBehind = differenceUnits < 0;
+      const isBehind = totalDifferenceUnits < 0;
 
       return (
         <Card key={`${log.id}-${target.id}`} className="flex flex-col justify-between">
@@ -135,25 +187,39 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                  <div className="flex justify-between items-start">
                     <CardTitle className="text-lg font-semibold">{target.name}</CardTitle>
                     <span className={`text-lg font-bold ${isBehind ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
-                        {(differenceUnits >= 0 ? '+' : '') + differenceUnits.toFixed(2)} Units
+                        {(totalDifferenceUnits >= 0 ? '+' : '') + totalDifferenceUnits.toFixed(2)} Units
+                         <span className="text-xs text-muted-foreground font-normal"> (vs Total Goal)</span>
                     </span>
                  </div>
                 <CardDescription>Goal UPH: {target.targetUPH.toFixed(1)}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                 {/* Show total metrics for comparison */}
                  <div>
-                    <p className="text-muted-foreground">Actual Units</p>
-                    <p className="font-medium">{actualUnits.toFixed(2)}</p>
+                    <p className="text-muted-foreground">Actual Units (Total)</p>
+                    <p className="font-medium">{totalActualUnits.toFixed(2)}</p>
                 </div>
                  <div>
-                    <p className="text-muted-foreground">Units Needed</p>
-                    <p className="font-medium">{requiredUnits.toFixed(2)}</p>
+                    <p className="text-muted-foreground">Units Needed (Total)</p>
+                    <p className="font-medium">{totalRequiredUnits.toFixed(2)}</p>
                 </div>
+
+                 {/* Show current metrics for today */}
                 {isToday && (
-                     <div>
-                        <p className="text-muted-foreground">Est. Goal Hit</p>
-                        <p className="font-medium">{goalHitTimeFormatted}</p>
-                    </div>
+                    <>
+                        <div>
+                            <p className="text-muted-foreground">Units Now</p>
+                             <p className="font-medium">{currentMetrics.currentUnits.toFixed(2)}</p>
+                        </div>
+                         <div>
+                            <p className="text-muted-foreground">Current UPH</p>
+                            <p className="font-medium">{currentMetrics.currentUPH.toFixed(2)}</p>
+                        </div>
+                        <div>
+                            <p className="text-muted-foreground">Est. Goal Hit</p>
+                            <p className="font-medium">{goalHitTimeFormatted}</p>
+                        </div>
+                     </>
                 )}
             </CardContent>
         </Card>
@@ -162,13 +228,14 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
    // --- Helper Function to Render a Summary Card for a Log (Used for Today & Expanded Previous) ---
    const renderLogSummaryCard = (log: DailyWorkLog, isToday: boolean) => {
+        // UPH based on total hours logged
         const summaryUPH = activeTarget && log.hoursWorked > 0 ? calculateDailyUPH(log, activeTarget) : 0;
         const summaryTargetName = activeTarget ? activeTarget.name : (targets.length > 0 ? 'First Target' : 'N/A');
-        const logDate = new Date(log.date + 'T00:00:00');
-        const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date;
+        const logDate = new Date(log.date + 'T00:00:00'); // Add time component for parsing
+        const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date; // Fallback to raw string if invalid
 
         return (
-            <Card className={`mb-4 relative group w-full ${!isToday ? 'shadow-none border-none' : ''}`}> {/* Remove shadow/border if not today */}
+            <Card className={`mb-4 relative group w-full ${!isToday ? 'shadow-none border-none bg-transparent' : ''}`}> {/* Transparent background if not today */}
                  <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                          <div>
@@ -180,19 +247,21 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             </CardDescription>
                          </div>
                            {/* Delete Button - Only visible on hover */}
-                           <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteLog(log);
-                            }}
-                            title="Delete This Log"
-                            aria-label="Delete This Log"
-                            >
-                            <Trash2 className="h-4 w-4" />
-                        </Button>
+                           {!isToday && ( // Only show delete on previous log summary card for now
+                             <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10"
+                                onClick={(e) => {
+                                    e.stopPropagation(); // Prevent accordion trigger
+                                    handleDeleteLog(log);
+                                }}
+                                title="Delete This Log"
+                                aria-label="Delete This Log"
+                                >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                           )}
                     </div>
                 </CardHeader>
                  <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -213,15 +282,17 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     <div className="flex items-center space-x-2">
                         <Clock className="h-5 w-5 text-muted-foreground" />
                         <div>
-                            <p className="text-sm text-muted-foreground">Actual UPH</p>
+                             {/* Label depends on context */}
+                            <p className="text-sm text-muted-foreground">Avg UPH (Total)</p>
                             <p className="text-lg font-semibold">{summaryUPH.toFixed(2)}</p>
                         </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                         <Calendar className="h-5 w-5 text-muted-foreground" />
+                         <Target className="h-5 w-5 text-muted-foreground" />
                          <div>
                              <p className="text-sm text-muted-foreground">vs. Target</p>
-                             <p className="text-lg font-semibold">{summaryTargetName}</p>
+                              {/* Show active target name or N/A */}
+                             <p className="text-lg font-semibold">{activeTarget?.name ?? 'N/A'}</p>
                          </div>
                     </div>
                  </CardContent>
@@ -259,18 +330,21 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       {previousLogsByDate.length > 0 && (
         <div>
           <h3 className="text-xl font-semibold mb-3">Previous Logs</h3>
-           <Accordion type="multiple" className="w-full space-y-1"> {/* Reduced space */}
+           <Accordion type="multiple" className="w-full space-y-1">
                {previousLogsByDate.map(({ date, log }) => (
-                    <AccordionItem value={date} key={date} className="border rounded-lg overflow-hidden shadow-sm bg-card"> {/* Moved styling here */}
-                        {/* Use PreviousLogTriggerSummary for the trigger content */}
-                        <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 data-[state=open]:border-b"> {/* Added padding & hover */}
-                              <PreviousLogTriggerSummary log={log} activeTarget={activeTarget} />
+                    <AccordionItem value={date} key={date} className="border-none">
+                         <AccordionTrigger asChild className="p-0 hover:no-underline focus-visible:ring-1 focus-visible:ring-ring rounded-md data-[state=open]:bg-muted/50">
+                            {/* Use Summary Card as the trigger */}
+                            <div className="p-4 cursor-pointer hover:bg-muted/30 rounded-md transition-colors w-full relative group">
+                                {/* Pass false for isToday */}
+                                {renderLogSummaryCard(log, false)}
+                                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 absolute top-4 right-4 group-data-[state=open]:rotate-180" />
+                            </div>
                         </AccordionTrigger>
-                        <AccordionContent className="p-4 border-t bg-muted/10">
-                            {/* Detailed breakdown inside the content */}
-                            {/* Move the delete button here, less intrusive */}
+                        <AccordionContent className="p-4 border-t bg-muted/10 mt-1 rounded-b-md">
                              <div className="flex justify-between items-center mb-4">
                                 <h4 className="text-md font-semibold">Target Breakdown for {formatFriendlyDate(new Date(date + 'T00:00:00'))}</h4>
+                                  {/* Delete Button inside content */}
                                  <Button
                                     variant="ghost"
                                     size="sm"
@@ -282,11 +356,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                     <Trash2 className="h-4 w-4 mr-1" /> Delete Log
                                 </Button>
                             </div>
-                             {log.notes && (
-                                <p className="text-sm text-muted-foreground italic mb-4">Notes: {log.notes}</p>
-                             )}
                              {sortedTargets.length > 0 ? (
                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {/* Pass false for isToday */}
                                     {sortedTargets.map(target => renderTargetMetricCard(log, target, false))}
                                  </div>
                                 ) : (
