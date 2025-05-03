@@ -167,8 +167,8 @@ const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
             <div className="text-sm text-muted-foreground mt-2 p-3 border rounded-md bg-muted/50">
                 <h4 className="font-semibold">Active Target: {activeTarget.name}</h4>
                 <p>Target UPH: {activeTarget.targetUPH}</p>
-                <p>Doc Weight: {activeTarget.docWeight} units</p>
-                <p>Video Weight: {activeTarget.videoWeight} units</p>
+                <p>Docs per Unit: {activeTarget.docsPerUnit}</p> {/* Updated display */}
+                <p>Videos per Unit: {activeTarget.videosPerUnit}</p> {/* Updated display */}
             </div>
             ) : (
             <p className="text-sm text-destructive mt-2 p-3 border border-destructive/50 rounded-md bg-destructive/10">No active UPH target set. Please set one in the Target Manager.</p>

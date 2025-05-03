@@ -15,9 +15,9 @@ let workLogStore: DailyWorkLog[] = [
 ]; // Start empty or with actual persisted data
 
 let uphTargetStore: UPHTarget[] = [
-    // Sample Data (Ensure one is active by default)
-    { id: 'std-1', name: 'Standard', targetUPH: 10, docWeight: 1, videoWeight: 2, isActive: true },
-    { id: 'peak-1', name: 'Peak Hours', targetUPH: 12.5, docWeight: 1, videoWeight: 2.5, isActive: false },
+    // Sample Data (Ensure one is active by default) - Using new fields
+    { id: 'std-1', name: 'Standard', targetUPH: 10, docsPerUnit: 5, videosPerUnit: 2.5, isActive: true }, // e.g., 5 docs = 1 unit, 2.5 videos = 1 unit
+    { id: 'peak-1', name: 'Peak Hours', targetUPH: 12.5, docsPerUnit: 4, videosPerUnit: 2, isActive: false }, // e.g., 4 docs = 1 unit, 2 videos = 1 unit
 ];
 
 // let nextWorkLogId = workLogStore.length + 1; // Remove if using timestamp/random ID
@@ -149,6 +149,10 @@ export async function getUPHTargets(): Promise<UPHTarget[]> {
  */
 export async function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): Promise<UPHTarget> {
   console.log('[Action] addUPHTarget called with:', targetData);
+    // Validate docsPerUnit and videosPerUnit
+  if (targetData.docsPerUnit <= 0 || targetData.videosPerUnit <= 0) {
+    throw new Error("Items per unit must be positive numbers.");
+  }
   await new Promise(resolve => setTimeout(resolve, 100));
   const newTarget: UPHTarget = {
     ...targetData,
@@ -166,6 +170,10 @@ export async function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'
  */
 export async function updateUPHTarget(targetData: UPHTarget): Promise<UPHTarget> {
   console.log('[Action] updateUPHTarget called with:', targetData);
+   // Validate docsPerUnit and videosPerUnit
+  if (targetData.docsPerUnit <= 0 || targetData.videosPerUnit <= 0) {
+    throw new Error("Items per unit must be positive numbers.");
+  }
   await new Promise(resolve => setTimeout(resolve, 100));
   const index = uphTargetStore.findIndex(t => t.id === targetData.id);
   if (index === -1) {

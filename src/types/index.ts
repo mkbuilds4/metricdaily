@@ -20,8 +20,8 @@ export interface UPHTarget {
   id: string; // Unique identifier for the target
   name: string; // User-friendly name (e.g., "Standard Shift", "Peak Hours")
   targetUPH: number; // The target units per hour rate
-  docWeight: number; // How many units each completed document is worth
-  videoWeight: number; // How many units each completed video session is worth
+  docsPerUnit: number; // How many documents are required to complete one unit
+  videosPerUnit: number; // How many video sessions are required to complete one unit
   isActive: boolean; // Indicates if this is the currently active target for calculations
 }
 

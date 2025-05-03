@@ -107,19 +107,24 @@ export function calculateHoursWorked(date: string, startTime: string, endTime: s
 
 
 /**
- * Calculates total units for a daily work log based on the weights defined in a UPH target.
- * Handles cases where log or target might be missing.
+ * Calculates total units for a daily work log based on the items per unit defined in a UPH target.
+ * Handles cases where log or target might be missing or itemsPerUnit is zero or invalid.
  *
  * @param log - The DailyWorkLog object.
- * @param target - The UPHTarget object containing weights.
+ * @param target - The UPHTarget object containing items per unit.
  * @returns The total calculated units, or 0 if inputs are invalid.
  */
 export function calculateDailyUnits(log: DailyWorkLog | null | undefined, target: UPHTarget | null | undefined): number {
   if (!log || !target) {
     return 0;
   }
-  const docUnits = (log.documentsCompleted || 0) * (target.docWeight || 0);
-  const videoUnits = (log.videoSessionsCompleted || 0) * (target.videoWeight || 0);
+  // Use 1 as default if docsPerUnit/videosPerUnit is missing, zero, or negative to avoid division errors
+  const effectiveDocsPerUnit = (target.docsPerUnit !== null && target.docsPerUnit !== undefined && target.docsPerUnit > 0) ? target.docsPerUnit : 1;
+  const effectiveVideosPerUnit = (target.videosPerUnit !== null && target.videosPerUnit !== undefined && target.videosPerUnit > 0) ? target.videosPerUnit : 1;
+
+  const docUnits = (log.documentsCompleted || 0) / effectiveDocsPerUnit;
+  const videoUnits = (log.videoSessionsCompleted || 0) / effectiveVideosPerUnit;
+
   return parseFloat((docUnits + videoUnits).toFixed(2)); // Use toFixed for rounding consistency
 }
 
@@ -167,7 +172,7 @@ export function calculateRequiredUnitsForTarget(hoursWorked: number | null | und
  */
 export function calculateRemainingUnits(log: DailyWorkLog | null | undefined, target: UPHTarget | null | undefined): number {
    // Use the calculated log.hoursWorked
-   if (!log || !target || log.hoursWorked <= 0) {
+   if (!log || !target || !log.hoursWorked || log.hoursWorked <= 0) {
     return 0; // Cannot calculate remaining if data is missing or no hours worked
   }
   const actualUnits = calculateDailyUnits(log, target);

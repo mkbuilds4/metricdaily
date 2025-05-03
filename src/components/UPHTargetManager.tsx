@@ -31,12 +31,12 @@ import { Trash2, Edit, CheckCircle, XCircle } from 'lucide-react'; // Icons
 import { useToast } from "@/hooks/use-toast";
 import type { UPHTarget } from '@/types'; // Assuming type is defined
 
-// Zod Schema remains the same
+// Zod Schema updated for docsPerUnit and videosPerUnit
 const targetFormSchema = z.object({
   name: z.string().min(1, { message: 'Target name is required.' }),
   targetUPH: z.coerce.number().positive({ message: 'Target UPH must be positive.' }),
-  docWeight: z.coerce.number().nonnegative({ message: 'Doc weight cannot be negative.' }),
-  videoWeight: z.coerce.number().nonnegative({ message: 'Video weight cannot be negative.' }),
+  docsPerUnit: z.coerce.number().positive({ message: 'Docs per unit must be a positive number.' }), // Must be positive
+  videosPerUnit: z.coerce.number().positive({ message: 'Videos per unit must be a positive number.' }), // Must be positive
 });
 
 type TargetFormData = z.infer<typeof targetFormSchema>;
@@ -77,8 +77,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     defaultValues: {
       name: '',
       targetUPH: undefined,
-      docWeight: 1,
-      videoWeight: 1,
+      docsPerUnit: 1, // Default to 1 item per unit
+      videosPerUnit: 1, // Default to 1 item per unit
     },
   });
 
@@ -88,8 +88,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     form.reset({ // Pre-fill form for editing
       name: target.name,
       targetUPH: target.targetUPH,
-      docWeight: target.docWeight,
-      videoWeight: target.videoWeight,
+      docsPerUnit: target.docsPerUnit,
+      videosPerUnit: target.videosPerUnit,
     });
     setIsDialogOpen(true);
   };
@@ -99,8 +99,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     form.reset({ // Reset to defaults for adding
       name: '',
       targetUPH: undefined,
-      docWeight: 1,
-      videoWeight: 1,
+      docsPerUnit: 1,
+      videosPerUnit: 1,
     });
     setIsDialogOpen(true);
   };
@@ -114,7 +114,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
         // === Optimistic Update (Edit) ===
         const updatedTargetData: UPHTarget = {
           ...editingTarget,
-          ...values,
+          ...values, // Values from form now contain docsPerUnit, videosPerUnit
         };
         setLocalTargets(prev =>
           prev.map(t => (t.id === editingTarget.id ? updatedTargetData : t))
@@ -129,7 +129,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
         // Create a temporary ID for the optimistic update
         const tempId = `temp-${Date.now()}`;
         const optimisticNewTarget: UPHTarget = {
-          ...values,
+          ...values, // Values from form now contain docsPerUnit, videosPerUnit
           id: tempId,
           isActive: false, // New targets are inactive
         };
@@ -202,6 +202,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
         return;
     }
 
+    // Use browser confirm for simplicity, consider a confirmation dialog component for better UX
     if (!confirm(`Are you sure you want to delete the target "${name}"?`)) {
         return;
     }
@@ -245,7 +246,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
             <DialogHeader>
               <DialogTitle>{editingTarget ? 'Edit Target' : 'Add New Target'}</DialogTitle>
               <DialogDescription>
-                {editingTarget ? 'Modify the details of this UPH target.' : 'Define a new UPH target with its weights.'}
+                {editingTarget ? 'Modify the details of this UPH target.' : 'Define a new UPH target and how many items make one unit.'}
               </DialogDescription>
             </DialogHeader>
             {/* Target Add/Edit Form */}
@@ -279,12 +280,12 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                     />
                  <FormField
                     control={form.control}
-                    name="docWeight"
+                    name="docsPerUnit" // Updated field name
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Document Unit Weight</FormLabel>
+                        <FormLabel>Documents per Unit</FormLabel> {/* Updated label */}
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 1" {...field} step="0.1" min="0" />
+                            <Input type="number" placeholder="e.g., 5" {...field} step="0.1" min="0.1" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -292,12 +293,12 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                     />
                 <FormField
                     control={form.control}
-                    name="videoWeight"
+                    name="videosPerUnit" // Updated field name
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Video Session Unit Weight</FormLabel>
+                        <FormLabel>Video Sessions per Unit</FormLabel> {/* Updated label */}
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 2.5" {...field} step="0.1" min="0" />
+                            <Input type="number" placeholder="e.g., 2.5" {...field} step="0.1" min="0.1" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -324,8 +325,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
               <TableHead>Active</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Target UPH</TableHead>
-              <TableHead>Doc Weight</TableHead>
-              <TableHead>Video Weight</TableHead>
+              <TableHead>Docs / Unit</TableHead> {/* Updated header */}
+              <TableHead>Videos / Unit</TableHead> {/* Updated header */}
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -356,8 +357,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                 </TableCell>
                 <TableCell>{target.name}</TableCell>
                 <TableCell>{target.targetUPH}</TableCell>
-                <TableCell>{target.docWeight}</TableCell>
-                <TableCell>{target.videoWeight}</TableCell>
+                <TableCell>{target.docsPerUnit}</TableCell> {/* Display new field */}
+                <TableCell>{target.videosPerUnit}</TableCell> {/* Display new field */}
                 <TableCell className="space-x-1">
                    <Button
                     variant="ghost"
