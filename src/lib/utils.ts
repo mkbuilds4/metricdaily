@@ -1,6 +1,21 @@
+
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { format, startOfWeek, endOfWeek, eachDayOfInterval, parseISO, differenceInMinutes, parse } from 'date-fns';
+import {
+    format,
+    startOfWeek,
+    endOfWeek,
+    eachDayOfInterval,
+    parseISO,
+    differenceInMinutes,
+    parse,
+    isValid,
+    addHours,
+    addMinutes,
+    getHours,
+    getMinutes,
+    getSeconds
+} from 'date-fns';
 import type { DailyWorkLog, UPHTarget } from '@/types'; // Assuming types are defined
 
 /**
@@ -21,6 +36,7 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function formatDateISO(date: Date | string): string {
   const dateObj = typeof date === 'string' ? parseISO(date) : date;
+  if (!isValid(dateObj)) return ''; // Handle invalid date input
   return format(dateObj, 'yyyy-MM-dd');
 }
 
@@ -41,8 +57,60 @@ export function getWeekDates(date: Date = new Date()): Date[] {
  * @returns The formatted date string.
  */
 export function formatFriendlyDate(date: Date): string {
+    if (!isValid(date)) return 'Invalid Date';
     return format(date, 'eee, MMM d');
 }
+
+/**
+ * Formats a number of hours into a duration string (e.g., "HH:MM:SS").
+ * Handles positive and negative values (prepends "-").
+ * @param totalHours - The total hours (can be fractional).
+ * @returns The formatted duration string.
+ */
+export function formatDurationFromHours(totalHours: number): string {
+    if (isNaN(totalHours)) return '00:00:00';
+
+    const sign = totalHours < 0 ? '-' : '';
+    const absHours = Math.abs(totalHours);
+
+    const hours = Math.floor(absHours);
+    const remainingMinutesTotal = (absHours - hours) * 60;
+    const minutes = Math.floor(remainingMinutesTotal);
+    const seconds = Math.floor((remainingMinutesTotal - minutes) * 60);
+
+    const pad = (num: number) => num.toString().padStart(2, '0');
+
+    return `${sign}${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+
+/**
+ * Calculates the projected time when a goal will be hit based on the current time and remaining work hours.
+ * @param currentTime - The current Date object.
+ * @param remainingWorkHours - The number of hours remaining to reach the goal.
+ * @returns The formatted projected time string (e.g., "HH:MM:SS AM/PM") or "N/A".
+ */
+export function calculateProjectedGoalHitTime(currentTime: Date, remainingWorkHours: number): string {
+  if (isNaN(remainingWorkHours) || remainingWorkHours < 0) {
+    return 'Goal Met'; // Or potentially calculate how long ago it was met
+  }
+   if (remainingWorkHours === 0 && currentTime) {
+     return format(currentTime, 'hh:mm:ss a'); // Goal met exactly now
+   }
+   if (!currentTime || !isValid(currentTime)) {
+       return 'Calculating...'
+   }
+
+  const totalMinutesRemaining = remainingWorkHours * 60;
+  const projectedHitDate = addMinutes(currentTime, totalMinutesRemaining);
+
+  if (!isValid(projectedHitDate)) {
+    return 'Invalid Date';
+  }
+
+  return format(projectedHitDate, 'hh:mm:ss a'); // e.g., "11:40:53 PM"
+}
+
 
 // --- Calculation Helper Functions ---
 
@@ -57,41 +125,44 @@ export function formatFriendlyDate(date: Date): string {
  * @returns The calculated hours worked as a number, rounded to 2 decimal places, or 0 if inputs are invalid.
  */
 export function calculateHoursWorked(date: string, startTime: string, endTime: string, breakMinutes: number): number {
-  if (!date || !startTime || !endTime || breakMinutes < 0) {
-    console.error("Invalid input for calculateHoursWorked:", { date, startTime, endTime, breakMinutes });
+  if (!date || !startTime || !endTime || breakMinutes === undefined || breakMinutes === null || breakMinutes < 0) {
+    console.warn("Invalid input for calculateHoursWorked:", { date, startTime, endTime, breakMinutes });
     return 0;
   }
 
   try {
     // Combine date and time strings to create Date objects
-    // Using a reference date helps handle potential DST issues slightly better than just time strings
     const startDateTime = parse(`${date} ${startTime}`, 'yyyy-MM-dd HH:mm', new Date());
     let endDateTime = parse(`${date} ${endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+
+     // Check if parsing was successful immediately after parsing
+    if (!isValid(startDateTime) || !isValid(endDateTime)) {
+        console.error("Failed to parse date/time strings:", { date, startTime, endTime });
+        return 0;
+    }
 
     // Basic handling for overnight shifts: if end time is earlier than start time, assume it's the next day
     if (endDateTime < startDateTime) {
       endDateTime.setDate(endDateTime.getDate() + 1);
+       // Re-validate after potential date change
+      if (!isValid(endDateTime)) {
+         console.error("End date became invalid after overnight adjustment:", { date, endTime });
+         return 0;
+      }
     }
-
-     // Check if parsing was successful (result is not 'Invalid Date')
-    if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-      console.error("Failed to parse date/time strings:", { date, startTime, endTime });
-      return 0;
-    }
-
 
     const totalMinutesWorked = differenceInMinutes(endDateTime, startDateTime);
 
     if (totalMinutesWorked < 0) {
         console.error("Calculated total minutes worked is negative. Check start/end times.");
-        return 0; // Should not happen with overnight check, but good safety measure
+        return 0;
     }
 
     const netMinutesWorked = totalMinutesWorked - breakMinutes;
 
     if (netMinutesWorked < 0) {
-        console.warn("Net minutes worked is negative after break deduction. Returning 0 hours.");
-        return 0; // Cannot have negative work hours
+        // Don't log error, just return 0 as it's a valid scenario (break > worked time)
+        return 0;
     }
 
     const hoursWorked = netMinutesWorked / 60;
@@ -147,11 +218,11 @@ export function calculateDailyUPH(log: DailyWorkLog | null | undefined, target: 
 
 /**
  * Calculates the total number of units required to meet a specific UPH target
- * given the number of hours worked.
+ * given the number of hours worked *in total for the log entry*.
  *
- * @param hoursWorked - The number of hours worked.
+ * @param hoursWorked - The total number of hours worked for the log entry.
  * @param targetUPH - The target Units Per Hour.
- * @returns The total required units.
+ * @returns The total required units for the duration of the log entry.
  */
 export function calculateRequiredUnitsForTarget(hoursWorked: number | null | undefined, targetUPH: number | null | undefined): number {
   if (hoursWorked === null || hoursWorked === undefined || hoursWorked <= 0 || targetUPH === null || targetUPH === undefined || targetUPH <= 0) {
@@ -161,10 +232,10 @@ export function calculateRequiredUnitsForTarget(hoursWorked: number | null | und
 }
 
 /**
- * Calculates the difference between the required units (to meet the target)
- * and the actual units completed.
- * A positive result means the user is behind the target.
- * A negative result means the user is ahead of the target.
+ * Calculates the difference between the required units (to meet the target for the total logged hours)
+ * and the actual units completed so far.
+ * A positive result means the user is behind the target pace FOR THE LOGGED DURATION.
+ * A negative result means the user is ahead of the target pace FOR THE LOGGED DURATION.
  *
  * @param log - The DailyWorkLog object.
  * @param target - The UPHTarget object.

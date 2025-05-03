@@ -1,3 +1,4 @@
+
 'use client'; // Make this a Client Component to use hooks and localStorage
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -9,7 +10,7 @@ import {
   getWorkLogs,
   getActiveUPHTarget,
   saveWorkLog,
-  deleteWorkLog, // Add delete if you implement deletion in WorkLogInputForm/Dashboard
+  deleteWorkLog, // Assuming deleteWorkLog exists for future use
   getUPHTargets,
   addUPHTarget,
   updateUPHTarget,
@@ -39,7 +40,7 @@ export default function Home() {
       setWorkLogs(loadedLogs);
       setUphTargets(loadedTargets);
       setActiveTarget(loadedActiveTarget);
-      console.log('[Home] Data loaded successfully.');
+      console.log('[Home] Data loaded successfully:', { logs: loadedLogs.length, targets: loadedTargets.length, active: !!loadedActiveTarget });
     } catch (error) {
       console.error('[Home] Error loading data from localStorage:', error);
       // Handle error state if needed
@@ -50,7 +51,13 @@ export default function Home() {
 
   // Load data on initial component mount
   useEffect(() => {
-    loadData();
+    // Defer initial load slightly to avoid potential hydration issues
+    // although with client-side storage, it might be less of a concern.
+    // Still, good practice.
+    const timer = setTimeout(() => {
+        loadData();
+    }, 0);
+    return () => clearTimeout(timer); // Cleanup timeout
   }, [loadData]); // Depend on the memoized loadData function
 
   // --- Action Handlers (Client-Side Wrappers) ---
@@ -59,31 +66,41 @@ export default function Home() {
   const handleSaveWorkLog = (logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }) => {
     try {
       const savedLog = saveWorkLog(logData); // Calls the client-side action
-      // Optimistically update or re-fetch data
-      loadData(); // Re-fetch all data to ensure consistency
+      // Re-fetch all data to ensure consistency - simplest approach for now
+      loadData();
       return savedLog; // Return the saved log (might have new ID)
     } catch (error) {
       console.error('[Home] Error saving work log:', error);
-      // Handle error display (e.g., using toast from the form)
-      throw error; // Re-throw for the form to catch
+      // Error handled by toast in the form component
+      throw error; // Re-throw for the form to catch if needed
     }
   };
 
   const handleAddTarget = (targetData: Omit<UPHTarget, 'id' | 'isActive'>) => {
     try {
       const newTarget = addUPHTarget(targetData);
-      loadData(); // Re-fetch
+      // Instead of full reload, update state directly (optimistic)
+      setUphTargets(prev => [...prev, newTarget]);
+       // If this is the first target added, make it active automatically?
+       // Decide based on UX preference. For now, manual activation.
+      // loadData(); // Re-fetch (safer but less performant)
       return newTarget;
     } catch (error) {
       console.error('[Home] Error adding target:', error);
-      throw error;
+      throw error; // Let the caller (UPHTargetManager) handle toast
     }
   };
 
-    const handleUpdateTarget = (targetData: UPHTarget) => {
+  const handleUpdateTarget = (targetData: UPHTarget) => {
     try {
       const updatedTarget = updateUPHTarget(targetData);
-      loadData(); // Re-fetch
+       // Optimistic update
+       setUphTargets(prev => prev.map(t => t.id === updatedTarget.id ? updatedTarget : t));
+       // Update active target if the edited one was active
+       if (updatedTarget.isActive) {
+         setActiveTarget(updatedTarget);
+       }
+      // loadData(); // Re-fetch
       return updatedTarget;
     } catch (error) {
       console.error('[Home] Error updating target:', error);
@@ -93,8 +110,17 @@ export default function Home() {
 
   const handleDeleteTarget = (id: string) => {
     try {
+       // Check if the target being deleted is the active one
+       if (activeTarget && activeTarget.id === id) {
+            // Optionally: Prevent deletion or set another target active first
+            // For now, we allow deletion but clear the active target state
+            setActiveTarget(null);
+            // Note: deleteUPHTarget action itself should prevent deletion of active target
+       }
       deleteUPHTarget(id);
-      loadData(); // Re-fetch
+      // Optimistic update
+      setUphTargets(prev => prev.filter(t => t.id !== id));
+      // loadData(); // Re-fetch
     } catch (error) {
       console.error('[Home] Error deleting target:', error);
       throw error;
@@ -104,7 +130,10 @@ export default function Home() {
   const handleSetActiveTarget = (id: string) => {
     try {
       const newActiveTarget = setActiveUPHTarget(id);
-      loadData(); // Re-fetch
+      // Optimistic update
+      setUphTargets(prev => prev.map(t => ({...t, isActive: t.id === newActiveTarget.id})));
+      setActiveTarget(newActiveTarget);
+      // loadData(); // Re-fetch
       return newActiveTarget;
     } catch (error) {
       console.error('[Home] Error setting active target:', error);
@@ -115,8 +144,8 @@ export default function Home() {
 
   // --- Render Logic ---
 
-   if (isLoading) {
-     // Optional: Display a loading indicator while data is fetched initially
+   if (isLoading && typeof window !== 'undefined' && !localStorage.getItem('workLogs')) {
+     // Show loading only on the very first load before localStorage is populated
      return (
         <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8 lg:p-12">
             <p className="text-xl text-muted-foreground">Loading Dashboard...</p>
@@ -146,9 +175,9 @@ export default function Home() {
         />
 
         {/* Pass current state */}
-        {/* ProductivityDashboard can now be simpler if it doesn't need optimistic updates */}
         <ProductivityDashboard
           initialWorkLogs={workLogs} // Pass current logs state
+          initialUphTargets={uphTargets} // Pass ALL targets
           initialActiveTarget={activeTarget} // Pass current active target state
         />
       </div>
