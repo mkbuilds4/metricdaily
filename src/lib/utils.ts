@@ -34,7 +34,8 @@ export function cn(...inputs: ClassValue[]) {
  * @param date - The date to format.
  * @returns The formatted date string.
  */
-export function formatDateISO(date: Date | string): string {
+export function formatDateISO(date: Date | string | null | undefined): string {
+  if (!date) return ''; // Handle null/undefined
   const dateObj = typeof date === 'string' ? parseISO(date) : date;
   if (!isValid(dateObj)) return ''; // Handle invalid date input
   return format(dateObj, 'yyyy-MM-dd');
@@ -56,8 +57,8 @@ export function getWeekDates(date: Date = new Date()): Date[] {
  * @param date - The date to format.
  * @returns The formatted date string.
  */
-export function formatFriendlyDate(date: Date): string {
-    if (!isValid(date)) return 'Invalid Date';
+export function formatFriendlyDate(date: Date | null | undefined): string {
+    if (!date || !isValid(date)) return 'Invalid Date';
     return format(date, 'eee, MMM d');
 }
 
@@ -90,15 +91,15 @@ export function formatDurationFromHours(totalHours: number): string {
  * @param remainingWorkHours - The number of hours remaining to reach the goal.
  * @returns The formatted projected time string (e.g., "HH:MM:SS AM/PM") or "N/A".
  */
-export function calculateProjectedGoalHitTime(currentTime: Date, remainingWorkHours: number): string {
-  if (isNaN(remainingWorkHours) || remainingWorkHours < 0) {
+export function calculateProjectedGoalHitTime(currentTime: Date | null, remainingWorkHours: number): string {
+  if (isNaN(remainingWorkHours)) {
+      return 'N/A'; // Calculation not possible
+  }
+  if (remainingWorkHours <= 0) {
     return 'Goal Met'; // Or potentially calculate how long ago it was met
   }
-   if (remainingWorkHours === 0 && currentTime) {
-     return format(currentTime, 'hh:mm:ss a'); // Goal met exactly now
-   }
    if (!currentTime || !isValid(currentTime)) {
-       return 'Calculating...'
+       return 'Calculating...';
    }
 
   const totalMinutesRemaining = remainingWorkHours * 60;
@@ -124,20 +125,22 @@ export function calculateProjectedGoalHitTime(currentTime: Date, remainingWorkHo
  * @param breakMinutes The break duration in minutes.
  * @returns The calculated hours worked as a number, rounded to 2 decimal places, or 0 if inputs are invalid.
  */
-export function calculateHoursWorked(date: string, startTime: string, endTime: string, breakMinutes: number): number {
-  if (!date || !startTime || !endTime || breakMinutes === undefined || breakMinutes === null || breakMinutes < 0) {
-    console.warn("Invalid input for calculateHoursWorked:", { date, startTime, endTime, breakMinutes });
+export function calculateHoursWorked(date: string | Date, startTime: string, endTime: string, breakMinutes: number): number {
+  const dateStr = typeof date === 'string' ? date : isValid(date) ? format(date, 'yyyy-MM-dd') : null;
+
+  if (!dateStr || !startTime || !endTime || breakMinutes === undefined || breakMinutes === null || breakMinutes < 0) {
+    console.warn("Invalid input for calculateHoursWorked:", { date: dateStr, startTime, endTime, breakMinutes });
     return 0;
   }
 
   try {
     // Combine date and time strings to create Date objects
-    const startDateTime = parse(`${date} ${startTime}`, 'yyyy-MM-dd HH:mm', new Date());
-    let endDateTime = parse(`${date} ${endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+    const startDateTime = parse(`${dateStr} ${startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+    let endDateTime = parse(`${dateStr} ${endTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
      // Check if parsing was successful immediately after parsing
     if (!isValid(startDateTime) || !isValid(endDateTime)) {
-        console.error("Failed to parse date/time strings:", { date, startTime, endTime });
+        console.error("Failed to parse date/time strings:", { date: dateStr, startTime, endTime });
         return 0;
     }
 
@@ -146,7 +149,7 @@ export function calculateHoursWorked(date: string, startTime: string, endTime: s
       endDateTime.setDate(endDateTime.getDate() + 1);
        // Re-validate after potential date change
       if (!isValid(endDateTime)) {
-         console.error("End date became invalid after overnight adjustment:", { date, endTime });
+         console.error("End date became invalid after overnight adjustment:", { date: dateStr, endTime });
          return 0;
       }
     }
