@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -5,7 +6,7 @@ import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Trash2, Clock, Calendar, BookOpen, Video, ChevronDown, Target, Gauge } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { isValid, differenceInMinutes, parse, addDays, addHours, format } from 'date-fns';
+import { isValid, differenceInMinutes, parse, addDays, addHours, format, addMinutes } from 'date-fns';
 import {
     Accordion,
     AccordionContent,
@@ -205,24 +206,14 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
             </CardHeader>
             <CardContent className="flex-grow grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                  {/* Total Metrics (Comparison) */}
-                 <div>
-                    <p className="text-muted-foreground">Units Completed</p>
-                    <p className="font-medium">{totalActualUnits.toFixed(2)}</p>
-                 </div>
-                 <div>
-                    <p className="text-muted-foreground">Units Needed</p>
-                    <p className="font-medium">{totalRequiredUnits.toFixed(2)}</p>
-                 </div>
-
-
-                 {/* Current Metrics (Today Only) */}
-                {isToday && (
-                    <>
+                 {isToday ? (
+                     <>
+                         {/* Current Metrics (Today Only) */}
                         <div>
                             <p className="text-muted-foreground">Units Now</p>
-                             <p className="font-medium">{currentMetrics.currentUnits.toFixed(2)}</p>
+                            <p className="font-medium">{currentMetrics.currentUnits.toFixed(2)}</p>
                         </div>
-                         <div>
+                        <div>
                             <p className="text-muted-foreground">Current UPH</p>
                             <p className="font-medium">{currentMetrics.currentUPH.toFixed(2)}</p>
                         </div>
@@ -230,8 +221,27 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             <p className="text-muted-foreground">Est. Goal Hit</p>
                             <p className="font-medium">{goalHitTimeFormatted}</p>
                         </div>
+                        <div>
+                             <p className="text-muted-foreground">Target Units</p>
+                             <p className="font-medium">{totalRequiredUnits.toFixed(2)}</p>
+                         </div>
+                    </>
+                 ) : (
+                     <>
+                        {/* Previous Log Specific Metrics */}
+                        <div>
+                             <p className="text-muted-foreground">Units Completed</p>
+                             <p className="font-medium">{totalActualUnits.toFixed(2)}</p>
+                         </div>
+                        <div>
+                            <p className="text-muted-foreground">Units Needed</p>
+                            <p className="font-medium">{totalRequiredUnits.toFixed(2)}</p>
+                        </div>
+
                      </>
-                )}
+                 )}
+
+
             </CardContent>
         </Card>
       );
@@ -254,22 +264,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 {log.hoursWorked.toFixed(2)} hrs ({log.startTime} - {log.endTime}, {log.breakDurationMinutes} min break)
                             </CardDescription>
                          </div>
-                           {/* Delete Button - Show only for *previous* logs in their summary */}
-                           {!isToday && (
-                             <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10"
-                                onClick={(e) => {
-                                    e.stopPropagation(); // Prevent accordion trigger if inside one
-                                    handleDeleteLog(log);
-                                }}
-                                title="Delete This Log"
-                                aria-label="Delete This Log"
-                                >
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                           )}
                     </div>
                 </CardHeader>
                  <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -342,39 +336,45 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
            <Accordion type="multiple" className="w-full space-y-1">
                {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date} className="border-none">
-                         {/* Previous Log Summary Component used as the trigger */}
-                         <AccordionTrigger asChild className="p-0 hover:no-underline focus-visible:ring-1 focus-visible:ring-ring rounded-md data-[state=open]:bg-muted/50">
-                            <div className="p-4 cursor-pointer hover:bg-muted/30 rounded-md transition-colors w-full relative group">
+                        {/* Use standard AccordionTrigger, containing the summary component and delete button */}
+                        <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-md transition-colors w-full relative group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50">
+                            <div className="flex items-center justify-between w-full"> {/* Flex container for summary and icons */}
                                 {/* Pass all targets to the trigger summary */}
                                 <PreviousLogTriggerSummary log={log} allTargets={sortedTargets} />
-                                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 absolute top-4 right-4 group-data-[state=open]:rotate-180" />
-                                 {/* Delete Button specific to previous logs trigger */}
-                                 <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-10 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10" // Adjust position if needed
-                                    onClick={(e) => {
-                                        e.stopPropagation(); // Prevent accordion trigger
-                                        handleDeleteLog(log);
-                                    }}
-                                    title="Delete This Log"
-                                    aria-label="Delete This Log"
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="flex items-center space-x-2 ml-auto"> {/* Container for icons */}
+                                    {/* Delete Button */}
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="text-destructive hover:text-destructive h-8 w-8 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10"
+                                        onClick={(e) => {
+                                            e.stopPropagation(); // Prevent accordion trigger
+                                            handleDeleteLog(log);
+                                        }}
+                                        title="Delete This Log"
+                                        aria-label="Delete This Log"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                    {/* Chevron Icon */}
+                                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                                </div>
                             </div>
-                         </AccordionTrigger>
+                        </AccordionTrigger>
+
                         <AccordionContent className="p-4 border-t bg-muted/10 mt-1 rounded-b-md">
                              <div className="flex justify-between items-center mb-4">
                                 <h4 className="text-md font-semibold">Target Breakdown for {formatFriendlyDate(new Date(date + 'T00:00:00'))}</h4>
-                            </div>
+                             </div>
+                              {/* Render the detailed summary card *inside* the accordion content */}
+                             {renderLogSummaryCard(log, false, sortedTargets)}
                              {sortedTargets.length > 0 ? (
-                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
                                     {/* Pass false for isToday */}
                                     {sortedTargets.map(target => renderTargetMetricCard(log, target, false))}
                                  </div>
                                 ) : (
-                                    <p className="text-center text-muted-foreground">No UPH targets were defined at the time of this log.</p>
+                                    <p className="text-center text-muted-foreground mt-4">No UPH targets were defined at the time of this log.</p>
                              )}
                         </AccordionContent>
                     </AccordionItem>
@@ -397,3 +397,4 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
+
