@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -16,7 +15,7 @@ const AccordionItem = React.forwardRef<
   <AccordionPrimitive.Item
     ref={ref}
     // Ensure border is handled by the Item wrapper or content styling
-    className={cn("", className)} // Keep base class minimal
+    className={cn("border-b", className)} // Added back border-b for visual separation
     {...props}
   />
 ))

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -205,7 +204,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                 <CardDescription>Goal UPH: {target.targetUPH.toFixed(1)}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                 {/* Total Metrics (Comparison) */}
                  {isToday ? (
                      <>
                          {/* Current Metrics (Today Only) */}
@@ -230,27 +228,25 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                      <>
                         {/* Previous Log Specific Metrics */}
                         <div>
-                             <p className="text-muted-foreground">Units Completed</p>
-                             <p className="font-medium">{totalActualUnits.toFixed(2)}</p>
-                         </div>
+                            <p className="text-muted-foreground">Units Completed</p>
+                            <p className="font-medium">{totalActualUnits.toFixed(2)}</p>
+                        </div>
                         <div>
                             <p className="text-muted-foreground">Units Needed</p>
                             <p className="font-medium">{totalRequiredUnits.toFixed(2)}</p>
                         </div>
-
                      </>
                  )}
-
-
             </CardContent>
         </Card>
       );
   };
 
-   // --- Helper Function to Render a Summary Card for a Log (Used for Today) ---
+   // --- Helper Function to Render a Summary Card for a Log (Used for Today and Previous Log Content) ---
    const renderLogSummaryCard = (log: DailyWorkLog, isToday: boolean, allTargets: UPHTarget[]) => {
         const logDate = new Date(log.date + 'T00:00:00'); // Add time component for parsing
         const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date; // Fallback to raw string if invalid
+        const overallUPHForActive = activeTarget ? calculateDailyUPH(log, activeTarget) : null; // Use active target for overall UPH display
 
         return (
             <Card className={`mb-4 relative ${!isToday ? 'shadow-none border-none bg-transparent' : ''}`}>
@@ -262,8 +258,24 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             </CardTitle>
                              <CardDescription>
                                 {log.hoursWorked.toFixed(2)} hrs ({log.startTime} - {log.endTime}, {log.breakDurationMinutes} min break)
+                                {overallUPHForActive !== null && ` | Avg UPH: ${overallUPHForActive.toFixed(2)}`}
                             </CardDescription>
                          </div>
+                         {!isToday && (
+                           <Button
+                             variant="ghost"
+                             size="icon"
+                             className="text-destructive hover:text-destructive h-8 w-8 absolute top-4 right-4" // Position delete button
+                             onClick={(e) => {
+                               e.stopPropagation(); // Prevent accordion trigger if inside one
+                               handleDeleteLog(log);
+                             }}
+                             title="Delete This Log"
+                             aria-label="Delete This Log"
+                           >
+                             <Trash2 className="h-4 w-4" />
+                           </Button>
+                         )}
                     </div>
                 </CardHeader>
                  <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -282,20 +294,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                              <p className="text-lg font-semibold">{log.videoSessionsCompleted}</p>
                          </div>
                      </div>
-
-                     {/* UPH per Target */}
-                     {allTargets.map(target => {
-                         const uphForTarget = calculateDailyUPH(log, target);
-                         return (
-                             <div key={target.id} className="flex items-center space-x-2">
-                                <Clock className="h-5 w-5 text-muted-foreground" />
-                                <div>
-                                    <p className="text-sm text-muted-foreground">UPH ({target.name})</p>
-                                    <p className="text-lg font-semibold">{uphForTarget.toFixed(2)}</p>
-                                </div>
-                             </div>
-                         );
-                     })}
                  </CardContent>
                  {log.notes && (
                     <CardFooter className="pt-3">
@@ -336,17 +334,17 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
            <Accordion type="multiple" className="w-full space-y-1">
                {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date} className="border-none">
-                        {/* Use standard AccordionTrigger, containing the summary component and delete button */}
+                        {/* Use standard AccordionTrigger, containing the summary component */}
                         <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-md transition-colors w-full relative group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50">
                             <div className="flex items-center justify-between w-full"> {/* Flex container for summary and icons */}
                                 {/* Pass all targets to the trigger summary */}
                                 <PreviousLogTriggerSummary log={log} allTargets={sortedTargets} />
-                                <div className="flex items-center space-x-2 ml-auto"> {/* Container for icons */}
+                                <div className="flex items-center space-x-2 ml-auto opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"> {/* Container for delete icon */}
                                     {/* Delete Button */}
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="text-destructive hover:text-destructive h-8 w-8 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10"
+                                        className="text-destructive hover:text-destructive h-8 w-8 z-10"
                                         onClick={(e) => {
                                             e.stopPropagation(); // Prevent accordion trigger
                                             handleDeleteLog(log);
@@ -356,16 +354,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                     >
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
-                                    {/* Chevron Icon */}
-                                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                                    {/* Chevron is now handled by the base AccordionTrigger */}
                                 </div>
                             </div>
                         </AccordionTrigger>
 
                         <AccordionContent className="p-4 border-t bg-muted/10 mt-1 rounded-b-md">
-                             <div className="flex justify-between items-center mb-4">
-                                <h4 className="text-md font-semibold">Target Breakdown for {formatFriendlyDate(new Date(date + 'T00:00:00'))}</h4>
-                             </div>
+                             {/* Removed redundant title, now using renderLogSummaryCard */}
                               {/* Render the detailed summary card *inside* the accordion content */}
                              {renderLogSummaryCard(log, false, sortedTargets)}
                              {sortedTargets.length > 0 ? (
@@ -397,4 +392,3 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
-
