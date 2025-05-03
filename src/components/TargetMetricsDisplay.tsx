@@ -180,7 +180,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date; // Fallback to raw string if invalid
 
         return (
-            <Card className="mb-4 relative group"> {/* Added relative positioning and group */}
+            <Card className="mb-4 relative group w-full"> {/* Added w-full */}
                  <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                          <div>
@@ -195,9 +195,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                            <Button
                             variant="ghost"
                             size="icon"
-                            className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" // Positioned top-right, hide by default, show on hover/focus
+                            className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10" // Ensure z-index
                             onClick={(e) => {
-                                e.stopPropagation(); // Prevent accordion toggle if this button is somehow still wrapped
+                                e.stopPropagation(); // Prevent accordion toggle
                                 handleDeleteLog(log);
                             }}
                             title="Delete This Log"
@@ -275,11 +275,11 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
            <Accordion type="multiple" className="w-full space-y-4">
                {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date} className="border-none rounded-lg overflow-hidden shadow-sm"> {/* Removed border, added shadow */}
-                         {/* Use AccordionTrigger to wrap the summary card for clickability */}
-                         {/* The Delete Button is now inside renderLogSummaryCard, positioned absolutely */}
-                        <AccordionTrigger className="hover:no-underline p-0 data-[state=open]:bg-muted/30 transition-colors w-full text-left rounded-t-lg"> {/* Remove underline on hover */}
-                             {/* Render summary card inside the trigger */}
-                             {renderLogSummaryCard(log, false)}
+                        <AccordionTrigger asChild className="p-0 data-[state=open]:bg-muted/30 transition-colors w-full text-left rounded-t-lg cursor-pointer"> {/* Use asChild and add cursor-pointer */}
+                            {/* Render summary card inside a div */}
+                             <div className="w-full"> {/* Ensure the div takes full width */}
+                                {renderLogSummaryCard(log, false)}
+                             </div>
                         </AccordionTrigger>
                         <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-lg"> {/* Add border-t */}
                              {/* Detailed breakdown inside the content */}
