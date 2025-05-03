@@ -191,8 +191,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 {log.hoursWorked.toFixed(2)} hrs ({log.startTime} - {log.endTime}, {log.breakDurationMinutes} min break)
                             </CardDescription>
                          </div>
-                           {/* Delete Button */}
-                         <Button
+                           {/* Delete Button - Now Outside AccordionTrigger */}
+                           <Button
                             variant="ghost"
                             size="icon"
                             className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" // Positioned top-right, hide by default, show on hover/focus
@@ -311,3 +311,4 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
+
