@@ -41,7 +41,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
-    // Update time immediately on mount to avoid hydration mismatch if possible
+    // Update time immediately on mount to avoid potential hydration mismatch if possible
     setCurrentTime(new Date());
     // Set up an interval to update the time every second
     const timerId = setInterval(() => {
@@ -132,6 +132,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                  <TableRow key={`${log.id}-${target.id}-prev-placeholder`}>
                     <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
                     <TableCell className="text-right">-</TableCell>
+                    {/* Actual UPH removed from previous rows */}
                     <TableCell className="text-right">-</TableCell>
                 </TableRow>
             );
@@ -157,9 +158,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       return (
           <TableRow key={`${log.id}-${target.id}`}>
               <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
-              {/* Show Docs/Videos only for Today's table rows */}
-              {isToday && <TableCell className="text-right">{log.documentsCompleted}</TableCell>}
-              {isToday && <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>}
+              {/* Show Docs/Videos/Units Needed for both */}
+              <TableCell className="text-right">{log.documentsCompleted}</TableCell>
+              <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>
               <TableCell className="text-right">{requiredUnits.toFixed(2)}</TableCell>
               {/* Show Actual UPH only for Today */}
               {isToday && <TableCell className="text-right">{actualUPH.toFixed(2)}</TableCell>}
@@ -231,7 +232,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         <div>
           <h3 className="text-lg font-semibold mb-2">Previous Logs</h3>
            <Accordion type="multiple" className="w-full">
-               {previousLogsByDate.map(({ date, log }) => (
+               {previousLogsByDate.map(({ date, log }) => {
+                    // Calculate Actual UPH once per day for display in summary
+                    // Assuming we need a target context for UPH, let's pick the first one or default
+                    const firstTarget = sortedTargets[0];
+                    const dailyActualUPH = firstTarget ? calculateDailyUPH(log, firstTarget) : 0;
+
+                    return (
                     <AccordionItem value={date} key={date}>
                         <AccordionTrigger className="text-base hover:no-underline">
                             <div className="flex justify-between items-center w-full pr-2"> {/* Use full width and padding for spacing */}
@@ -252,17 +259,20 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             </div>
                         </AccordionTrigger>
                         <AccordionContent>
-                            {/* Show Docs/Videos/Hours completed once for the day */}
+                            {/* Show Docs/Videos/Hours/Actual UPH completed once for the day */}
                             <CardDescription className="px-1 py-2 text-sm">
-                                Completed: {log.documentsCompleted} Docs, {log.videoSessionsCompleted} Videos ({log.hoursWorked} hrs)
+                                Completed: {log.documentsCompleted} Docs, {log.videoSessionsCompleted} Videos ({log.hoursWorked} hrs).
+                                {log.hoursWorked > 0 && ` Actual UPH: ${dailyActualUPH.toFixed(2)}`}{/* Display Actual UPH here */}
                             </CardDescription>
                              <div className="overflow-x-auto border rounded-md mt-2">
                                 <Table>
                                 <TableHeader>
                                     <TableRow>
                                     <TableHead className="text-right">Goal UPH</TableHead>
+                                    <TableHead className="text-right">Docs Done</TableHead>
+                                    <TableHead className="text-right">Videos Done</TableHead>
                                     <TableHead className="text-right">Units Needed</TableHead>
-                                    {/* Actual UPH removed from previous logs */}
+                                    {/* Actual UPH removed from previous logs table columns */}
                                     <TableHead className="text-right">+/- Target</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -271,7 +281,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                         sortedTargets.map(target => renderMetricsRow(log, target, false)) // Pass false for isToday
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={3} className="text-center text-muted-foreground">No UPH targets defined for this day.</TableCell> {/* Updated colspan */}
+                                            <TableCell colSpan={5} className="text-center text-muted-foreground">No UPH targets defined for this day.</TableCell> {/* Updated colspan */}
                                         </TableRow>
                                     )}
                                 </TableBody>
@@ -279,7 +289,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             </div>
                         </AccordionContent>
                     </AccordionItem>
-               ))}
+                    );
+                })}
            </Accordion>
         </div>
       )}
