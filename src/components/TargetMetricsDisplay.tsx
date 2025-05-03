@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -27,6 +28,7 @@ import {
     calculateProjectedGoalHitTime,
     formatDateISO,
     formatFriendlyDate,
+    calculateRemainingUnits, // Import the difference calculator
 } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 
@@ -45,12 +47,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
+    // Run only on the client after hydration
     setCurrentTime(new Date());
     const timerId = setInterval(() => {
       setCurrentTime(new Date());
-    }, 1000); // Update every second
+    }, 60000); // Update every minute is sufficient for projection
     return () => clearInterval(timerId);
-  }, []);
+  }, []); // Empty dependency array ensures this runs once on mount
 
   const { todayLog, previousLogsByDate } = useMemo(() => {
     const todayDateStr = formatDateISO(new Date());
@@ -60,38 +63,49 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     const sortedLogs = [...allWorkLogs].sort((a, b) => b.date.localeCompare(a.date));
 
     sortedLogs.forEach(log => {
-      if (log.date === todayDateStr && !foundTodayLog) {
-        foundTodayLog = log;
-      } else if (log.date !== todayDateStr) {
-          if (!prevLogsMap[log.date]) {
-              prevLogsMap[log.date] = [];
-          }
-          if (prevLogsMap[log.date].length === 0) {
-             prevLogsMap[log.date].push(log);
-          }
-      }
+        // Ensure the log has a valid date format before comparing
+        if (log.date && /^\d{4}-\d{2}-\d{2}$/.test(log.date)) {
+            if (log.date === todayDateStr && !foundTodayLog) {
+              foundTodayLog = log;
+            } else if (log.date !== todayDateStr) {
+                if (!prevLogsMap[log.date]) {
+                    prevLogsMap[log.date] = [];
+                }
+                // Store the first unique log for each previous date
+                 if (prevLogsMap[log.date].length === 0) {
+                   prevLogsMap[log.date].push(log);
+                }
+            }
+        } else {
+            console.warn("Skipping log due to invalid date format:", log);
+        }
     });
 
+     // Convert map to array and sort by date descending
     const prevLogsGrouped = Object.entries(prevLogsMap)
-                                .map(([date, logs]) => ({ date, log: logs[0] }))
-                                .sort((a, b) => b.date.localeCompare(a.date));
+                                .map(([date, logs]) => ({ date, log: logs[0] })) // Take the first log found for that date
+                                .sort((a, b) => b.date.localeCompare(a.date)); // Sort by date string descending
 
     return { todayLog: foundTodayLog, previousLogsByDate: prevLogsGrouped };
   }, [allWorkLogs]);
 
 
   const sortedTargets = [...targets].sort((a, b) => a.targetUPH - b.targetUPH);
-  const activeTarget = targets.find(t => t.isActive) ?? sortedTargets[0] ?? null; // Find active or fallback to first
+  const activeTarget = targets.find(t => t.isActive) ?? (targets.length > 0 ? targets[0] : null);
+
 
   const handleDeleteLog = (log: DailyWorkLog) => {
-    if (!confirm(`Are you sure you want to delete the log for ${formatFriendlyDate(new Date(log.date + 'T00:00:00'))}?`)) {
+     const logDate = new Date(log.date + 'T00:00:00'); // Add time component for safer parsing
+     const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date;
+
+    if (!confirm(`Are you sure you want to delete the log for ${formattedLogDate}?`)) {
       return;
     }
     try {
       deleteWorkLogAction(log.id);
       toast({
         title: "Log Deleted",
-        description: `Work log for ${formatFriendlyDate(new Date(log.date + 'T00:00:00'))} deleted successfully.`,
+        description: `Work log for ${formattedLogDate} deleted successfully.`,
       });
     } catch (error) {
       console.error("Failed to delete work log:", error);
@@ -106,20 +120,15 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   // --- Helper Function to Render a Metric Card (Used for Targets) ---
   const renderTargetMetricCard = (log: DailyWorkLog, target: UPHTarget, isToday: boolean) => {
       const actualUnits = calculateDailyUnits(log, target);
-      const actualUPH = calculateDailyUPH(log, target);
       const requiredUnits = calculateRequiredUnitsForTarget(log.hoursWorked, target.targetUPH);
-      const differenceUnits = parseFloat((actualUnits - requiredUnits).toFixed(2));
+      // Use calculateRemainingUnits which calculates Actual - Required
+      const differenceUnits = calculateRemainingUnits(log, target);
 
       let goalHitTimeFormatted = '-';
-      if (isToday && currentTime && actualUPH > 0) {
-          const remainingUnits = requiredUnits - actualUnits;
-          const remainingWorkHours = (remainingUnits > 0) ? remainingUnits / actualUPH : 0;
-          goalHitTimeFormatted = calculateProjectedGoalHitTime(currentTime, remainingWorkHours);
-      } else if (isToday && actualUPH <= 0 && log.hoursWorked > 0) {
-          goalHitTimeFormatted = 'N/A (No Units)';
-      } else if (isToday && log.hoursWorked <= 0) {
-          goalHitTimeFormatted = '-';
-      }
+       if (isToday && currentTime) {
+           // Use the updated calculation function
+           goalHitTimeFormatted = calculateProjectedGoalHitTime(log, target, currentTime);
+       }
 
       const isBehind = differenceUnits < 0;
 
@@ -129,6 +138,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                  <div className="flex justify-between items-start">
                     <CardTitle className="text-lg font-semibold">{target.name}</CardTitle>
                     {/* Display +/- Target in the header */}
+                     {/* Positive means ahead, Negative means behind */}
                     <span className={`text-lg font-bold ${isBehind ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
                         {(differenceUnits >= 0 ? '+' : '') + differenceUnits.toFixed(2)} Units
                     </span>
@@ -144,11 +154,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     <p className="text-muted-foreground">Units Needed</p>
                     <p className="font-medium">{requiredUnits.toFixed(2)}</p>
                 </div>
-                {/* Show Actual UPH here (calculated based on *this* target's unit definition) */}
-                <div>
-                    <p className="text-muted-foreground">Actual UPH (Target)</p>
-                    <p className="font-medium">{actualUPH.toFixed(2)}</p>
-                </div>
+                {/* Removed Actual UPH from here as requested */}
 
                 {isToday && (
                      <div>
@@ -157,9 +163,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     </div>
                 )}
             </CardContent>
-             {/* <CardFooter className="text-xs text-muted-foreground pt-2">
-                 Calculated vs {target.targetUPH.toFixed(1)} UPH Goal
-            </CardFooter> */}
         </Card>
       );
   };
@@ -168,7 +171,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
    const renderLogSummaryCard = (log: DailyWorkLog, isToday: boolean) => {
         // Calculate Actual UPH using the active target (or first if none active)
         const summaryUPH = activeTarget && log.hoursWorked > 0 ? calculateDailyUPH(log, activeTarget) : 0;
-        const summaryTargetName = activeTarget ? activeTarget.name : 'Default';
+        const summaryTargetName = activeTarget ? activeTarget.name : (targets.length > 0 ? 'First Target' : 'N/A');
+        const logDate = new Date(log.date + 'T00:00:00'); // Add time component for parsing
+        const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date; // Fallback to raw string if invalid
 
         return (
             <Card className="mb-4 relative"> {/* Added relative positioning for delete button */}
@@ -176,7 +181,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     <div className="flex justify-between items-start">
                          <div>
                             <CardTitle className="text-xl">
-                                {isToday ? `Today (${formatFriendlyDate(new Date(log.date + 'T00:00:00'))})` : formatFriendlyDate(new Date(log.date + 'T00:00:00'))}
+                                {isToday ? `Today (${formattedLogDate})` : formattedLogDate}
                             </CardTitle>
                              <CardDescription>
                                 {log.hoursWorked.toFixed(2)} hrs ({log.startTime} - {log.endTime}, {log.breakDurationMinutes} min break)
@@ -267,13 +272,12 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date} className="border rounded-lg overflow-hidden">
                          {/* Use AccordionTrigger to wrap the summary card for clickability */}
-                        <AccordionTrigger className="hover:no-underline p-0 data-[state=open]:bg-muted/30 transition-colors">
+                        <AccordionTrigger className="hover:no-underline p-0 data-[state=open]:bg-muted/30 transition-colors w-full text-left">
                              {/* Render summary card inside the trigger */}
-                             <div className="w-full"> {/* Ensure full width */}
-                                {renderLogSummaryCard(log, false)}
-                            </div>
+                             {renderLogSummaryCard(log, false)}
                         </AccordionTrigger>
                         <AccordionContent className="p-4 border-t bg-muted/10">
+                             {/* Detailed breakdown inside the content */}
                             <h4 className="text-md font-semibold mb-3">Target Breakdown for {formatFriendlyDate(new Date(date + 'T00:00:00'))}</h4>
                              {sortedTargets.length > 0 ? (
                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -31,7 +32,7 @@ const AccordionTrigger = React.forwardRef<
       ref={ref}
       className={cn(
         "flex flex-1 items-center justify-between py-4 font-medium transition-all [&[data-state=open]>svg]:rotate-180",
-        // Remove hover:underline if it conflicts with card styling
+        // Remove hover:underline if it conflicts with card styling or nested buttons
         // "hover:underline",
         className
       )}
