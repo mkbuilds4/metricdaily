@@ -23,7 +23,7 @@ import {
     formatFriendlyDate,
 } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
-import { Card, CardDescription } from '@/components/ui/card'; // Import CardDescription for summary
+import { CardDescription } from '@/components/ui/card'; // Import CardDescription for summary
 
 interface TargetMetricsDisplayProps {
   allWorkLogs: DailyWorkLog[]; // Receive all logs
@@ -122,7 +122,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                   <TableCell className="text-right">-</TableCell>
                   <TableCell className="text-right">-</TableCell>
                   <TableCell className="text-right">-</TableCell>
-                  <TableCell className="text-right">-</TableCell>
               </TableRow>
           );
       }
@@ -133,7 +132,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
                     <TableCell className="text-right">{log.documentsCompleted}</TableCell>
                     <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>
-                    <TableCell className="text-right">-</TableCell>
                     <TableCell className="text-right">-</TableCell>
                     <TableCell className="text-right">-</TableCell>
                 </TableRow>
@@ -155,26 +153,26 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
           goalHitTimeFormatted = calculateProjectedGoalHitTime(currentTime, remainingWorkHours);
       } else if (isToday && actualUPH <= 0) {
           goalHitTimeFormatted = 'N/A';
+      } else if (!isToday && log.hoursWorked > 0) {
+          // If it's a previous day, show N/A for goal hit time
+          goalHitTimeFormatted = '-';
       }
+
 
       return (
           <TableRow key={`${log.id}-${target.id}`}>
+              <TableCell className="text-right font-medium">{target.name}</TableCell>
               <TableCell className="text-right">{target.targetUPH.toFixed(1)}</TableCell>
-              <TableCell className="text-right">{log.documentsCompleted}</TableCell>
-              <TableCell className="text-right">{log.videoSessionsCompleted}</TableCell>
-              <TableCell className="text-right">{requiredUnits.toFixed(2)}</TableCell>
-              {/* Show Actual UPH only for Today */}
-              {isToday && <TableCell className="text-right">{actualUPH.toFixed(2)}</TableCell>}
-              {/* Show Actual Units (for this target) for both Today and Previous */}
+              {/* Show Actual Units (for this target) */}
               <TableCell className="text-right">{actualUnits.toFixed(2)}</TableCell>
-              {/* Show Est. Goal Hit Time only for Today */}
-              {isToday && <TableCell className="text-right">{goalHitTimeFormatted}</TableCell>}
-              {/* Show +/- Difference only for Previous Days */}
-              {!isToday && (
-                    <TableCell className={`text-right font-medium ${differenceUnits >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
-                         {(differenceUnits >= 0 ? '+' : '') + differenceUnits.toFixed(2)}
-                    </TableCell>
-              )}
+              {/* Show Units Needed for this target */}
+              <TableCell className="text-right">{requiredUnits.toFixed(2)}</TableCell>
+              {/* Show +/- Difference */}
+              <TableCell className={`text-right font-medium ${differenceUnits >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
+                   {(differenceUnits >= 0 ? '+' : '') + differenceUnits.toFixed(2)}
+              </TableCell>
+               {/* Show Est. Goal Hit Time only for Today */}
+               {isToday && <TableCell className="text-right">{goalHitTimeFormatted}</TableCell>}
           </TableRow>
       );
   };
@@ -202,18 +200,18 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
            <CardDescription className="mb-3 text-sm px-1">
                 Logged: {todayLog.hoursWorked} hrs (Start: {todayLog.startTime}, End: {todayLog.endTime}, Break: {todayLog.breakDurationMinutes} mins).
                 Completed: {todayLog.documentsCompleted} Docs, {todayLog.videoSessionsCompleted} Videos.
+                {todayLog.hoursWorked > 0 && ` Actual UPH: ${calculateDailyUPH(todayLog, sortedTargets[0]).toFixed(2)} (vs. ${sortedTargets[0]?.name || 'first target'})`}
                 {todayLog.notes && <p className="mt-1 italic">Notes: {todayLog.notes}</p>}
             </CardDescription>
           <div className="overflow-x-auto border rounded-md">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="text-right">Goal Name</TableHead>
                   <TableHead className="text-right">Goal UPH</TableHead>
-                  <TableHead className="text-right">Docs Done</TableHead>
-                  <TableHead className="text-right">Videos Done</TableHead>
-                  <TableHead className="text-right">Units Needed</TableHead>
-                  <TableHead className="text-right">Actual UPH</TableHead>
                   <TableHead className="text-right">Actual Units</TableHead>
+                  <TableHead className="text-right">Units Needed</TableHead>
+                  <TableHead className="text-right">+/- Target</TableHead>
                   <TableHead className="text-right">Est. Goal Hit Time</TableHead>
                 </TableRow>
               </TableHeader>
@@ -222,7 +220,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     sortedTargets.map((target) => renderMetricsRow(todayLog, target, true))
                 ) : (
                     <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground">No UPH targets defined.</TableCell>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground">No UPH targets defined.</TableCell>
                     </TableRow>
                 )}
               </TableBody>
@@ -241,33 +239,34 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
            <Accordion type="multiple" className="w-full">
                {previousLogsByDate.map(({ date, log }) => {
                     // Calculate Actual UPH once per day for display in summary using the first target
-                    const firstTarget = sortedTargets[0];
-                    const dailyActualUPH = firstTarget ? calculateDailyUPH(log, firstTarget) : 0;
+                    const firstTarget = sortedTargets[0]; // Use first target for summary UPH
+                    const dailyActualUPH = firstTarget && log.hoursWorked > 0 ? calculateDailyUPH(log, firstTarget) : 0;
 
                     return (
                     <AccordionItem value={date} key={date}>
-                        <AccordionTrigger className="text-base hover:no-underline">
-                            <div className="flex justify-between items-center w-full pr-2"> {/* Use full width and padding for spacing */}
-                                <span>{formatFriendlyDate(new Date(date + 'T00:00:00'))}</span>
-                                {/* Keep delete button accessible when closed */}
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="text-destructive hover:text-destructive h-7 w-7 shrink-0 data-[state=open]:opacity-0 data-[state=closed]:opacity-100 transition-opacity" // Hide when open
-                                    onClick={(e) => {
-                                        e.stopPropagation(); // Prevent accordion toggle
-                                        handleDeleteLog(log);
-                                    }}
-                                    title="Delete This Log"
-                                    aria-label="Delete This Log"
-                                    >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                            </div>
-                        </AccordionTrigger>
+                        {/* Header container for Trigger and Delete Button */}
+                         <div className="flex items-center justify-between py-1 border-b data-[state=open]:border-b-0"> {/* Adjust padding/border */}
+                            <AccordionTrigger className="flex-1 text-base hover:no-underline py-3 pr-2"> {/* Adjust padding */}
+                                {formatFriendlyDate(new Date(date + 'T00:00:00'))}
+                            </AccordionTrigger>
+                             {/* Delete Button outside the Trigger */}
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive h-8 w-8 shrink-0 mr-2" // Add margin
+                                onClick={(e) => {
+                                    e.stopPropagation(); // Keep stopping propagation if needed
+                                    handleDeleteLog(log);
+                                }}
+                                title="Delete This Log"
+                                aria-label="Delete This Log"
+                                >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </div>
                         <AccordionContent>
                             {/* Show more detailed summary */}
-                            <CardDescription className="px-1 py-2 text-sm">
+                            <CardDescription className="px-1 py-2 text-sm border-t pt-3"> {/* Add border-t */}
                                 Logged: {log.hoursWorked} hrs (Start: {log.startTime}, End: {log.endTime}, Break: {log.breakDurationMinutes} mins).
                                 Completed: {log.documentsCompleted} Docs, {log.videoSessionsCompleted} Videos.
                                 {log.hoursWorked > 0 && ` Actual UPH (vs. ${firstTarget?.name || 'first target'}): ${dailyActualUPH.toFixed(2)}`}
@@ -277,11 +276,10 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 <Table>
                                 <TableHeader>
                                     <TableRow>
+                                    <TableHead className="text-right">Goal Name</TableHead>
                                     <TableHead className="text-right">Goal UPH</TableHead>
-                                    <TableHead className="text-right">Docs Done</TableHead>
-                                    <TableHead className="text-right">Videos Done</TableHead>
+                                    <TableHead className="text-right">Actual Units</TableHead>
                                     <TableHead className="text-right">Units Needed</TableHead>
-                                    <TableHead className="text-right">Actual Units</TableHead> {/* Added Actual Units */}
                                     <TableHead className="text-right">+/- Target</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -290,7 +288,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                         sortedTargets.map(target => renderMetricsRow(log, target, false)) // Pass false for isToday
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="text-center text-muted-foreground">No UPH targets defined for this day.</TableCell> {/* Updated colspan */}
+                                            <TableCell colSpan={5} className="text-center text-muted-foreground">No UPH targets defined for this day.</TableCell> {/* Updated colspan */}
                                         </TableRow>
                                     )}
                                 </TableBody>
