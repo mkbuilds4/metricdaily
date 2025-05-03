@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format } from 'date-fns'; // Use date-fns for reliable date formatting
+import { format, parse, isValid } from 'date-fns'; // Use date-fns for reliable date formatting
 
 import { Button } from '@/components/ui/button';
 import {
@@ -21,13 +21,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { CalendarIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, calculateHoursWorked } from '@/lib/utils'; // Import calculateHoursWorked
 import { useToast } from "@/hooks/use-toast";
-import type { DailyWorkLog } from '@/types'; // Assuming type is defined
+import type { DailyWorkLog } from '@/types';
 
-// Define Zod schema for validation based on DailyWorkLog
+// Define Zod schema for validation based on the updated DailyWorkLog
 const formSchema = z.object({
   date: z.date({ required_error: 'A date is required.' }),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: "Invalid time format (HH:mm)" }),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: "Invalid time format (HH:mm)" }),
+  breakDurationMinutes: z.coerce
+    .number({ invalid_type_error: 'Must be a number' })
+    .nonnegative({ message: 'Break duration cannot be negative' })
+    .default(0),
   documentsCompleted: z.coerce // coerce converts string input to number
     .number({ invalid_type_error: 'Must be a number' })
     .nonnegative({ message: 'Docs cannot be negative' })
@@ -36,55 +42,87 @@ const formSchema = z.object({
     .number({ invalid_type_error: 'Must be a number' })
     .nonnegative({ message: 'Videos cannot be negative' })
     .default(0),
-  hoursWorked: z.coerce
-    .number({ invalid_type_error: 'Must be a number' })
-    .positive({ message: 'Hours must be positive' }), // Must work some time
   notes: z.string().optional(),
+}).refine(data => {
+    // Basic validation: end time should logically be after start time (simple check)
+    // More complex validation (crossing midnight) is handled in calculateHoursWorked
+    const startDate = parse(`${format(data.date, 'yyyy-MM-dd')} ${data.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+    const endDate = parse(`${format(data.date, 'yyyy-MM-dd')} ${data.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+    return isValid(startDate) && isValid(endDate); // Ensure dates are valid before comparison logic
+    // We let calculateHoursWorked handle the overnight logic, just check parsing here
+}, {
+    message: "Start or end time is invalid.",
+    path: ["endTime"], // Attach error to endTime field for simplicity
 });
+
 
 type WorkLogFormData = z.infer<typeof formSchema>;
 
 interface WorkLogInputFormProps {
-  // Callback to notify parent component when a log is saved/updated
-  // This should be a server action passed from the parent
-  onWorkLogSaved: (workLogData: Omit<DailyWorkLog, 'id'>) => Promise<void | DailyWorkLog>; // Allow void or return type from server action
-  // Optional: Pass an existing log to pre-fill the form for editing
+  onWorkLogSaved: (workLogData: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { hoursWorked: number }) => Promise<void | DailyWorkLog>;
   existingLog?: DailyWorkLog | null;
 }
 
 const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, existingLog }) => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [calculatedHours, setCalculatedHours] = useState<number | null>(
+     existingLog ? calculateHoursWorked(existingLog.date, existingLog.startTime, existingLog.endTime, existingLog.breakDurationMinutes) : null
+  );
 
-  // Initialize the form with react-hook-form
   const form = useForm<WorkLogFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      date: existingLog ? new Date(existingLog.date + 'T00:00:00') : new Date(), // Ensure correct Date object
+      date: existingLog ? parse(existingLog.date, 'yyyy-MM-dd', new Date()) : new Date(),
+      startTime: existingLog?.startTime ?? '',
+      endTime: existingLog?.endTime ?? '',
+      breakDurationMinutes: existingLog?.breakDurationMinutes ?? 0,
       documentsCompleted: existingLog?.documentsCompleted ?? 0,
       videoSessionsCompleted: existingLog?.videoSessionsCompleted ?? 0,
-      hoursWorked: existingLog?.hoursWorked ?? undefined, // Start empty unless editing
       notes: existingLog?.notes ?? '',
     },
   });
 
-   // Update form default values if existingLog changes (e.g., user selects a different date to edit)
+  const watchStartTime = form.watch('startTime');
+  const watchEndTime = form.watch('endTime');
+  const watchBreakMinutes = form.watch('breakDurationMinutes');
+  const watchDate = form.watch('date');
+
+  // Calculate hours worked whenever relevant fields change
+  useEffect(() => {
+      const formattedDate = format(watchDate, 'yyyy-MM-dd');
+      if (watchStartTime && watchEndTime && watchBreakMinutes !== undefined && formattedDate) {
+          const hours = calculateHoursWorked(formattedDate, watchStartTime, watchEndTime, watchBreakMinutes);
+          setCalculatedHours(hours);
+      } else {
+          setCalculatedHours(null); // Reset if inputs are incomplete/invalid
+      }
+  }, [watchStartTime, watchEndTime, watchBreakMinutes, watchDate]);
+
+
+   // Update form default values if existingLog changes
    useEffect(() => {
     if (existingLog) {
+      const hours = calculateHoursWorked(existingLog.date, existingLog.startTime, existingLog.endTime, existingLog.breakDurationMinutes);
+      setCalculatedHours(hours);
       form.reset({
-        date: new Date(existingLog.date + 'T00:00:00'), // Adjust for potential timezone issues if needed
+        date: parse(existingLog.date, 'yyyy-MM-dd', new Date()),
+        startTime: existingLog.startTime,
+        endTime: existingLog.endTime,
+        breakDurationMinutes: existingLog.breakDurationMinutes,
         documentsCompleted: existingLog.documentsCompleted,
         videoSessionsCompleted: existingLog.videoSessionsCompleted,
-        hoursWorked: existingLog.hoursWorked,
         notes: existingLog.notes ?? '',
       });
     } else {
-      // Optionally reset to defaults if existingLog becomes null (e.g., switching from edit to add mode)
+       setCalculatedHours(null);
        form.reset({
         date: new Date(),
+        startTime: '',
+        endTime: '',
+        breakDurationMinutes: 0,
         documentsCompleted: 0,
         videoSessionsCompleted: 0,
-        hoursWorked: undefined,
         notes: '',
       });
     }
@@ -95,18 +133,35 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
   const onSubmit = async (values: WorkLogFormData) => {
     setIsLoading(true);
     try {
-       // Format date consistently before sending
       const formattedDate = format(values.date, 'yyyy-MM-dd');
+      const hoursWorked = calculateHoursWorked(formattedDate, values.startTime, values.endTime, values.breakDurationMinutes);
 
-      const workLogData: Omit<DailyWorkLog, 'id'> = {
+      if (hoursWorked <= 0 && (values.documentsCompleted > 0 || values.videoSessionsCompleted > 0)) {
+           toast({
+            variant: "destructive",
+            title: "Invalid Time Entry",
+            description: "Calculated hours worked is zero or negative. Please check start time, end time, and break duration.",
+           });
+           setIsLoading(false);
+           return; // Prevent saving if hours are invalid but work was done
+      }
+
+
+      const workLogData = { // Omit id, it will be handled by the action
         date: formattedDate,
+        startTime: values.startTime,
+        endTime: values.endTime,
+        breakDurationMinutes: values.breakDurationMinutes,
+        hoursWorked: hoursWorked, // Send the calculated hours
         documentsCompleted: values.documentsCompleted,
         videoSessionsCompleted: values.videoSessionsCompleted,
-        hoursWorked: values.hoursWorked,
         notes: values.notes,
       };
 
-      await onWorkLogSaved(workLogData); // Call the server action passed as prop
+      // Add the existing ID if we are editing
+      const payload = existingLog ? { ...workLogData, id: existingLog.id } : workLogData;
+
+      await onWorkLogSaved(payload); // Call the server action passed as prop
 
       toast({
         title: "Work Log Saved",
@@ -114,11 +169,14 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
       });
       // Reset form after successful submission only if NOT editing
       if (!existingLog) {
+         setCalculatedHours(null);
          form.reset({
             date: new Date(), // Keep today's date as default
+            startTime: '',
+            endTime: '',
+            breakDurationMinutes: 0,
             documentsCompleted: 0,
             videoSessionsCompleted: 0,
-            hoursWorked: undefined, // Clear hours
             notes: '',
         });
       }
@@ -142,58 +200,115 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Date Picker */}
-            <FormField
-              control={form.control}
-              name="date"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Date</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant={'outline'}
-                          className={cn(
-                            'w-full md:w-[240px] pl-3 text-left font-normal', // Responsive width
-                            !field.value && 'text-muted-foreground'
-                          )}
-                        >
-                          {field.value ? (
-                            format(field.value, 'PPP') // Pretty date format
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) =>
-                          date > new Date() || date < new Date('1900-01-01')
-                        }
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Date Picker */}
+                <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                    <FormLabel>Date</FormLabel>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                        <FormControl>
+                            <Button
+                            variant={'outline'}
+                            className={cn(
+                                'w-full pl-3 text-left font-normal',
+                                !field.value && 'text-muted-foreground'
+                            )}
+                            >
+                            {field.value ? (
+                                format(field.value, 'PPP') // Pretty date format
+                            ) : (
+                                <span>Pick a date</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                        </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) =>
+                            date > new Date() || date < new Date('1900-01-01')
+                            }
+                            initialFocus
+                        />
+                        </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                    </FormItem>
+                )}
+                />
+                 {/* Calculated Hours Display */}
+                 <div className="flex flex-col justify-end pb-1">
+                    <FormLabel>Calculated Hours</FormLabel>
+                    <div className="h-10 px-3 py-2 text-sm font-medium text-muted-foreground border border-input rounded-md bg-muted">
+                        {calculatedHours !== null ? `${calculatedHours} hrs` : 'Enter times & break'}
+                    </div>
+                 </div>
+            </div>
 
-            {/* Grid for number inputs */}
+
+            {/* Grid for time and break inputs */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                 {/* Start Time */}
+                <FormField
+                control={form.control}
+                name="startTime"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Start Time (HH:mm)</FormLabel>
+                    <FormControl>
+                        <Input type="time" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                    </FormItem>
+                )}
+                />
+                 {/* End Time */}
+                 <FormField
+                control={form.control}
+                name="endTime"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>End Time (HH:mm)</FormLabel>
+                    <FormControl>
+                        <Input type="time" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                    </FormItem>
+                )}
+                />
+                 {/* Break Duration */}
+                 <FormField
+                control={form.control}
+                name="breakDurationMinutes"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Break (Minutes)</FormLabel>
+                    <FormControl>
+                        <Input type="number" placeholder="e.g., 30" {...field} min="0" step="1" />
+                    </FormControl>
+                    <FormMessage />
+                    </FormItem>
+                )}
+                />
+            </div>
+
+
+            {/* Grid for work completed inputs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Documents Completed */}
                 <FormField
                 control={form.control}
                 name="documentsCompleted"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Documents</FormLabel>
+                    <FormLabel>Documents Completed</FormLabel>
                     <FormControl>
                         <Input type="number" placeholder="0" {...field} min="0" />
                     </FormControl>
@@ -208,25 +323,9 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                 name="videoSessionsCompleted"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Videos</FormLabel>
+                    <FormLabel>Video Sessions Completed</FormLabel>
                     <FormControl>
                         <Input type="number" placeholder="0" {...field} min="0" />
-                    </FormControl>
-                    <FormMessage />
-                    </FormItem>
-                )}
-                />
-
-                {/* Hours Worked */}
-                <FormField
-                control={form.control}
-                name="hoursWorked"
-                render={({ field }) => (
-                    <FormItem>
-                    <FormLabel>Hours Worked</FormLabel>
-                    <FormControl>
-                        {/* Use step="0.01" for finer control if needed */}
-                        <Input type="number" placeholder="e.g., 7.5" {...field} step="0.1" min="0.1" />
                     </FormControl>
                     <FormMessage />
                     </FormItem>

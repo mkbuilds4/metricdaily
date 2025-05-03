@@ -4,9 +4,12 @@
 export interface DailyWorkLog {
   id: string; // Unique identifier, could be date or a generated ID
   date: string; // Format: 'YYYY-MM-DD'
+  startTime: string; // Format: 'HH:mm' (24-hour)
+  endTime: string; // Format: 'HH:mm' (24-hour)
+  breakDurationMinutes: number; // Break time in minutes
+  hoursWorked: number; // Calculated from startTime, endTime, and breakDurationMinutes
   documentsCompleted: number;
   videoSessionsCompleted: number;
-  hoursWorked: number; // Can include decimals (e.g., 7.5)
   notes?: string; // Optional notes for the day
 }
 
@@ -29,9 +32,12 @@ export interface UPHTarget {
  */
 export interface GoogleSheetsData {
   date: string;
+  startTime: string;
+  endTime: string;
+  breakMinutes: number;
+  hoursWorked: number; // Display the calculated hours
   docs: number;
   videos: number;
-  hours: number;
   calculatedUnits: number | string; // Use string if displaying '-' for invalid data
   calculatedUPH: number | string;   // Use string if displaying '-'
   targetUnits: number | string;     // Use string if displaying '-'

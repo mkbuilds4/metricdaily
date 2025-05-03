@@ -1,39 +1,15 @@
 'use client';
 
 import type React from 'react';
-import type { DailyWorkLog, UPHTarget } from '@/types'; // Assuming types are defined
+import type { DailyWorkLog, UPHTarget, GoogleSheetsData } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { exportWorkLogsToSheet } from '@/lib/actions'; // Assuming an action exists
+// Import calculation functions from utils
+import { calculateDailyUnits, calculateDailyUPH, calculateRequiredUnitsForTarget, calculateRemainingUnits } from '@/lib/utils';
 
-// --- Helper Functions (Move to lib/utils.ts later) ---
-
-/** Calculates total units for a log entry based on a target's weights. */
-function calculateDailyUnits(log: DailyWorkLog, target: UPHTarget): number {
-  return (log.documentsCompleted * target.docWeight) + (log.videoSessionsCompleted * target.videoWeight);
-}
-
-/** Calculates Units Per Hour (UPH) for a log entry. */
-function calculateDailyUPH(log: DailyWorkLog, target: UPHTarget): number {
-  if (log.hoursWorked <= 0) {
-    return 0; // Avoid division by zero
-  }
-  const totalUnits = calculateDailyUnits(log, target);
-  return parseFloat((totalUnits / log.hoursWorked).toFixed(2));
-}
-
-/** Calculates the number of units required to meet the target UPH for the hours worked. */
-function calculateRequiredUnitsForTarget(hoursWorked: number, targetUPH: number): number {
-    return parseFloat((hoursWorked * targetUPH).toFixed(2));
-}
-
-/** Calculates the difference between actual units and target units. */
-function calculateRemainingUnits(log: DailyWorkLog, target: UPHTarget): number {
-    const actualUnits = calculateDailyUnits(log, target);
-    const requiredUnits = calculateRequiredUnitsForTarget(log.hoursWorked, target.targetUPH);
-    return parseFloat((requiredUnits - actualUnits).toFixed(2));
-}
+// Helper functions are now imported from lib/utils.ts
 
 // --- Component Props ---
 
@@ -57,12 +33,15 @@ const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({ workLogs 
         return;
     }
 
-    // Format data for export
-    const exportData = workLogs.map(log => ({
+    // Format data for export according to GoogleSheetsData type
+    const exportData: GoogleSheetsData[] = workLogs.map(log => ({
         date: log.date,
+        startTime: log.startTime,
+        endTime: log.endTime,
+        breakMinutes: log.breakDurationMinutes,
+        hoursWorked: log.hoursWorked, // Use pre-calculated hours
         docs: log.documentsCompleted,
         videos: log.videoSessionsCompleted,
-        hours: log.hoursWorked,
         calculatedUnits: calculateDailyUnits(log, activeTarget),
         calculatedUPH: calculateDailyUPH(log, activeTarget),
         targetUnits: calculateRequiredUnitsForTarget(log.hoursWorked, activeTarget.targetUPH),
@@ -72,8 +51,20 @@ const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({ workLogs 
 
     try {
         // Assume exportWorkLogsToSheet is a server action defined in lib/actions.ts
-        // You'll need to pass spreadsheetId and sheetName, perhaps from config or state
-        await exportWorkLogsToSheet(exportData, 'YOUR_SPREADSHEET_ID', 'WorkLogsExport'); // Replace placeholders
+        // TODO: Replace placeholders with actual Spreadsheet ID and Sheet Name
+        // These should ideally come from environment variables or configuration
+        const spreadsheetId = process.env.NEXT_PUBLIC_SPREADSHEET_ID || 'YOUR_SPREADSHEET_ID';
+        const sheetName = process.env.NEXT_PUBLIC_SHEET_NAME || 'WorkLogsExport';
+
+         if (spreadsheetId === 'YOUR_SPREADSHEET_ID' || sheetName === 'WorkLogsExport') {
+             console.warn("Using placeholder Spreadsheet ID or Sheet Name. Please configure environment variables NEXT_PUBLIC_SPREADSHEET_ID and NEXT_PUBLIC_SHEET_NAME.");
+             // Optionally prevent export if not configured
+             // alert("Export configuration missing. Please set up Spreadsheet ID and Sheet Name.");
+             // return;
+         }
+
+
+        await exportWorkLogsToSheet(exportData, spreadsheetId, sheetName);
         alert('Data exported successfully!');
     } catch (error) {
         console.error('Export failed:', error);
@@ -104,25 +95,28 @@ const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({ workLogs 
           <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>
+              <TableHead>Start</TableHead>
+              <TableHead>End</TableHead>
+              <TableHead>Break (m)</TableHead>
+              <TableHead>Hours</TableHead>
               <TableHead>Docs</TableHead>
               <TableHead>Videos</TableHead>
-              <TableHead>Hours</TableHead>
               <TableHead>Total Units</TableHead>
               <TableHead>Actual UPH</TableHead>
               <TableHead>Target Units</TableHead>
               <TableHead>+/- Target</TableHead>
-              {/* Optional: <TableHead>Progress</TableHead> */}
               <TableHead>Notes</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {workLogs.length === 0 && (
                  <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground">No work logs recorded for this period.</TableCell>
+                    <TableCell colSpan={12} className="text-center text-muted-foreground">No work logs recorded for this period.</TableCell>
                 </TableRow>
             )}
             {workLogs.map((log) => {
               const hasTarget = !!activeTarget;
+              // Calculations now use log.hoursWorked directly
               const totalUnits = hasTarget ? calculateDailyUnits(log, activeTarget) : '-';
               const actualUPH = hasTarget ? calculateDailyUPH(log, activeTarget) : '-';
               const targetUnits = hasTarget ? calculateRequiredUnitsForTarget(log.hoursWorked, activeTarget.targetUPH) : '-';
@@ -132,17 +126,19 @@ const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({ workLogs 
               return (
                 <TableRow key={log.id || log.date}>
                   <TableCell>{log.date}</TableCell>
+                  <TableCell>{log.startTime}</TableCell>
+                  <TableCell>{log.endTime}</TableCell>
+                  <TableCell>{log.breakDurationMinutes}</TableCell>
+                  <TableCell>{log.hoursWorked.toFixed(2)}</TableCell> {/* Display calculated hours */}
                   <TableCell>{log.documentsCompleted}</TableCell>
                   <TableCell>{log.videoSessionsCompleted}</TableCell>
-                  <TableCell>{log.hoursWorked}</TableCell>
                   <TableCell>{totalUnits}</TableCell>
                   <TableCell>{actualUPH}</TableCell>
                   <TableCell>{targetUnits}</TableCell>
                   <TableCell className={remainingColor}>
                      {typeof remainingUnits === 'number' ? (remainingUnits > 0 ? `-${remainingUnits}` : `+${Math.abs(remainingUnits)}`) : '-'}
                   </TableCell>
-                  {/* Optional Progress Bar Cell */}
-                  <TableCell className="max-w-[200px] truncate">{log.notes || ''}</TableCell>
+                  <TableCell className="max-w-[150px] truncate">{log.notes || ''}</TableCell>
                 </TableRow>
               );
             })}

@@ -3,15 +3,16 @@
 import { revalidatePath } from 'next/cache'; // Import revalidatePath
 import type { DailyWorkLog, UPHTarget, GoogleSheetsData } from '@/types';
 import { exportToGoogleSheets as exportSheetService } from '@/services/google-sheets'; // Import the service
+import { calculateHoursWorked } from './utils'; // Import the calculator
 
 // --- In-Memory Data Stores (Replace with Database/Persistent Storage) ---
 
 let workLogStore: DailyWorkLog[] = [
     // Sample Data (Optional - remove for production)
-    { id: '2024-07-15', date: '2024-07-15', documentsCompleted: 50, videoSessionsCompleted: 10, hoursWorked: 7.5, notes: 'Regular day' },
-    { id: '2024-07-16', date: '2024-07-16', documentsCompleted: 65, videoSessionsCompleted: 12, hoursWorked: 8, notes: 'Busy morning' },
-    { id: '2024-07-17', date: '2024-07-17', documentsCompleted: 40, videoSessionsCompleted: 8, hoursWorked: 6, notes: 'Short day' },
-];
+    // { id: 'log-1721234567890-abc12', date: '2024-07-15', startTime: '09:00', endTime: '17:30', breakDurationMinutes: 30, hoursWorked: 8, documentsCompleted: 50, videoSessionsCompleted: 10, notes: 'Regular day' },
+    // { id: 'log-1721320987654-def34', date: '2024-07-16', startTime: '08:30', endTime: '17:30', breakDurationMinutes: 45, hoursWorked: 8.25, documentsCompleted: 65, videoSessionsCompleted: 12, notes: 'Busy morning' },
+    // { id: 'log-1721407321098-ghi56', date: '2024-07-17', startTime: '10:00', endTime: '16:00', breakDurationMinutes: 0, hoursWorked: 6, documentsCompleted: 40, videoSessionsCompleted: 8, notes: 'Short day' },
+]; // Start empty or with actual persisted data
 
 let uphTargetStore: UPHTarget[] = [
     // Sample Data (Ensure one is active by default)
@@ -19,20 +20,13 @@ let uphTargetStore: UPHTarget[] = [
     { id: 'peak-1', name: 'Peak Hours', targetUPH: 12.5, docWeight: 1, videoWeight: 2.5, isActive: false },
 ];
 
-let nextWorkLogId = workLogStore.length + 1;
+// let nextWorkLogId = workLogStore.length + 1; // Remove if using timestamp/random ID
 let nextTargetId = uphTargetStore.length + 1;
 
 // --- Helper Function ---
 function generateId(prefix: string = 'id'): string {
     // In a real app, use a more robust ID generation (e.g., UUID)
-    if (prefix === 'log') {
-        // Use date as ID for logs if it's unique for the day
-        // return logData.date; // Be cautious if multiple logs per day are possible
-        return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`; // Fallback if date isn't unique ID
-    } else if (prefix === 'target') {
-         return `${prefix}-${nextTargetId++}`;
-    }
-    // Fallback for other potential uses
+    // Using timestamp + random string for better uniqueness for logs
     return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 }
 
@@ -47,38 +41,57 @@ export async function getWorkLogs(): Promise<DailyWorkLog[]> {
   console.log('[Action] getWorkLogs called');
   // Simulate async operation
   await new Promise(resolve => setTimeout(resolve, 50));
-  // Return a deep copy to prevent accidental mutation of the store
-  return JSON.parse(JSON.stringify(workLogStore));
+  // Return a deep copy to prevent accidental mutation of the store, sorted by date desc
+  return JSON.parse(JSON.stringify(workLogStore)).sort((a: DailyWorkLog, b: DailyWorkLog) => b.date.localeCompare(a.date));
 }
 
 /**
  * Saves (adds or updates) a work log entry.
  * If an entry for the given date exists, it updates it. Otherwise, it adds a new one.
+ * Expects `hoursWorked` to be pre-calculated and passed in.
  * Replace with database upsert logic in a real application.
  */
-export async function saveWorkLog(logData: Omit<DailyWorkLog, 'id'>): Promise<DailyWorkLog> {
+export async function saveWorkLog(
+    logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number } // Allow optional ID for updates
+): Promise<DailyWorkLog> {
     console.log('[Action] saveWorkLog called with:', logData);
     await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async
 
-    const existingIndex = workLogStore.findIndex(log => log.date === logData.date);
+    // Data validation (basic)
+    if (logData.hoursWorked < 0) {
+        throw new Error("Hours worked cannot be negative.");
+    }
+    // Consider adding more validation for times, break duration etc. if needed server-side
+
+    const existingIndex = logData.id ? workLogStore.findIndex(log => log.id === logData.id) : workLogStore.findIndex(log => log.date === logData.date); // Prefer ID if provided, else check date for upsert
+
     let savedLog: DailyWorkLog;
 
     if (existingIndex > -1) {
         // Update existing log
-        // Important: Preserve the original ID when updating
-        savedLog = { ...workLogStore[existingIndex], ...logData };
+        const logToUpdate = workLogStore[existingIndex];
+        savedLog = {
+            ...logToUpdate, // Keep original ID and other fields
+            ...logData, // Apply updates from payload (includes calculated hoursWorked)
+             // Ensure ID from payload (if present) matches or use original ID
+            id: logData.id || logToUpdate.id
+        };
         workLogStore[existingIndex] = savedLog;
         console.log('[Action] Updated log:', savedLog);
     } else {
         // Add new log
         const newLog: DailyWorkLog = {
-        ...logData,
-        id: generateId('log'), // Generate a unique ID for new logs
+            ...logData,
+            id: generateId('log'), // Generate a unique ID for new logs
+            // hoursWorked is already provided in logData
         };
         workLogStore.push(newLog);
         savedLog = newLog;
         console.log('[Action] Added new log:', savedLog);
     }
+
+    // Sort the store again after modification
+     workLogStore.sort((a, b) => b.date.localeCompare(a.date));
 
     revalidatePath('/'); // Revalidate the page after saving
     return JSON.parse(JSON.stringify(savedLog)); // Return a copy
@@ -95,7 +108,23 @@ export async function exportWorkLogsToSheet(data: GoogleSheetsData[], spreadshee
   }
   // In a real app, you might fetch sensitive info like spreadsheetId from server-side env vars
   try {
-    await exportSheetService(data, spreadsheetId, sheetName);
+    // Transform data if needed to match GoogleSheetsData structure expected by the service
+     const transformedData = data.map(item => ({
+        date: item.date,
+        startTime: item.startTime, // Make sure these fields are included in the data passed to this action
+        endTime: item.endTime,
+        breakMinutes: item.breakMinutes,
+        hoursWorked: item.hoursWorked,
+        docs: item.docs,
+        videos: item.videos,
+        calculatedUnits: item.calculatedUnits,
+        calculatedUPH: item.calculatedUPH,
+        targetUnits: item.targetUnits,
+        remainingUnits: item.remainingUnits,
+        notes: item.notes || '',
+    }));
+
+    await exportSheetService(transformedData, spreadsheetId, sheetName);
      // No revalidation needed for export unless it affects displayed data
   } catch (error) {
      console.error("Export to Google Sheets failed in action:", error);
