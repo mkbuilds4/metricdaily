@@ -11,21 +11,18 @@ import { FieldValue } from 'firebase-admin/firestore'; // Needed for transaction
 const workLogsCollection = db.collection('worklogs');
 const uphTargetsCollection = db.collection('uphtargets');
 
-// --- Helper Function (No longer needed for in-memory ID generation) ---
-// function generateId(prefix: string = 'id'): string {
-//     return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-// }
-
 // === Work Log Actions ===
 
 /**
  * Fetches all work logs from Firestore, sorted by date descending.
+ * Returns an empty array on error, especially authentication errors.
  */
 export async function getWorkLogs(): Promise<DailyWorkLog[]> {
   console.log('[Action] getWorkLogs called');
   try {
     const snapshot = await workLogsCollection.orderBy('date', 'desc').get();
     if (snapshot.empty) {
+      console.log('[Action] No work logs found.');
       return [];
     }
     // Map Firestore documents to DailyWorkLog type
@@ -33,11 +30,24 @@ export async function getWorkLogs(): Promise<DailyWorkLog[]> {
       id: doc.id,
       ...(doc.data() as Omit<DailyWorkLog, 'id'>), // Assert type after getting data
     }));
+     console.log(`[Action] Fetched ${logs.length} work logs.`);
     return logs;
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Action] Error fetching work logs:", error);
-    // Depending on requirements, you might return [] or throw the error
-    throw new Error("Could not fetch work logs.");
+    console.error("[Action] Error Details:", {
+        code: error.code,
+        message: error.message,
+        // stack: error.stack, // Stack trace can be very long, log conditionally if needed
+    });
+    // Specific check for the token refresh error - log and return empty instead of throwing
+    if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) { // Added common gRPC/Auth error codes
+         console.error("[Action] Authentication/Permission Error: Could not fetch work logs. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
+         return []; // Return empty array on auth errors during read
+    }
+    console.error("[Action] Unknown error fetching work logs, returning empty array.");
+    // For other unexpected errors during read, return empty array to prevent page crash
+    return [];
+    // throw new Error(`Could not fetch work logs. Reason: ${error.message || 'Unknown Firestore error'}`);
   }
 }
 
@@ -46,6 +56,7 @@ export async function getWorkLogs(): Promise<DailyWorkLog[]> {
  * Expects `hoursWorked` to be pre-calculated.
  * If `logData.id` is provided, it updates the existing document.
  * Otherwise, it adds a new document and Firestore generates the ID.
+ * Throws errors on failure.
  */
 export async function saveWorkLog(
     logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }
@@ -56,7 +67,6 @@ export async function saveWorkLog(
     if (logData.hoursWorked < 0) {
         throw new Error("Hours worked cannot be negative.");
     }
-    // Firestore handles Date object conversion, but ensure format consistency if needed
 
     const { id, ...dataToSave } = logData; // Separate id from the rest of the data
 
@@ -77,9 +87,19 @@ export async function saveWorkLog(
 
         revalidatePath('/'); // Revalidate the page after saving
         return savedLog; // Return the saved log data (including ID)
-    } catch (error) {
+    } catch (error: any) {
         console.error("[Action] Error saving work log:", error);
-        throw new Error("Could not save work log.");
+        console.error("[Action] Error Details:", {
+            code: error.code,
+            message: error.message,
+            // stack: error.stack,
+        });
+         // Specific check for the token refresh error - throw specific error
+        if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
+             console.error("[Action] Authentication/Permission Error: Could not save work log. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
+             throw new Error("Authentication failed. Could not save work log. Please check server configuration and credentials.");
+        }
+        throw new Error(`Could not save work log. Reason: ${error.message || 'Unknown Firestore error'}`);
     }
 }
 
@@ -110,9 +130,15 @@ export async function exportWorkLogsToSheet(data: GoogleSheetsData[], spreadshee
     }));
 
     await exportSheetService(transformedData, spreadsheetId, sheetName);
-  } catch (error) {
+  } catch (error: any) {
      console.error("Export to Google Sheets failed in action:", error);
-     throw error;
+      console.error("[Action] Google Sheets Export Error Details:", {
+            message: error.message,
+            // stack: error.stack,
+            // Include specific Google API error details if available
+            ...(error.response?.data?.error && { googleError: error.response.data.error }),
+      });
+     throw new Error(`Could not export to Google Sheet. Reason: ${error.message || 'Unknown export error'}`);
   }
 }
 
@@ -120,27 +146,44 @@ export async function exportWorkLogsToSheet(data: GoogleSheetsData[], spreadshee
 
 /**
  * Fetches all UPH targets from Firestore.
+ * Returns an empty array on error, especially authentication errors.
  */
 export async function getUPHTargets(): Promise<UPHTarget[]> {
   console.log('[Action] getUPHTargets called');
    try {
     const snapshot = await uphTargetsCollection.get();
     if (snapshot.empty) {
+       console.log('[Action] No UPH targets found.');
       return [];
     }
     const targets = snapshot.docs.map(doc => ({
       id: doc.id,
       ...(doc.data() as Omit<UPHTarget, 'id'>),
     }));
+    console.log(`[Action] Fetched ${targets.length} UPH targets.`);
     return targets;
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Action] Error fetching UPH targets:", error);
-    throw new Error("Could not fetch UPH targets.");
+     console.error("[Action] Error Details:", {
+        code: error.code, // Firestore error code (e.g., 'permission-denied', 'unauthenticated')
+        message: error.message,
+        // stack: error.stack,
+    });
+    // Specific check for the token refresh error - log and return empty
+    if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
+         console.error("[Action] Authentication/Permission Error: Could not fetch UPH targets. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
+         return []; // Return empty array on auth errors during read
+    }
+    console.error("[Action] Unknown error fetching UPH targets, returning empty array.");
+    // For other unexpected errors during read, return empty array
+    return [];
+    // throw new Error(`Could not fetch UPH targets. Reason: ${error.message || 'Unknown Firestore error'}`);
   }
 }
 
 /**
  * Adds a new UPH target to Firestore. Defaults to isActive: false.
+ * Throws errors on failure.
  */
 export async function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): Promise<UPHTarget> {
   console.log('[Action] addUPHTarget called with:', targetData);
@@ -159,14 +202,25 @@ export async function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'
     console.log('[Action] Added new target with ID:', docRef.id);
     revalidatePath('/');
     return newTarget;
-  } catch (error) {
+  } catch (error: any) {
      console.error("[Action] Error adding UPH target:", error);
-     throw new Error("Could not add UPH target.");
+     console.error("[Action] Error Details:", {
+        code: error.code,
+        message: error.message,
+        // stack: error.stack,
+     });
+     // Specific check for the token refresh error - throw specific error
+    if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
+         console.error("[Action] Authentication/Permission Error: Could not add UPH target. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
+         throw new Error("Authentication failed. Could not add UPH target. Please check server configuration and credentials.");
+    }
+     throw new Error(`Could not add UPH target. Reason: ${error.message || 'Unknown Firestore error'}`);
   }
 }
 
 /**
  * Updates an existing UPH target in Firestore.
+ * Throws errors on failure.
  */
 export async function updateUPHTarget(targetData: UPHTarget): Promise<UPHTarget> {
   console.log('[Action] updateUPHTarget called with:', targetData);
@@ -181,23 +235,29 @@ export async function updateUPHTarget(targetData: UPHTarget): Promise<UPHTarget>
   const targetRef = uphTargetsCollection.doc(id);
 
   try {
-    // Check if document exists before update (optional, set overwrites)
-    // const docSnap = await targetRef.get();
-    // if (!docSnap.exists) {
-    //   throw new Error(`Target with ID ${id} not found.`);
-    // }
     await targetRef.set(dataToUpdate, { merge: true }); // Use set with merge to update
     console.log('[Action] Updated target with ID:', id);
     revalidatePath('/');
     return targetData; // Return the data that was passed in (now saved)
-  } catch (error) {
+  } catch (error: any) {
       console.error("[Action] Error updating UPH target:", error);
-      throw new Error("Could not update UPH target.");
+      console.error("[Action] Error Details:", {
+        code: error.code,
+        message: error.message,
+        // stack: error.stack,
+     });
+     // Specific check for the token refresh error - throw specific error
+    if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
+         console.error("[Action] Authentication/Permission Error: Could not update UPH target. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
+         throw new Error("Authentication failed. Could not update UPH target. Please check server configuration and credentials.");
+    }
+      throw new Error(`Could not update UPH target. Reason: ${error.message || 'Unknown Firestore error'}`);
   }
 }
 
 /**
  * Deletes a UPH target from Firestore. Cannot delete the active target.
+ * Throws errors on failure (except for "not found" which is handled gracefully).
  */
 export async function deleteUPHTarget(id: string): Promise<void> {
   console.log('[Action] deleteUPHTarget called for ID:', id);
@@ -207,7 +267,7 @@ export async function deleteUPHTarget(id: string): Promise<void> {
     const docSnap = await targetRef.get();
     if (!docSnap.exists) {
       console.warn(`[Action] Target with ID ${id} not found for deletion.`);
-      return; // Or throw if needed
+      return; // Gracefully handle not found
     }
 
     const targetData = docSnap.data() as UPHTarget;
@@ -218,18 +278,26 @@ export async function deleteUPHTarget(id: string): Promise<void> {
     await targetRef.delete();
     console.log('[Action] Deleted target with ID:', id);
     revalidatePath('/');
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Action] Error deleting UPH target:", error);
-    // Don't rethrow the "cannot delete active" error, let the client handle it via toast
-    if (error instanceof Error && error.message === "Cannot delete the currently active target.") {
-       throw error;
+     console.error("[Action] Error Details:", {
+        code: error.code,
+        message: error.message,
+        // stack: error.stack,
+     });
+     // Specific check for the token refresh error - throw specific error
+    if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
+         console.error("[Action] Authentication/Permission Error: Could not delete UPH target. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
+         throw new Error("Authentication failed. Could not delete UPH target. Please check server configuration and credentials.");
     }
-    throw new Error("Could not delete UPH target.");
+    // Rethrow other errors, including the "cannot delete active" one
+    throw new Error(`Could not delete UPH target. Reason: ${error.message || 'Unknown Firestore error'}`);
   }
 }
 
 /**
  * Sets a specific target as active in Firestore and deactivates all others using a transaction.
+ * Throws errors on failure.
  */
 export async function setActiveUPHTarget(id: string): Promise<UPHTarget> {
   console.log('[Action] setActiveUPHTarget called for ID:', id);
@@ -277,7 +345,7 @@ export async function setActiveUPHTarget(id: string): Promise<UPHTarget> {
      if (!activeTargetData) {
        // This should only happen if the target was already active and the transaction exited early
         const snap = await targetToActivateRef.get(); // Re-fetch to be sure
-        if (!snap.exists) throw new Error(`Target with ID ${id} disappeared.`);
+        if (!snap.exists) throw new Error(`Target with ID ${id} disappeared during transaction.`);
         activeTargetData = { id: snap.id, ...snap.data() } as UPHTarget;
      }
 
@@ -286,18 +354,27 @@ export async function setActiveUPHTarget(id: string): Promise<UPHTarget> {
     revalidatePath('/');
     return activeTargetData;
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Action] Error setting active UPH target:", error);
-     if (error instanceof Error && error.message.startsWith("Target with ID")) {
-        throw error; // Rethrow specific known errors
-     }
-    throw new Error("Could not set active UPH target.");
+     console.error("[Action] Error Details:", {
+        code: error.code,
+        message: error.message,
+        // stack: error.stack,
+     });
+     // Specific check for the token refresh error - throw specific error
+    if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
+         console.error("[Action] Authentication/Permission Error: Could not set active UPH target. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
+         throw new Error("Authentication failed. Could not set active target. Please check server configuration and credentials.");
+    }
+     // Rethrow other errors, including "Target not found"
+    throw new Error(`Could not set active UPH target. Reason: ${error.message || 'Unknown Firestore error'}`);
   }
 }
 
 
 /**
  * Fetches the currently active UPH target from Firestore.
+ * Returns null if no active target is found or on error (especially authentication errors).
  */
 export async function getActiveUPHTarget(): Promise<UPHTarget | null> {
   console.log('[Action] getActiveUPHTarget called');
@@ -306,6 +383,7 @@ export async function getActiveUPHTarget(): Promise<UPHTarget | null> {
     const snapshot = await query.get();
 
     if (snapshot.empty) {
+       console.log('[Action] No active UPH target found.');
       return null; // No active target found
     }
 
@@ -314,11 +392,22 @@ export async function getActiveUPHTarget(): Promise<UPHTarget | null> {
       id: doc.id,
       ...(doc.data() as Omit<UPHTarget, 'id'>),
     };
+    console.log('[Action] Fetched active UPH target:', activeTarget.id);
     return activeTarget;
-  } catch (error) {
+  } catch (error: any) {
      console.error("[Action] Error fetching active UPH target:", error);
-     // It might be acceptable to return null on error, depending on how the UI handles it
-     // throw new Error("Could not fetch active UPH target.");
+      console.error("[Action] Error Details:", {
+        code: error.code,
+        message: error.message,
+        // stack: error.stack,
+     });
+     // Specific check for the token refresh error - log and return null
+     if (error.message?.includes('Could not refresh access token') || error.code === 2 || error.code === 16 || error.code === 7) {
+         console.error("[Action] Authentication/Permission Error: Could not fetch active UPH target. Check Firebase Admin SDK credentials/permissions and ensure Firestore API is enabled.");
+         return null; // Return null on auth errors during read
+     }
+     console.error("[Action] Unknown error fetching active UPH target, returning null.");
+      // For other unexpected errors during read, return null
      return null;
   }
 }
