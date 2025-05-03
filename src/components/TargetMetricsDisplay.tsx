@@ -191,13 +191,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 {log.hoursWorked.toFixed(2)} hrs ({log.startTime} - {log.endTime}, {log.breakDurationMinutes} min break)
                             </CardDescription>
                          </div>
-                           {/* Delete Button - Now Outside AccordionTrigger */}
+                           {/* Delete Button - Positioned absolutely within the CardHeader */}
                            <Button
                             variant="ghost"
                             size="icon"
                             className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" // Positioned top-right, hide by default, show on hover/focus
                             onClick={(e) => {
-                                e.stopPropagation(); // Prevent accordion toggle if inside trigger
+                                e.stopPropagation(); // Prevent accordion toggle if this button is somehow still wrapped
                                 handleDeleteLog(log);
                             }}
                             title="Delete This Log"
@@ -276,6 +276,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date} className="border-none rounded-lg overflow-hidden shadow-sm"> {/* Removed border, added shadow */}
                          {/* Use AccordionTrigger to wrap the summary card for clickability */}
+                         {/* The Delete Button is now inside renderLogSummaryCard, positioned absolutely */}
                         <AccordionTrigger className="hover:no-underline p-0 data-[state=open]:bg-muted/30 transition-colors w-full text-left rounded-t-lg"> {/* Remove underline on hover */}
                              {/* Render summary card inside the trigger */}
                              {renderLogSummaryCard(log, false)}
