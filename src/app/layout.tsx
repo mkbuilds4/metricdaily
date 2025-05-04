@@ -1,4 +1,5 @@
 
+
 'use client'; // Required for usePathname
 
 import type { Metadata } from 'next';
@@ -42,7 +43,7 @@ export default function RootLayout({
   const pathname = usePathname(); // Get the current path
 
   return (
-    <html lang="en" suppressHydrationWarning> {/* Add suppressHydrationWarning if needed */}
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Metadata tags can be placed here directly or managed via page metadata objects */}
         <title>Metric Daily</title>
