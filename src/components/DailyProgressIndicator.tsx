@@ -8,6 +8,7 @@ import type { DailyWorkLog, UPHTarget } from '@/types';
 import { calculateCurrentMetrics, calculateRequiredUnitsForTarget, formatTimeAheadBehind, calculateTimeAheadBehindSchedule, formatFriendlyDate } from '@/lib/utils';
 import { format, parse, isValid } from 'date-fns';
 import { AlertCircle } from 'lucide-react'; // Import icon
+import { cn } from '@/lib/utils'; // Import cn utility
 
 interface DailyProgressIndicatorProps {
   todayLog: DailyWorkLog | null;
@@ -117,3 +118,4 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
 };
 
 export default DailyProgressIndicator;
+
