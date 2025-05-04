@@ -15,12 +15,13 @@ export interface DailyWorkLog {
 
 /**
  * Represents a Units Per Hour (UPH) target configuration.
+ * Includes how many items constitute one 'unit' for this specific target.
  */
 export interface UPHTarget {
-  id: string; // Unique identifier for the target, typically generated (e.g., UUID)
+  id: string; // Unique identifier for the target
   name: string; // User-friendly name (e.g., "Standard Shift", "Peak Hours")
   targetUPH: number; // The target units per hour rate
-  docsPerUnit: number; // How many documents are required to complete one unit
-  videosPerUnit: number; // How many video sessions are required to complete one unit
+  docsPerUnit: number; // How many documents are required to complete one unit *for this target*
+  videosPerUnit: number; // How many video sessions are required to complete one unit *for this target*
   isActive: boolean; // Indicates if this is the currently active target for calculations
 }

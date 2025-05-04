@@ -1,7 +1,8 @@
 // src/lib/actions.ts
-// IMPORTANT: These functions now run CLIENT-SIDE and interact with localStorage.
+// These functions now run CLIENT-SIDE and interact with localStorage.
 
 import type { DailyWorkLog, UPHTarget } from '@/types';
+import { formatDateISO } from '@/lib/utils'; // Import utility
 
 // --- Constants for localStorage keys ---
 const WORK_LOGS_KEY = 'workLogs';
@@ -28,6 +29,7 @@ function generateLocalId(): string {
 function getFromLocalStorage<T>(key: string, defaultValue: T): T {
   if (typeof window === 'undefined') {
     // Cannot access localStorage on the server
+    console.warn(`Attempted to access localStorage key "${key}" on the server.`);
     return defaultValue;
   }
   try {
@@ -76,51 +78,77 @@ export function getWorkLogs(): DailyWorkLog[] {
  * Expects `hoursWorked` to be pre-calculated.
  * If `logData.id` is provided, it updates the existing entry.
  * Otherwise, it adds a new entry with a generated local ID.
+ * Updates log for the same date if one exists instead of adding duplicates.
  */
 export function saveWorkLog(
   logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }
 ): DailyWorkLog {
   console.log('[Client Action] saveWorkLog called with:', logData);
 
-  if (logData.hoursWorked < 0) {
-    throw new Error('Hours worked cannot be negative.');
+  // Basic validation
+   if (logData.hoursWorked === undefined || logData.hoursWorked === null || isNaN(logData.hoursWorked) || logData.hoursWorked < 0) {
+    console.error('Invalid hoursWorked provided:', logData.hoursWorked);
+    throw new Error('Hours worked must be a non-negative number.');
+  }
+  if (logData.documentsCompleted === undefined || logData.documentsCompleted === null || isNaN(logData.documentsCompleted) || logData.documentsCompleted < 0) {
+    console.error('Invalid documentsCompleted provided:', logData.documentsCompleted);
+    throw new Error('Documents completed must be a non-negative number.');
+  }
+  if (logData.videoSessionsCompleted === undefined || logData.videoSessionsCompleted === null || isNaN(logData.videoSessionsCompleted) || logData.videoSessionsCompleted < 0) {
+    console.error('Invalid videoSessionsCompleted provided:', logData.videoSessionsCompleted);
+    throw new Error('Video sessions completed must be a non-negative number.');
+  }
+  // Ensure date format is valid (basic check, more robust validation might be needed)
+  if (!logData.date || !/^\d{4}-\d{2}-\d{2}$/.test(logData.date)) {
+       console.error('Invalid date format provided:', logData.date);
+       throw new Error('Date must be in YYYY-MM-DD format.');
   }
 
   const logs = getWorkLogs(); // Get current logs
   let savedLog: DailyWorkLog;
+  let operation: 'added' | 'updated' = 'added'; // Track operation type
 
+  // Check if an ID was provided for update
   if (logData.id) {
-    // Update existing log
     const index = logs.findIndex((log) => log.id === logData.id);
     if (index > -1) {
+      // Update existing log found by ID
       savedLog = { ...logs[index], ...logData }; // Merge updates
       logs[index] = savedLog;
-      console.log('[Client Action] Updated log with ID:', logData.id);
+      console.log('[Client Action] Updated log using provided ID:', logData.id);
+      operation = 'updated';
     } else {
-      // If ID provided but not found, treat as new add
-      // This shouldn't happen if IDs are managed correctly, but handles edge cases.
-      savedLog = { ...logData, id: generateLocalId() }; // Generate new ID
-      logs.push(savedLog);
+      // ID provided but not found - treat as new entry (perhaps log was deleted elsewhere)
+      // Generate a new ID and add it.
       console.warn('[Client Action] Log ID provided but not found, adding as new:', logData.id);
+      savedLog = { ...logData, id: generateLocalId() }; // Generate a new ID
+      logs.push(savedLog);
+       operation = 'added'; // Effectively added
     }
   } else {
-    // Add new log - Check if a log for this date already exists
+    // No ID provided - check if a log for this date already exists
     const existingLogIndex = logs.findIndex(log => log.date === logData.date);
     if (existingLogIndex > -1) {
         // Update the existing log for that date instead of adding a new one
         const existingId = logs[existingLogIndex].id;
         savedLog = { ...logs[existingLogIndex], ...logData, id: existingId };
         logs[existingLogIndex] = savedLog;
-        console.log('[Client Action] Updated existing log for date:', logData.date, ' ID:', existingId);
+        console.log('[Client Action] Updated existing log found by date:', logData.date, ' ID:', existingId);
+        operation = 'updated';
     } else {
         // Truly a new log for a new date
         savedLog = { ...logData, id: generateLocalId() }; // Generate a local ID
         logs.push(savedLog);
         console.log('[Client Action] Added new log with ID:', savedLog.id);
+         operation = 'added';
     }
   }
 
+  // Ensure logs remain sorted after modification
+  logs.sort((a, b) => b.date.localeCompare(a.date));
   saveToLocalStorage(WORK_LOGS_KEY, logs);
+
+  console.log(`[Client Action] Log successfully ${operation}.`);
   // Revalidation is handled by components re-fetching or state updates
   return savedLog;
 }
@@ -160,14 +188,23 @@ export function getUPHTargets(): UPHTarget[] {
 
 /**
  * Adds a new UPH target to localStorage. Defaults to isActive: false.
+ * Includes validation for new docsPerUnit and videosPerUnit fields.
  */
 export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): UPHTarget {
   console.log('[Client Action] addUPHTarget called with:', targetData);
-  if (targetData.docsPerUnit <= 0 || targetData.videosPerUnit <= 0) {
-    throw new Error('Items per unit must be positive numbers.');
+
+  // Validation
+  if (!targetData.name || targetData.name.trim() === '') {
+    throw new Error('Target name cannot be empty.');
   }
-  if (targetData.targetUPH <= 0) {
-    throw new Error('Target UPH must be positive.');
+  if (targetData.targetUPH === undefined || isNaN(targetData.targetUPH) || targetData.targetUPH <= 0) {
+    throw new Error('Target UPH must be a positive number.');
+  }
+  if (targetData.docsPerUnit === undefined || isNaN(targetData.docsPerUnit) || targetData.docsPerUnit <= 0) {
+    throw new Error('Documents per unit must be a positive number.');
+  }
+  if (targetData.videosPerUnit === undefined || isNaN(targetData.videosPerUnit) || targetData.videosPerUnit <= 0) {
+    throw new Error('Video sessions per unit must be a positive number.');
   }
 
   const targets = getUPHTargets();
@@ -186,23 +223,36 @@ export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): UP
 
 /**
  * Updates an existing UPH target in localStorage.
+ * Includes validation for updated docsPerUnit and videosPerUnit fields.
  */
 export function updateUPHTarget(targetData: UPHTarget): UPHTarget {
   console.log('[Client Action] updateUPHTarget called with:', targetData);
-  if (targetData.docsPerUnit <= 0 || targetData.videosPerUnit <= 0) {
-    throw new Error('Items per unit must be positive numbers.');
-  }
-   if (targetData.targetUPH <= 0) {
-    throw new Error('Target UPH must be positive.');
-  }
+
+  // Validation
   if (!targetData.id) {
     throw new Error('Target ID is required for update.');
   }
+   if (!targetData.name || targetData.name.trim() === '') {
+    throw new Error('Target name cannot be empty.');
+  }
+   if (targetData.targetUPH === undefined || isNaN(targetData.targetUPH) || targetData.targetUPH <= 0) {
+    throw new Error('Target UPH must be a positive number.');
+  }
+  if (targetData.docsPerUnit === undefined || isNaN(targetData.docsPerUnit) || targetData.docsPerUnit <= 0) {
+    throw new Error('Documents per unit must be a positive number.');
+  }
+  if (targetData.videosPerUnit === undefined || isNaN(targetData.videosPerUnit) || targetData.videosPerUnit <= 0) {
+    throw new Error('Video sessions per unit must be a positive number.');
+  }
+
 
   const targets = getUPHTargets();
   const index = targets.findIndex((t) => t.id === targetData.id);
 
   if (index > -1) {
+    // Ensure isActive status is preserved if not explicitly changed?
+    // The current implementation overwrites completely. If merging is needed:
+    // targets[index] = { ...targets[index], ...targetData };
     targets[index] = targetData; // Overwrite with new data
     saveToLocalStorage(UPH_TARGETS_KEY, targets);
     console.log('[Client Action] Updated target with ID:', targetData.id);

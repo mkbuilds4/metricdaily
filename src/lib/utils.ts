@@ -198,13 +198,16 @@ export function calculateProjectedGoalHitTime(
 
     // 7. Calculate Remaining *Work* Duration based on *current pace* (provides a different perspective)
     let remainingWorkDurationFormatted = '-';
-    if (currentUPH > 0) {
-        const unitsNeeded = targetUnitsForShift - currentUnits;
+    const unitsNeeded = targetUnitsForShift - currentUnits; // Use pre-calculated value
+
+    if (currentUPH > 0 && unitsNeeded > 0) {
         const remainingNetWorkHoursNeeded = unitsNeeded / currentUPH;
         const remainingNetWorkMinutesNeeded = remainingNetWorkHoursNeeded * 60;
         remainingWorkDurationFormatted = formatDurationFromMinutes(remainingNetWorkMinutesNeeded);
-    } else if (unitsNeeded > 0) {
+    } else if (unitsNeeded > 0) { // Need units but pace is 0
         remainingWorkDurationFormatted = 'Never (0 Pace)';
+    } else { // Units needed is 0 or less (goal met)
+        remainingWorkDurationFormatted = '0 mins';
     }
 
 
@@ -414,6 +417,7 @@ export function calculateHoursWorked(date: string | Date, startTime: string, end
 /**
  * Calculates total units for a daily work log based on the items per unit defined in a UPH target.
  * Handles cases where log or target might be missing or itemsPerUnit is zero or invalid.
+ * Uses target.docsPerUnit and target.videosPerUnit for the calculation.
  *
  * @param log - The DailyWorkLog object.
  * @param target - The UPHTarget object containing items per unit.
@@ -437,6 +441,7 @@ export function calculateDailyUnits(log: DailyWorkLog | null | undefined, target
  * Calculates the Units Per Hour (UPH) for a given daily work log and target,
  * based on the *total logged duration* (log.hoursWorked).
  * Handles division by zero if hours worked is 0 or invalid.
+ * Uses target-specific docsPerUnit and videosPerUnit via calculateDailyUnits.
  * NOTE: This reflects the average UPH over the entire logged shift duration.
  * For real-time UPH based on time elapsed *so far*, use `calculateCurrentMetrics`.
  *
@@ -449,7 +454,7 @@ export function calculateDailyUPH(log: DailyWorkLog | null | undefined, target: 
   if (!log || !target || !log.hoursWorked || log.hoursWorked <= 0) {
     return 0; // Cannot calculate UPH without valid hours or data
   }
-  const totalUnits = calculateDailyUnits(log, target);
+  const totalUnits = calculateDailyUnits(log, target); // Uses target-specific units
   return parseFloat((totalUnits / log.hoursWorked).toFixed(2)); // Use toFixed for rounding
 }
 
@@ -472,6 +477,7 @@ export function calculateRequiredUnitsForTarget(hoursWorked: number | null | und
  * Calculates the difference between the actual units completed and the required units for the *total logged hours*.
  * A positive result means the user was ahead of the target pace FOR THE LOGGED DURATION.
  * A negative result means the user was behind the target pace FOR THE LOGGED DURATION.
+ * Uses target-specific unit calculations.
  *
  * @param log - The DailyWorkLog object.
  * @param target - The UPHTarget object.
@@ -482,7 +488,7 @@ export function calculateRemainingUnits(log: DailyWorkLog | null | undefined, ta
    if (!log || !target || !log.hoursWorked || log.hoursWorked <= 0) {
     return 0; // Cannot calculate remaining if data is missing or no hours worked
   }
-  const actualUnits = calculateDailyUnits(log, target);
+  const actualUnits = calculateDailyUnits(log, target); // Uses target-specific units
   const requiredUnits = calculateRequiredUnitsForTarget(log.hoursWorked, target.targetUPH);
   // Rounding difference to avoid floating point inaccuracies
   // Difference = Actual - Required. Positive = Ahead, Negative = Behind
@@ -492,6 +498,7 @@ export function calculateRemainingUnits(log: DailyWorkLog | null | undefined, ta
 /**
  * Calculates the current actual units completed and the current UPH based on the time elapsed
  * *so far* in the shift, accounting for estimated break time taken.
+ * Uses target-specific unit calculations.
  *
  * @param log - Today's DailyWorkLog object.
  * @param target - The relevant UPHTarget object.
@@ -509,7 +516,7 @@ export function calculateCurrentMetrics(
         return defaultReturn;
     }
 
-    // 1. Calculate Actual Units Completed So Far (using the full log data)
+    // 1. Calculate Actual Units Completed So Far (using the full log data and target's unit definition)
     const actualUnitsSoFar = calculateDailyUnits(log, target);
 
     // 2. Parse shift start/end times

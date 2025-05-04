@@ -86,7 +86,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
   const sortedTargets = useMemo(() => {
     if (!sortColumn) {
       // Default sort or maintain original order if no column selected
-      return [...localTargets];
+      // Ensure consistent default order (e.g., by name or targetUPH)
+       return [...localTargets].sort((a, b) => a.name.localeCompare(b.name));
     }
 
     return [...localTargets].sort((a, b) => {
@@ -113,8 +114,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     defaultValues: {
       name: '',
       targetUPH: 0, // Initialize with 0 to avoid undefined -> controlled error
-      docsPerUnit: 1,
-      videosPerUnit: 1,
+      docsPerUnit: 1, // Sensible default
+      videosPerUnit: 1, // Sensible default
     },
   });
 
@@ -143,8 +144,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     form.reset({ // Reset to defaults for adding
       name: '',
       targetUPH: 0, // Initialize with 0
-      docsPerUnit: 1,
-      videosPerUnit: 1,
+      docsPerUnit: 1, // Default value
+      videosPerUnit: 1, // Default value
     });
     setIsDialogOpen(true);
   };
@@ -318,6 +319,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         </FormItem>
                     )}
                     />
+                 {/* New Field: Docs per Unit */}
                  <FormField
                     control={form.control}
                     name="docsPerUnit"
@@ -332,6 +334,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         </FormItem>
                     )}
                     />
+                 {/* New Field: Videos per Unit */}
                 <FormField
                     control={form.control}
                     name="videosPerUnit"
@@ -378,12 +381,14 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                    {renderSortIcon('targetUPH')}
                  </Button>
               </TableHead>
+              {/* New Column Header: Docs / Unit */}
               <TableHead>
                  <Button variant="ghost" onClick={() => handleSort('docsPerUnit')} className="px-0 hover:bg-transparent">
                    Docs / Unit
                    {renderSortIcon('docsPerUnit')}
                  </Button>
               </TableHead>
+              {/* New Column Header: Videos / Unit */}
               <TableHead>
                  <Button variant="ghost" onClick={() => handleSort('videosPerUnit')} className="px-0 hover:bg-transparent">
                    Videos / Unit
@@ -396,6 +401,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
           <TableBody>
             {sortedTargets.length === 0 && ( // Use sortedTargets here
                  <TableRow>
+                    {/* Adjust colSpan to include new columns */}
                     <TableCell colSpan={6} className="text-center text-muted-foreground">No UPH targets defined yet.</TableCell>
                 </TableRow>
             )}
@@ -420,7 +426,9 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                 </TableCell>
                 <TableCell>{target.name}</TableCell>
                 <TableCell>{target.targetUPH}</TableCell>
+                {/* New Cell: Docs per Unit */}
                 <TableCell>{target.docsPerUnit}</TableCell>
+                 {/* New Cell: Videos per Unit */}
                 <TableCell>{target.videosPerUnit}</TableCell>
                 <TableCell className="space-x-1">
                    <Button
