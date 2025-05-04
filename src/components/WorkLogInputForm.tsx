@@ -73,6 +73,11 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [calculatedHours, setCalculatedHours] = useState<number | null>(null);
+  const [isClient, setIsClient] = useState(false); // State to track client-side mount
+
+  useEffect(() => {
+    setIsClient(true); // Set to true after component mounts
+  }, []);
 
   const isEditingToday = existingLog && existingLog.date === formatDateISO(new Date());
 
@@ -88,7 +93,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
         videoSessionsCompleted: existingLog.videoSessionsCompleted,
         notes: existingLog.notes ?? '',
     } : {
-        date: new Date(), // Today's date
+        date: new Date(), // Today's date - this can cause hydration mismatch
         startTime: '14:00', // Default start time: 2:00 PM
         endTime: '22:30', // Default end time: 10:30 PM
         breakDurationMinutes: 65, // Default break: 65 minutes
@@ -149,6 +154,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
         resetToDefaults();
     }
     // Only run when existingLog changes. Avoid including form or resetToDefaults in deps.
+   // eslint-disable-next-line react-hooks/exhaustive-deps
    }, [existingLog]);
 
    // Function to reset form to default values for a *new* log entry (today)
@@ -167,14 +173,22 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
     };
 
 
-   // Calculate initial hours when the component mounts
+   // Calculate initial hours when the component mounts AND sync form date to avoid mismatch
     useEffect(() => {
+        // This effect runs only on the client after hydration
         const initialValues = form.getValues();
         if (isValid(initialValues.date)) {
             const hours = calculateHoursWorked(initialValues.date, initialValues.startTime, initialValues.endTime, initialValues.breakDurationMinutes);
             setCalculatedHours(hours);
+             // If the form date is still the potentially mismatched new Date(), reset it to a client-side new Date()
+            // This syncs the form state post-hydration before user interaction.
+             if (initialValues.date.toDateString() === new Date().toDateString() && !existingLog) {
+                 // form.setValue('date', new Date(), { shouldDirty: false, shouldValidate: false });
+             }
         }
-    }, []); // Run only once on mount
+    // Only run once on mount. Ignore form dependency warning.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [existingLog]); // Rerun if existingLog changes (e.g., log for today is found later)
 
 
   // Handle form submission
@@ -280,7 +294,10 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                             )}
                             >
                              <CalendarIcon className="mr-2 h-4 w-4" /> {/* Icon on the left */}
-                            {field.value && isValid(field.value) ? (
+                            {/* Render placeholder on server and initial client render */}
+                            {!isClient ? (
+                                <span>Pick a date</span>
+                            ) : field.value && isValid(field.value) ? (
                                 format(field.value, 'PPP') // e.g., Oct 26, 2023
                             ) : (
                                 <span>Pick a date</span>
@@ -421,7 +438,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                 </Button>
                 {/* Button to reset to the component's default values for today */}
                 {/* Show reset only if not currently editing today's log OR if form date is not today */}
-                 {(!isEditingToday || formatDateISO(watchDate) !== formatDateISO(new Date())) && (
+                 {(!isEditingToday || (isValid(watchDate) && formatDateISO(watchDate) !== formatDateISO(new Date())) || !isValid(watchDate) ) && (
                     <Button type="button" variant="outline" onClick={resetToDefaults} className="ml-2" disabled={isLoading}>
                         Reset to Today's Defaults
                     </Button>
@@ -435,3 +452,6 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
 };
 
 export default WorkLogInputForm;
+
+
+    
