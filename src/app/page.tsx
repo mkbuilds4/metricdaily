@@ -286,7 +286,7 @@ export default function Home() {
                     <CardContent className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-center justify-center py-6"> {/* Added padding and centering */}
                         {/* Document Count */}
                         <div className="flex items-center gap-2">
-                            <Label htmlFor="quick-update-docs" className="min-w-[80px] sm:min-w-[auto]">Documents:</Label>
+                            <Label htmlFor="quick-update-docs-input" className="min-w-[80px] sm:min-w-[auto]">Documents:</Label>
                             <Button
                                 id="quick-update-docs-minus"
                                 aria-label="Decrease document count"
@@ -305,7 +305,7 @@ export default function Home() {
                                 value={docInputValue}
                                 onChange={handleDocInputChange}
                                 onBlur={handleDocInputBlur} // Save on blur
-                                className="h-9 w-16 text-center tabular-nums text-lg font-medium" // Adjusted width and height
+                                className="h-9 w-16 text-center tabular-nums text-lg font-medium [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" // Hide spinners
                                 disabled={isLoading}
                                 min="0" // Prevent negative input via browser
                                 aria-label="Document count input"
@@ -324,7 +324,7 @@ export default function Home() {
                         </div>
                         {/* Video Count */}
                         <div className="flex items-center gap-2">
-                            <Label htmlFor="quick-update-videos" className="min-w-[80px] sm:min-w-[auto]">Videos:</Label>
+                            <Label htmlFor="quick-update-videos-input" className="min-w-[80px] sm:min-w-[auto]">Videos:</Label>
                             <Button
                                 id="quick-update-videos-minus"
                                 aria-label="Decrease video count"
@@ -343,7 +343,7 @@ export default function Home() {
                                  value={videoInputValue}
                                  onChange={handleVideoInputChange}
                                  onBlur={handleVideoInputBlur} // Save on blur
-                                 className="h-9 w-16 text-center tabular-nums text-lg font-medium" // Adjusted width and height
+                                 className="h-9 w-16 text-center tabular-nums text-lg font-medium [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" // Hide spinners
                                  disabled={isLoading}
                                  min="0"
                                  aria-label="Video count input"
