@@ -88,6 +88,7 @@ export default function PreviousLogsPage() {
         targets={uphTargets}
         deleteWorkLogAction={handleDeleteWorkLog}
         showTodaySection={false} // Add a prop to hide the "Today" section
+        paginatePreviousLogs={true} // Enable pagination for this page
       />
 
        {previousLogs.length === 0 && !isLoading && (
@@ -96,5 +97,4 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
-
-      
+    
