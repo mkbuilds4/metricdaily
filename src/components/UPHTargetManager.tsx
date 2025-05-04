@@ -33,12 +33,14 @@ import { useToast } from "@/hooks/use-toast";
 import type { UPHTarget } from '@/types'; // Assuming type is defined
 import { cn } from '@/lib/utils'; // Import cn for conditional classes
 
-// Zod Schema updated for docsPerUnit and videosPerUnit
+// Zod Schema updated for docsPerUnit and videosPerUnit to allow floats
 const targetFormSchema = z.object({
   name: z.string().min(1, { message: 'Target name is required.' }),
   targetUPH: z.coerce.number().positive({ message: 'Target UPH must be positive.' }),
-  docsPerUnit: z.coerce.number().positive({ message: 'Docs per unit must be a positive number.' }), // Must be positive
-  videosPerUnit: z.coerce.number().positive({ message: 'Videos per unit must be a positive number.' }), // Must be positive
+  // Allow any positive number (float)
+  docsPerUnit: z.coerce.number().positive({ message: 'Docs per unit must be a positive number.' }),
+  // Allow any positive number (float)
+  videosPerUnit: z.coerce.number().positive({ message: 'Videos per unit must be a positive number.' }),
 });
 
 type TargetFormData = z.infer<typeof targetFormSchema>;
@@ -327,8 +329,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         <FormItem>
                         <FormLabel>Documents per Unit</FormLabel>
                         <FormControl>
-                             {/* Ensure value passed is never undefined */}
-                            <Input type="number" placeholder="e.g., 5" {...field} value={field.value ?? 0} onChange={field.onChange} step="0.1" min="0.1" />
+                             {/* Ensure value passed is never undefined. Use step="any" to allow any float */}
+                            <Input type="number" placeholder="e.g., 5.25" {...field} value={field.value ?? 0} onChange={field.onChange} step="any" min="0.000001" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -342,8 +344,8 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         <FormItem>
                         <FormLabel>Video Sessions per Unit</FormLabel>
                         <FormControl>
-                             {/* Ensure value passed is never undefined */}
-                            <Input type="number" placeholder="e.g., 2.5" {...field} value={field.value ?? 0} onChange={field.onChange} step="0.1" min="0.1" />
+                             {/* Ensure value passed is never undefined. Use step="any" to allow any float */}
+                            <Input type="number" placeholder="e.g., 2.55" {...field} value={field.value ?? 0} onChange={field.onChange} step="any" min="0.000001" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -464,4 +466,3 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
 };
 
 export default UPHTargetManager;
-
