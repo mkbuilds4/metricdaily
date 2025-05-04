@@ -124,100 +124,6 @@ export function formatDurationFromMinutes(totalMinutes: number | null | undefine
 
 
 /**
- * Calculates the projected time when the shift's target units will be hit,
- * based on current progress relative to the scheduled end time and schedule status.
- * Also estimates the remaining *work* duration needed at the current pace.
- *
- * @param log - Today's DailyWorkLog object.
- * @param target - The relevant UPHTarget object.
- * @param currentTime - The current Date object.
- * @returns An object containing `projectedTime` (e.g., "hh:mm a") and `remainingDuration` (e.g., "X hrs Y mins"), or placeholder values.
- */
-export function calculateProjectedGoalHitTime(
-    log: DailyWorkLog | null,
-    target: UPHTarget | null,
-    currentTime: Date | null
-): { projectedTime: string; remainingDuration: string } {
-    const defaultReturn = { projectedTime: '-', remainingDuration: '-' };
-
-    if (!log || !target || !currentTime || !isValid(currentTime)) {
-        return defaultReturn;
-    }
-
-    // 1. Calculate current metrics
-    const { currentUnits, currentUPH } = calculateCurrentMetrics(log, target, currentTime);
-
-    // 2. Calculate Target Units for the Full Shift
-    const targetUnitsForShift = calculateRequiredUnitsForTarget(log.hoursWorked, target.targetUPH);
-    if (targetUnitsForShift <= 0) {
-        return { projectedTime: 'N/A (Target)', remainingDuration: '-' };
-    }
-
-    // 3. Check if Goal Already Met
-    if (currentUnits >= targetUnitsForShift) {
-        return { projectedTime: 'Goal Met', remainingDuration: '0 mins' };
-    }
-
-    // 4. Calculate Time Ahead/Behind Schedule (in minutes)
-    const timeDifferenceMinutes = calculateTimeAheadBehindSchedule(log, target, currentTime);
-
-    // If calculation failed (e.g., zero pace), cannot project accurately.
-    if (timeDifferenceMinutes === null) {
-         return { projectedTime: 'N/A (Calc)', remainingDuration: '-' };
-    }
-
-    // 5. Get Scheduled End Time
-    const dateStr = log.date;
-    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
-     if (!timeRegex.test(log.startTime) || !timeRegex.test(log.endTime)) {
-         console.error("Invalid log start/end time format for projection:", log);
-         return { projectedTime: 'Invalid Time', remainingDuration: '-' };
-     }
-    const shiftStartDate = parse(`${dateStr} ${log.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
-    let shiftEndDate = parse(`${dateStr} ${log.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
-
-    if (!isValid(shiftStartDate) || !isValid(shiftEndDate)) {
-        console.error("Invalid parsed log start/end dates for projection:", log);
-        return { projectedTime: 'Invalid Date', remainingDuration: '-' };
-    }
-    if (shiftEndDate < shiftStartDate) {
-        shiftEndDate = addDays(shiftEndDate, 1);
-    }
-
-    // 6. Project Goal Hit Time based on End Time and Schedule Status
-    // If ahead by X mins (timeDifference > 0), finish X mins *before* shiftEndDate.
-    // If behind by Y mins (timeDifference < 0), finish Y mins *after* shiftEndDate.
-    // So, subtract timeDifferenceMinutes from shiftEndDate. (e.g., end=5pm, behind 30min (-30) => 5pm - (-30) = 5:30pm)
-    const projectedHitDate = addMinutes(shiftEndDate, -timeDifferenceMinutes);
-
-    if (!isValid(projectedHitDate)) {
-         return { projectedTime: 'Invalid Date', remainingDuration: '-' };
-    }
-    const projectedTimeFormatted = format(projectedHitDate, 'hh:mm a'); // e.g., "11:40 PM"
-
-
-    // 7. Calculate Remaining *Work* Duration based on *current pace* (provides a different perspective)
-    let remainingWorkDurationFormatted = '-';
-    const unitsNeeded = targetUnitsForShift - currentUnits; // Use pre-calculated value
-
-    if (currentUPH > 0 && unitsNeeded > 0) {
-        const remainingNetWorkHoursNeeded = unitsNeeded / currentUPH;
-        const remainingNetWorkMinutesNeeded = remainingNetWorkHoursNeeded * 60;
-        remainingWorkDurationFormatted = formatDurationFromMinutes(remainingNetWorkMinutesNeeded);
-    } else if (unitsNeeded > 0) { // Need units but pace is 0
-        remainingWorkDurationFormatted = 'Never (0 Pace)';
-    } else { // Units needed is 0 or less (goal met)
-        remainingWorkDurationFormatted = '0 mins';
-    }
-
-
-    return {
-        projectedTime: projectedTimeFormatted,
-        remainingDuration: remainingWorkDurationFormatted,
-    };
-}
-
-/**
  * Calculates how far ahead or behind schedule the user is in minutes, relative to the target pace.
  * Positive value means ahead (took less net time than target pace would require for completed units).
  * Negative value means behind (took more net time than target pace would require for completed units).
@@ -576,3 +482,4 @@ export function calculateCurrentMetrics(
         currentUPH: currentActualUPH,
     };
 }
+

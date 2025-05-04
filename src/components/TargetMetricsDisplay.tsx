@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -6,7 +5,7 @@ import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Trash2, BookOpen, Video, Clock, ChevronDown, ArrowUp, ArrowDown, Minus as MinusIcon, AlertCircle } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { parse, isValid, format } from 'date-fns';
+import { parse, isValid, format, addMinutes, addDays } from 'date-fns'; // Import addMinutes and addDays
 import {
     Accordion,
     AccordionContent,
@@ -25,13 +24,13 @@ import {
     calculateDailyUnits,
     calculateDailyUPH,
     calculateRequiredUnitsForTarget,
-    calculateProjectedGoalHitTime,
     formatDateISO,
     formatFriendlyDate,
     calculateRemainingUnits,
     calculateCurrentMetrics,
     calculateTimeAheadBehindSchedule,
     formatTimeAheadBehind,
+    // Removed calculateProjectedGoalHitTime import as we recalculate here
 } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import PreviousLogTriggerSummary from './PreviousLogTriggerSummary';
@@ -130,20 +129,56 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       const totalDifferenceUnits = totalActualUnits - totalRequiredUnits; // Difference vs the display target's goal
       const dailyUPHForTarget = calculateDailyUPH(log, targetForCalculation); // UPH based on target used for calculation
 
-      let projectedTimeResult = { projectedTime: '-', remainingDuration: '-' };
+      let projectedHitTimeFormatted = '-';
       let currentMetrics = { currentUnits: 0, currentUPH: 0 };
       let timeAheadBehindMinutes: number | null = null;
 
        if (isToday && currentTime) {
            // Use the targetForCalculation (which should be the active one for today) for real-time projections
-           projectedTimeResult = calculateProjectedGoalHitTime(log, targetForCalculation, currentTime);
            currentMetrics = calculateCurrentMetrics(log, targetForCalculation, currentTime);
            timeAheadBehindMinutes = calculateTimeAheadBehindSchedule(log, targetForCalculation, currentTime);
+
+           // --- New Est. Goal Hit Time Calculation ---
+           if (timeAheadBehindMinutes !== null) {
+                const dateStr = log.date;
+                const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+                 if (timeRegex.test(log.startTime) && timeRegex.test(log.endTime)) {
+                    const shiftStartDate = parse(`${dateStr} ${log.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+                    let shiftEndDate = parse(`${dateStr} ${log.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+
+                     if (isValid(shiftStartDate) && isValid(shiftEndDate)) {
+                        if (shiftEndDate < shiftStartDate) {
+                            shiftEndDate = addDays(shiftEndDate, 1);
+                        }
+                        // Projected Hit Time = Scheduled End Time - Time Ahead/Behind
+                        // If behind (-X mins), end - (-X) = end + X
+                        // If ahead (+Y mins), end - (+Y) = end - Y
+                        const projectedHitDate = addMinutes(shiftEndDate, -timeAheadBehindMinutes);
+                         if (isValid(projectedHitDate)) {
+                            projectedHitTimeFormatted = format(projectedHitDate, 'hh:mm a');
+                        } else {
+                            projectedHitTimeFormatted = 'Invalid Date';
+                        }
+                     } else {
+                          projectedHitTimeFormatted = 'Invalid Time';
+                     }
+                 } else {
+                     projectedHitTimeFormatted = 'Invalid Time';
+                 }
+           } else {
+               projectedHitTimeFormatted = 'N/A (Calc)';
+           }
+           // Check if goal is already met
+           if (currentMetrics.currentUnits >= calculateRequiredUnitsForTarget(log.hoursWorked, targetForCalculation.targetUPH)) {
+               projectedHitTimeFormatted = 'Goal Met';
+           }
+           // --- End New Calculation ---
        }
 
       const isBehindSchedule = timeAheadBehindMinutes !== null && timeAheadBehindMinutes < 0;
       const isAheadSchedule = timeAheadBehindMinutes !== null && timeAheadBehindMinutes > 0;
-      const isOnSchedule = timeAheadBehindMinutes !== null && Math.abs(timeAheadBehindMinutes) < 0.05;
+      const isOnSchedule = timeAheadBehindMinutes !== null && Math.abs(timeAheadBehindMinutes) < 0.05; // Use tolerance for float comparison
+
 
       return (
         <Card key={`${log.id}-${displayTarget.id}`} className="flex flex-col justify-between">
@@ -180,11 +215,11 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 {formatTimeAheadBehind(timeAheadBehindMinutes)}
                              </p>
                          </div>
+                         {/* Updated Est. Goal Hit Time Display */}
                          <div className="col-span-2">
-                             <p className="text-muted-foreground">Est. Goal Hit Time / Remaining Work</p>
+                             <p className="text-muted-foreground">Est. Goal Hit Time</p>
                              <p className="font-medium">
-                                {projectedTimeResult.projectedTime}
-                                {projectedTimeResult.remainingDuration !== '-' && ` (${projectedTimeResult.remainingDuration})`}
+                                {projectedHitTimeFormatted}
                              </p>
                          </div>
                     </>
@@ -223,12 +258,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         const targetForSummaryCalc = logTarget ?? activeTarget ?? (targets.length > 0 ? targets[0] : null);
 
         let summaryUPH: number | null = null;
-        let currentUPHMetrics: { currentUnits: number, currentUPH: number } | null = null;
+        let currentUnitsNow: number | null = null;
 
         if (targetForSummaryCalc) {
             if (isToday && currentTime) {
-                currentUPHMetrics = calculateCurrentMetrics(log, targetForSummaryCalc, currentTime);
-                summaryUPH = currentUPHMetrics.currentUPH;
+                const metrics = calculateCurrentMetrics(log, targetForSummaryCalc, currentTime);
+                summaryUPH = metrics.currentUPH;
+                currentUnitsNow = metrics.currentUnits; // Get current units
             } else if (!isToday) {
                 summaryUPH = calculateDailyUPH(log, targetForSummaryCalc);
             }
@@ -252,6 +288,19 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 {!targetForSummaryCalc && <span className="text-destructive ml-2">(Target Missing!)</span>}
                             </CardDescription>
                          </div>
+                         {/* Delete button positioned absolutely within the summary card for previous logs */}
+                          {!isToday && (
+                             <Button
+                                 variant="ghost"
+                                 size="icon"
+                                 className="absolute top-2 right-2 text-destructive hover:text-destructive h-7 w-7" // Adjust size/position
+                                 onClick={(e) => { e.stopPropagation(); handleDeleteLog(log); }} // Prevent accordion toggle
+                                 title="Delete This Log"
+                                 aria-label="Delete This Log"
+                             >
+                                 <Trash2 className="h-4 w-4" />
+                             </Button>
+                         )}
                     </div>
                 </CardHeader>
                  <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -272,17 +321,19 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                          </div>
                      </div>
                       {/* Today Only: Current Units Now */}
-                      {isToday && currentUPHMetrics && (
+                      {isToday && currentUnitsNow !== null && (
                            <div className="flex items-center space-x-2">
+                                <MinusIcon className="h-5 w-5 text-transparent" /> {/* Placeholder for alignment */}
                                <div>
                                  <p className="text-sm text-muted-foreground">Units Now ({summaryTargetName})</p>
-                                 <p className="text-lg font-semibold">{currentUPHMetrics.currentUnits.toFixed(2)}</p>
+                                 <p className="text-lg font-semibold">{currentUnitsNow.toFixed(2)}</p>
                               </div>
                            </div>
                       )}
                       {/* Previous Only: Total Units Completed */}
                        {!isToday && targetForSummaryCalc && (
                            <div className="flex items-center space-x-2">
+                               <MinusIcon className="h-5 w-5 text-transparent" /> {/* Placeholder for alignment */}
                                <div>
                                  <p className="text-sm text-muted-foreground">Units Completed ({summaryTargetName})</p>
                                  <p className="text-lg font-semibold">{calculateDailyUnits(log, targetForSummaryCalc).toFixed(2)}</p>
@@ -352,18 +403,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                               <div className="flex items-center justify-between w-full gap-4">
                                 <div className="flex-grow">
                                    {/* Pass the specific target for this log's summary */}
-                                  <PreviousLogTriggerSummary log={log} displayTarget={targetForCalc} />
+                                  <PreviousLogTriggerSummary log={log} displayTarget={targetForCalc} allTargets={targets} />
                                 </div>
-                                 <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="text-destructive hover:text-destructive h-8 w-8 mr-2 shrink-0"
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteLog(log); }}
-                                    title="Delete This Log"
-                                    aria-label="Delete This Log"
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                                 {/* Chevron is now part of the trigger, controlled by hideChevron */}
                                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
                               </div>
                             </AccordionTrigger>
