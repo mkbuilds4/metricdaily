@@ -31,15 +31,15 @@ const AccordionTrigger = React.forwardRef<
       ref={ref}
       className={cn(
         "flex flex-1 items-center justify-between py-4 font-medium transition-all hover:underline",
-        // Add conditional rotation only if chevron is shown
-        !hideChevron && "[&[data-state=open]>svg]:rotate-180",
+        // Add conditional rotation only if chevron is shown AND asChild is false
+        !hideChevron && !props.asChild && "[&[data-state=open]>svg]:rotate-180",
         className
       )}
       {...props}
     >
       {children}
-       {/* Conditionally render the ChevronDown icon */}
-       {!hideChevron && (
+       {/* Conditionally render the ChevronDown icon ONLY if hideChevron and asChild are false */}
+       {!hideChevron && !props.asChild && (
           <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200" />
        )}
     </AccordionPrimitive.Trigger>
@@ -65,3 +65,4 @@ const AccordionContent = React.forwardRef<
 AccordionContent.displayName = AccordionPrimitive.Content.displayName
 
 export { Accordion, AccordionItem, AccordionTrigger, AccordionContent }
+
