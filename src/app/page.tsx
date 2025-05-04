@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ProductivityDashboard from '@/components/DashboardDisplay';
 import WeeklyAverages from '@/components/WeeklyAverages'; // Import the new component
-import DailyUPHChart from '@/components/DailyUPHChart'; // Import the new chart component
+import DailyProgressIndicator from '@/components/DailyProgressIndicator'; // Import the new progress indicator component
 import {
   getWorkLogs,
   getActiveUPHTarget,
@@ -37,6 +37,7 @@ export default function Home() {
     console.log('[Home] Loading data...');
     setIsLoading(true);
     try {
+      // Use client-side local storage functions
       const loadedLogs = getWorkLogs();
       const loadedTargets = getUPHTargets();
       const loadedActiveTarget = getActiveUPHTarget();
@@ -84,6 +85,7 @@ export default function Home() {
   // Simplified save handler needed for quick updates and dashboard interaction
   const handleSaveWorkLog = useCallback((logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }) => {
     try {
+       // Use client-side local storage function
       const savedLog = saveWorkLog(logData);
       // Update local state immediately for responsiveness
       const todayDateStr = formatDateISO(new Date());
@@ -119,6 +121,7 @@ export default function Home() {
 
   const handleDeleteWorkLog = useCallback((id: string) => {
     try {
+         // Use client-side local storage function
         deleteWorkLog(id);
         setWorkLogs(prev => prev.filter(log => log.id !== id));
          toast({ title: "Log Deleted", description: "Work log deleted successfully." });
@@ -385,9 +388,9 @@ export default function Home() {
             />
         </div>
 
-         {/* --- Daily UPH Chart --- */}
+         {/* --- Daily Progress Indicator --- */}
          {todayLog && activeTarget && (
-             <DailyUPHChart
+             <DailyProgressIndicator
                  todayLog={todayLog}
                  activeTarget={activeTarget}
              />
@@ -405,5 +408,3 @@ export default function Home() {
     </div>
   );
 }
-
-
