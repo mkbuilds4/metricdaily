@@ -1,32 +1,29 @@
 
-'use client'; // Make this a Client Component to use hooks and localStorage
+'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-// Removed imports for WorkLogInputForm and UPHTargetManager
 import ProductivityDashboard from '@/components/DashboardDisplay';
+import WeeklyAverages from '@/components/WeeklyAverages'; // Import the new component
 import {
   getWorkLogs,
   getActiveUPHTarget,
   saveWorkLog,
   deleteWorkLog,
   getUPHTargets,
-  addUPHTarget,
-  updateUPHTarget,
-  deleteUPHTarget,
-  setActiveUPHTarget,
-} from '@/lib/actions'; // These are client-side functions using localStorage
+  // Removed target management actions from here
+} from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget } from '@/types';
+import { formatDateISO } from '@/lib/utils'; // Import formatDateISO
 
 export default function Home() {
   const [workLogs, setWorkLogs] = useState<DailyWorkLog[]>([]);
   const [uphTargets, setUphTargets] = useState<UPHTarget[]>([]);
   const [activeTarget, setActiveTarget] = useState<UPHTarget | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // Loading state
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Function to fetch all data from localStorage
   const loadData = useCallback(() => {
-    console.log('[Home] Loading data from localStorage...');
-    setIsLoading(true); // Start loading
+    console.log('[Home] Loading data...');
+    setIsLoading(true);
     try {
       const loadedLogs = getWorkLogs();
       const loadedTargets = getUPHTargets();
@@ -35,42 +32,49 @@ export default function Home() {
       setWorkLogs(loadedLogs);
       setUphTargets(loadedTargets);
       setActiveTarget(loadedActiveTarget);
-      console.log('[Home] Data loaded successfully:', { logs: loadedLogs.length, targets: loadedTargets.length, active: !!loadedActiveTarget });
+      console.log('[Home] Data loaded:', { logs: loadedLogs.length, targets: loadedTargets.length, active: !!loadedActiveTarget });
     } catch (error) {
-      console.error('[Home] Error loading data from localStorage:', error);
+      console.error('[Home] Error loading data:', error);
+      // Handle error appropriately (e.g., show toast)
     } finally {
-       setIsLoading(false); // Finish loading
+      setIsLoading(false);
     }
   }, []);
 
-  // Load data on initial component mount
   useEffect(() => {
-    const timer = setTimeout(() => {
+    // Ensure this runs only client-side
+     if (typeof window !== 'undefined') {
         loadData();
-    }, 0);
-    return () => clearTimeout(timer);
+     }
   }, [loadData]);
 
-  // --- Action Handlers (Simplified as they primarily update state now) ---
-  // These functions now call the client-side actions and update local state
+  // --- Action Handlers ---
 
+  // Simplified save handler needed for quick updates and dashboard interaction
   const handleSaveWorkLog = (logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }) => {
     try {
       const savedLog = saveWorkLog(logData);
-      if (logData.id) {
-         setWorkLogs(prev => prev.map(log => log.id === savedLog.id ? savedLog : log));
+      // Update local state immediately for responsiveness
+      const todayDateStr = formatDateISO(new Date());
+      if (savedLog.date === todayDateStr) {
+          // Update or add today's log
+          setWorkLogs(prev => {
+              const existingIndex = prev.findIndex(log => log.id === savedLog.id);
+              if (existingIndex > -1) {
+                  return prev.map(log => log.id === savedLog.id ? savedLog : log);
+              } else {
+                   // Ensure logs remain sorted if adding new ones
+                   return [savedLog, ...prev.filter(l => l.id !== savedLog.id)].sort((a, b) => b.date.localeCompare(a.date));
+              }
+          });
       } else {
-        const existingIndex = workLogs.findIndex(log => log.id === savedLog.id);
-        if (existingIndex > -1) {
-             setWorkLogs(prev => prev.map(log => log.id === savedLog.id ? savedLog : log));
-        } else {
-             setWorkLogs(prev => [savedLog, ...prev].sort((a, b) => b.date.localeCompare(a.date)));
-        }
+         // If saving a past log (shouldn't happen from this page ideally), reload all
+         loadData();
       }
       return savedLog;
     } catch (error) {
-      console.error('[Home] Error saving work log:', error);
-      throw error;
+      console.error('[Home] Error saving work log via quick update/dashboard:', error);
+      throw error; // Rethrow for potential handling in components
     }
   };
 
@@ -84,91 +88,92 @@ export default function Home() {
     }
   };
 
+  // --- Quick Update Handlers (Placeholder - needs UI implementation) ---
+  const handleQuickUpdate = (field: 'documentsCompleted' | 'videoSessionsCompleted', increment: number) => {
+      const todayDateStr = formatDateISO(new Date());
+      const todayLog = workLogs.find(log => log.date === todayDateStr);
 
-  const handleAddTarget = (targetData: Omit<UPHTarget, 'id' | 'isActive'>) => {
-    try {
-      const newTarget = addUPHTarget(targetData);
-      setUphTargets(prev => [...prev, newTarget]);
-      return newTarget;
-    } catch (error) {
-      console.error('[Home] Error adding target:', error);
-      throw error;
-    }
-  };
-
-  const handleUpdateTarget = (targetData: UPHTarget) => {
-    try {
-      const updatedTarget = updateUPHTarget(targetData);
-       setUphTargets(prev => prev.map(t => t.id === updatedTarget.id ? updatedTarget : t));
-       if (updatedTarget.isActive) {
-         setActiveTarget(updatedTarget);
-       }
-      return updatedTarget;
-    } catch (error) {
-      console.error('[Home] Error updating target:', error);
-      throw error;
-    }
-  };
-
-  const handleDeleteTarget = (id: string) => {
-    try {
-       const targetToDelete = uphTargets.find(t => t.id === id);
-       if (targetToDelete?.isActive) {
-           throw new Error("Cannot delete the currently active target. Set another target as active first.");
-       }
-      deleteUPHTarget(id);
-      setUphTargets(prev => prev.filter(t => t.id !== id));
-      if (activeTarget && activeTarget.id === id) {
-         setActiveTarget(null);
+      if (!todayLog) {
+          console.warn("[Home] Quick Update: No log found for today to update.");
+          // Optionally prompt user to create a log first or handle gracefully
+          return;
       }
-    } catch (error) {
-      console.error('[Home] Error deleting target:', error);
-      throw error;
-    }
+
+      const updatedValue = Math.max(0, (todayLog[field] || 0) + increment); // Ensure non-negative
+
+      const updatedLogData = {
+          ...todayLog,
+          [field]: updatedValue,
+      };
+
+      // Call the save handler which updates state
+      try {
+           handleSaveWorkLog(updatedLogData);
+           console.log(`[Home] Quick Update: Incremented ${field} by ${increment}`);
+      } catch(error) {
+          console.error(`[Home] Quick Update Failed for ${field}:`, error);
+          // Add user feedback (e.g., toast)
+      }
   };
 
-  const handleSetActiveTarget = (id: string) => {
-    try {
-      const newActiveTarget = setActiveUPHTarget(id);
-      setUphTargets(prev => prev.map(t => ({...t, isActive: t.id === newActiveTarget.id})));
-      setActiveTarget(newActiveTarget);
-      return newActiveTarget;
-    } catch (error) {
-      console.error('[Home] Error setting active target:', error);
-      throw error;
-    }
-  };
 
+  // --- Derived State ---
+  const todayLog = workLogs.find(log => log.date === formatDateISO(new Date())) || null;
 
   // --- Render Logic ---
-
-   // Conditionally render loading state only on the very first client-side load
-   if (isLoading && typeof window !== 'undefined' && !localStorage.getItem('workLogs') && !localStorage.getItem('uphTargets')) {
-     return (
-        <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4"> {/* Adjust height calculation based on header/sidebar */}
-            <p className="text-xl text-muted-foreground">Loading Dashboard...</p>
-            {/* Spinner can go here */}
-        </div>
-        );
-   }
-
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4">
+        <p className="text-xl text-muted-foreground">Loading Dashboard...</p>
+        {/* Optional: Add Skeleton loaders */}
+      </div>
+    );
+  }
 
   return (
-    // Main content area within the SidebarInset
-    <div className="w-full max-w-7xl mx-auto space-y-8"> {/* Increased max-width potentially */}
-        <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Metric Daily Dashboard</h1>
+    <div className="w-full max-w-7xl mx-auto space-y-8">
+        <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Daily Dashboard</h1>
 
-        {/* REMOVED WorkLogInputForm */}
-        {/* REMOVED UPHTargetManager */}
+        {/* --- Quick Update Section (Example UI - Needs actual implementation) --- */}
+        {/*
+        {todayLog && (
+            <Card>
+                <CardHeader><CardTitle>Quick Update Today</CardTitle></CardHeader>
+                <CardContent className="flex gap-4">
+                    <div className="flex items-center gap-2">
+                        <Label>Documents:</Label>
+                        <Button size="sm" onClick={() => handleQuickUpdate('documentsCompleted', -1)}>-</Button>
+                        <span>{todayLog.documentsCompleted}</span>
+                        <Button size="sm" onClick={() => handleQuickUpdate('documentsCompleted', 1)}>+</Button>
+                    </div>
+                     <div className="flex items-center gap-2">
+                        <Label>Videos:</Label>
+                        <Button size="sm" onClick={() => handleQuickUpdate('videoSessionsCompleted', -1)}>-</Button>
+                        <span>{todayLog.videoSessionsCompleted}</span>
+                        <Button size="sm" onClick={() => handleQuickUpdate('videoSessionsCompleted', 1)}>+</Button>
+                    </div>
+                </CardContent>
+            </Card>
+        )}
+        */}
 
-        {/* Productivity Dashboard remains the primary content */}
+        {/* Productivity Dashboard - Now only shows Today's Metrics */}
         <ProductivityDashboard
-          initialWorkLogs={workLogs}
+          initialWorkLogs={todayLog ? [todayLog] : []} // Pass only today's log (or empty array)
           initialUphTargets={uphTargets}
           initialActiveTarget={activeTarget}
-          deleteWorkLogAction={handleDeleteWorkLog}
+          deleteWorkLogAction={handleDeleteWorkLog} // Pass delete action
+          // Add quick update handlers if implemented inside Dashboard
+          // handleQuickUpdate={handleQuickUpdate}
         />
+
+        {/* Weekly Averages Component */}
+        <WeeklyAverages
+            allWorkLogs={workLogs}
+            targets={uphTargets}
+            activeTarget={activeTarget}
+        />
+
     </div>
   );
 }
-

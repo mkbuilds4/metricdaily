@@ -1,9 +1,10 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Trash2, BookOpen, Video, Clock } from 'lucide-react';
+import { Trash2, BookOpen, Video, Clock, ChevronDown } from 'lucide-react'; // Added ChevronDown
 import { useToast } from "@/hooks/use-toast";
 import { isValid, differenceInMinutes, parse, addDays, addHours, format, addMinutes } from 'date-fns';
 import {
@@ -34,15 +35,17 @@ import { Separator } from '@/components/ui/separator';
 import PreviousLogTriggerSummary from './PreviousLogTriggerSummary'; // Import the component for previous log triggers
 
 interface TargetMetricsDisplayProps {
-  allWorkLogs: DailyWorkLog[]; // Receive all logs
+  allWorkLogs: DailyWorkLog[]; // Receive relevant logs (could be all, just today, or just previous)
   targets: UPHTarget[];
-  deleteWorkLogAction: (id: string) => void; // Add delete action prop
+  deleteWorkLogAction: (id: string) => void;
+  showTodaySection?: boolean; // New prop to control visibility of "Today" section
 }
 
 const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   allWorkLogs = [],
   targets = [],
   deleteWorkLogAction,
+  showTodaySection = true, // Default to showing the "Today" section
 }) => {
   const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
@@ -65,9 +68,10 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
     sortedLogs.forEach(log => {
         if (log.date && /^\d{4}-\d{2}-\d{2}$/.test(log.date)) {
-            if (log.date === todayDateStr && !foundTodayLog) {
+             // Assign to todayLog only if showTodaySection is true
+            if (showTodaySection && log.date === todayDateStr && !foundTodayLog) {
               foundTodayLog = log;
-            } else if (log.date !== todayDateStr) {
+            } else if (log.date !== todayDateStr) { // Always collect previous logs
                 if (!prevLogsMap[log.date]) {
                     prevLogsMap[log.date] = [];
                 }
@@ -86,8 +90,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 .map(([date, logs]) => ({ date, log: logs[0] })) // Assign logs[0] to a key 'log'
                                 .sort((a, b) => b.date.localeCompare(a.date)); // Sort dates descending
 
-    return { todayLog: foundTodayLog, previousLogsByDate: prevLogsGrouped };
-  }, [allWorkLogs]);
+     // If showTodaySection is false, ensure todayLog is null
+    return { todayLog: showTodaySection ? foundTodayLog : null, previousLogsByDate: prevLogsGrouped };
+  }, [allWorkLogs, showTodaySection]); // Add showTodaySection dependency
 
 
   const sortedTargets = useMemo(() => [...targets].sort((a, b) => a.targetUPH - b.targetUPH), [targets]);
@@ -219,7 +224,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date; // Fallback to raw string if invalid
 
         return (
-            <Card className={`mb-4 relative ${!isToday ? 'shadow-none border-none bg-transparent' : ''}`}> {/* Added relative positioning */}
+            <Card className={`mb-4 relative ${!isToday ? 'shadow-none border-none bg-transparent' : ''}`}>
                  <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                          <div>
@@ -230,7 +235,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 {log.hoursWorked.toFixed(2)} hrs ({log.startTime} - {log.endTime}, {log.breakDurationMinutes} min break)
                             </CardDescription>
                          </div>
-                         {/* Delete button is now only rendered outside the trigger, in the accordion content */}
                     </div>
                 </CardHeader>
                  <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -272,8 +276,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* --- Today's Metrics Section --- */}
-      {todayLog && (
+      {/* --- Today's Metrics Section (Conditional) --- */}
+      {showTodaySection && todayLog && (
         <div>
            {/* Pass all targets to the summary card */}
           {renderLogSummaryCard(todayLog, true, sortedTargets)}
@@ -290,40 +294,43 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       )}
 
       {/* --- Separator --- */}
-       {todayLog && previousLogsByDate.length > 0 && <Separator className="my-6" />}
+       {showTodaySection && todayLog && previousLogsByDate.length > 0 && <Separator className="my-6" />}
 
       {/* --- Previous Logs Section (Accordion) --- */}
       {previousLogsByDate.length > 0 && (
         <div>
-          <h3 className="text-xl font-semibold mb-3">Previous Logs</h3>
+           {/* Only show title if Today section is hidden OR if both exist */}
+          {(!showTodaySection || (showTodaySection && todayLog)) && (
+               <h3 className="text-xl font-semibold mb-3">Previous Logs</h3>
+          )}
            <Accordion type="multiple" className="w-full space-y-1">
                {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date} className="border-b bg-muted/20 rounded-md">
                          {/* Use asChild and wrap content in a div to avoid button-in-button */}
                         <AccordionTrigger
-                            asChild
+                            asChild // Important: Prevent nested buttons
                             className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50"
                         >
-                             {/* This div is now the actual button/trigger content */}
+                             {/* This div is now the actual trigger content */}
                             <div className="flex items-center justify-between w-full gap-4">
                                 {/* Summary Component */}
                                 <div className="flex-grow">
                                     {/* Pass targets for UPH calculation in summary */}
                                     <PreviousLogTriggerSummary log={log} allTargets={sortedTargets} />
                                 </div>
-                                {/* Delete Button (aligned right) - Moved to AccordionContent */}
-                                {/* Chevron/Indicator */}
+                                {/* Chevron/Indicator (Now part of the trigger's div) */}
                                 <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
                             </div>
                         </AccordionTrigger>
                         <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-md">
-                             <div className="flex justify-end mb-2"> {/* Container for delete button */}
+                             {/* Delete button is placed *inside* the content */}
+                             <div className="flex justify-end mb-2">
                                 <Button
                                     variant="ghost"
                                     size="icon"
                                     className="text-destructive hover:text-destructive h-8 w-8"
                                     onClick={(e) => {
-                                        e.stopPropagation(); // Still good practice
+                                        // e.stopPropagation(); // Prevent accordion toggle if needed, though maybe not necessary here
                                         handleDeleteLog(log);
                                     }}
                                     title="Delete This Log"
