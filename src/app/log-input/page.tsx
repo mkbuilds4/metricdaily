@@ -16,12 +16,14 @@ import {
 } from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { formatDateISO } from '@/lib/utils';
+import { useToast } from "@/hooks/use-toast";
 
 export default function LogInputPage() {
   const [todayLog, setTodayLog] = useState<DailyWorkLog | null>(null);
   const [uphTargets, setUphTargets] = useState<UPHTarget[]>([]);
   const [activeTarget, setActiveTarget] = useState<UPHTarget | null>(null); // Keep track of active target for context maybe
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   // Load data needed for this page
   const loadData = useCallback(() => {
@@ -42,10 +44,15 @@ export default function LogInputPage() {
       console.log('[LogInputPage] Data loaded:', { hasTodayLog: !!foundTodayLog, targets: loadedTargets.length, active: !!loadedActiveTarget });
     } catch (error) {
       console.error('[LogInputPage] Error loading data:', error);
+      toast({
+        variant: "destructive",
+        title: "Error Loading Data",
+        description: "Could not load work logs or targets from local storage.",
+      });
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [toast]); // Add toast dependency
 
   useEffect(() => {
      if (typeof window !== 'undefined') {
@@ -55,7 +62,7 @@ export default function LogInputPage() {
 
   // --- Action Handlers (Pass client-side actions to components) ---
 
-  const handleSaveWorkLog = (logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }) => {
+  const handleSaveWorkLog = useCallback((logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }) => {
     try {
       const savedLog = saveWorkLog(logData);
       // Update local state for today's log if it was saved
@@ -66,22 +73,28 @@ export default function LogInputPage() {
       return savedLog;
     } catch (error) {
       console.error('[LogInputPage] Error saving work log:', error);
-      throw error; // Let the form handle displaying the error
+      // Error toast is handled within the saveWorkLog action itself now
+      throw error; // Let the form handle displaying the error if needed
     }
-  };
+  }, []); // Removed toast dependency here as it's handled in the action
 
-  const handleAddTarget = (targetData: Omit<UPHTarget, 'id' | 'isActive'>) => {
+  const handleAddTarget = useCallback((targetData: Omit<UPHTarget, 'id' | 'isActive'>) => {
     try {
       const newTarget = addUPHTarget(targetData);
       setUphTargets(prev => [...prev, newTarget]); // Update local state
       return newTarget;
     } catch (error) {
       console.error('[LogInputPage] Error adding target:', error);
+      toast({
+        variant: "destructive",
+        title: "Add Target Failed",
+        description: error instanceof Error ? error.message : "Could not add the target.",
+      });
       throw error;
     }
-  };
+  }, [toast]); // Add toast dependency
 
-  const handleUpdateTarget = (targetData: UPHTarget) => {
+  const handleUpdateTarget = useCallback((targetData: UPHTarget) => {
     try {
       const updatedTarget = updateUPHTarget(targetData);
       setUphTargets(prev => prev.map(t => t.id === updatedTarget.id ? updatedTarget : t));
@@ -91,14 +104,24 @@ export default function LogInputPage() {
       return updatedTarget;
     } catch (error) {
       console.error('[LogInputPage] Error updating target:', error);
+      toast({
+        variant: "destructive",
+        title: "Update Target Failed",
+        description: error instanceof Error ? error.message : "Could not update the target.",
+      });
       throw error;
     }
-  };
+  }, [toast]); // Add toast dependency
 
-   const handleDeleteTarget = (id: string) => {
+   const handleDeleteTarget = useCallback((id: string) => {
     try {
        const targetToDelete = uphTargets.find(t => t.id === id);
        if (targetToDelete?.isActive) {
+           toast({
+                variant: "destructive",
+                title: "Deletion Blocked",
+                description: "Cannot delete the currently active target. Set another target as active first.",
+           });
            throw new Error("Cannot delete the currently active target. Set another target as active first.");
        }
       deleteUPHTarget(id);
@@ -107,23 +130,38 @@ export default function LogInputPage() {
        if (activeTarget && activeTarget.id === id) {
           setActiveTarget(null); // Clear active state locally
        }
+       toast({ title: "Target Deleted", description: "UPH Target deleted successfully." });
     } catch (error) {
       console.error('[LogInputPage] Error deleting target:', error);
+      // Toasting is handled above or in the action itself for specific errors
+      if (!(error instanceof Error && error.message.includes("Cannot delete"))) {
+           toast({
+                variant: "destructive",
+                title: "Deletion Failed",
+                description: error instanceof Error ? error.message : "Could not delete the target.",
+            });
+      }
       throw error;
     }
-  };
+  }, [uphTargets, activeTarget, toast]); // Add toast and other deps
 
-  const handleSetActiveTarget = (id: string) => {
+  const handleSetActiveTarget = useCallback((id: string) => {
     try {
       const newActiveTarget = setActiveUPHTarget(id);
       setUphTargets(prev => prev.map(t => ({...t, isActive: t.id === newActiveTarget.id})));
       setActiveTarget(newActiveTarget); // Update local active target state
+      toast({ title: "Target Activated", description: `"${newActiveTarget.name}" is now the active target.` });
       return newActiveTarget;
     } catch (error) {
       console.error('[LogInputPage] Error setting active target:', error);
+       toast({
+            variant: "destructive",
+            title: "Activation Failed",
+            description: error instanceof Error ? error.message : "Could not activate the target.",
+       });
       throw error;
     }
-  };
+  }, [toast]); // Add toast dependency
 
 
   if (isLoading) {
@@ -155,3 +193,5 @@ export default function LogInputPage() {
     </div>
   );
 }
+
+      

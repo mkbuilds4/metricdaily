@@ -11,11 +11,13 @@ import {
 } from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { formatDateISO } from '@/lib/utils';
+import { useToast } from "@/hooks/use-toast";
 
 export default function PreviousLogsPage() {
   const [previousLogs, setPreviousLogs] = useState<DailyWorkLog[]>([]);
   const [uphTargets, setUphTargets] = useState<UPHTarget[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+   const { toast } = useToast();
 
   // Load data needed for this page
   const loadData = useCallback(() => {
@@ -35,10 +37,15 @@ export default function PreviousLogsPage() {
       console.log('[PreviousLogsPage] Data loaded:', { logs: filteredPreviousLogs.length, targets: loadedTargets.length });
     } catch (error) {
       console.error('[PreviousLogsPage] Error loading data:', error);
+       toast({
+            variant: "destructive",
+            title: "Error Loading Data",
+            description: "Could not load previous work logs or targets.",
+       });
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [toast]); // Add toast dependency
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -46,15 +53,21 @@ export default function PreviousLogsPage() {
     }
   }, [loadData]);
 
-  const handleDeleteWorkLog = (id: string) => {
+  const handleDeleteWorkLog = useCallback((id: string) => {
     try {
       deleteWorkLog(id);
       setPreviousLogs(prev => prev.filter(log => log.id !== id)); // Update local state
+      toast({ title: "Log Deleted", description: "Previous work log deleted successfully." });
     } catch (error) {
       console.error('[PreviousLogsPage] Error deleting work log:', error);
-      throw error; // Let the component handle toast/feedback
+      toast({
+            variant: "destructive",
+            title: "Deletion Failed",
+            description: error instanceof Error ? error.message : "Could not delete the work log.",
+      });
+      throw error; // Let the component handle toast/feedback if needed elsewhere
     }
-  };
+  }, [toast]); // Add toast dependency
 
   if (isLoading) {
     return (
@@ -83,3 +96,5 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
+
+      
