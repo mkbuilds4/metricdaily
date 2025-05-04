@@ -40,19 +40,14 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
       return [];
     }
 
-    const averages: Array<{ target: UPHTarget; avgDocs: number; avgVideos: number; avgUnits: number; avgUPH: number; daysLogged: number }> = [];
+    // Simplified averages to only include UPH
+    const averages: Array<{ target: UPHTarget; avgUPH: number }> = [];
 
     targets.forEach(target => {
-      let totalDocs = 0;
-      let totalVideos = 0;
-      let totalUnits = 0;
       let totalUPHSum = 0;
       let daysWithValidUPH = 0;
 
       logsThisWeek.forEach(log => {
-        totalDocs += log.documentsCompleted || 0;
-        totalVideos += log.videoSessionsCompleted || 0;
-        totalUnits += calculateDailyUnits(log, target);
         const dailyUPH = calculateDailyUPH(log, target);
         if (dailyUPH > 0) { // Only average days where UPH is calculable and positive
             totalUPHSum += dailyUPH;
@@ -60,15 +55,9 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
         }
       });
 
-      const numDaysLogged = logsThisWeek.length; // Total days logged this week
-
       averages.push({
         target,
-        avgDocs: numDaysLogged > 0 ? parseFloat((totalDocs / numDaysLogged).toFixed(2)) : 0,
-        avgVideos: numDaysLogged > 0 ? parseFloat((totalVideos / numDaysLogged).toFixed(2)) : 0,
-        avgUnits: numDaysLogged > 0 ? parseFloat((totalUnits / numDaysLogged).toFixed(2)) : 0,
         avgUPH: daysWithValidUPH > 0 ? parseFloat((totalUPHSum / daysWithValidUPH).toFixed(2)) : 0, // Average UPH only over days with valid UPH
-        daysLogged: numDaysLogged,
       });
     });
 
@@ -85,9 +74,9 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Weekly Averages</CardTitle>
+        <CardTitle>Weekly Average UPH</CardTitle>
         <CardDescription>
-           Averages for the current work week ({weekStartDateFormatted} - {weekEndDateFormatted}). Based on days logged.
+           Average Units Per Hour for the current work week ({weekStartDateFormatted} - {weekEndDateFormatted}). Based on days logged.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -97,23 +86,15 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Target</TableHead>
-                <TableHead className="text-right">Avg Docs/Day</TableHead>
-                <TableHead className="text-right">Avg Videos/Day</TableHead>
-                <TableHead className="text-right">Avg Units/Day</TableHead>
-                <TableHead className="text-right">Avg UPH</TableHead>
-                <TableHead className="text-right">Days Logged</TableHead>
+                <TableHead>Target Name</TableHead>
+                <TableHead className="text-right">Average UPH</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {weeklyAverages.map(({ target, avgDocs, avgVideos, avgUnits, avgUPH, daysLogged }) => (
+              {weeklyAverages.map(({ target, avgUPH }) => (
                 <TableRow key={target.id} className={target.id === activeTarget?.id ? 'bg-accent/10' : ''}>
                   <TableCell className="font-medium">{target.name}</TableCell>
-                  <TableCell className="text-right">{avgDocs}</TableCell>
-                  <TableCell className="text-right">{avgVideos}</TableCell>
-                  <TableCell className="text-right">{avgUnits}</TableCell>
-                  <TableCell className="text-right">{avgUPH > 0 ? avgUPH : '-'}</TableCell>
-                   <TableCell className="text-right">{daysLogged}</TableCell>
+                  <TableCell className="text-right tabular-nums">{avgUPH > 0 ? avgUPH.toFixed(2) : '-'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
