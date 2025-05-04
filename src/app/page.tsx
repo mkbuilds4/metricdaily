@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ProductivityDashboard from '@/components/DashboardDisplay';
 import WeeklyAverages from '@/components/WeeklyAverages'; // Import the new component
+import DailyUPHChart from '@/components/DailyUPHChart'; // Import the new chart component
 import {
   getWorkLogs,
   getActiveUPHTarget,
@@ -384,6 +385,14 @@ export default function Home() {
             />
         </div>
 
+         {/* --- Daily UPH Chart --- */}
+         {todayLog && activeTarget && (
+             <DailyUPHChart
+                 todayLog={todayLog}
+                 activeTarget={activeTarget}
+             />
+         )}
+
         {/* --- Productivity Dashboard --- */}
         {/* This remains below the grid */}
         <ProductivityDashboard
@@ -398,4 +407,3 @@ export default function Home() {
 }
 
 
-    
