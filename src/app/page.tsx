@@ -17,6 +17,7 @@ import { formatDateISO } from '@/lib/utils'; // Import formatDateISO
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input'; // Import Input
 import { Minus, Plus } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
@@ -26,6 +27,9 @@ export default function Home() {
   const [uphTargets, setUphTargets] = useState<UPHTarget[]>([]);
   const [activeTarget, setActiveTarget] = useState<UPHTarget | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // State to manage input values locally for immediate feedback
+  const [docInputValue, setDocInputValue] = useState<string>('');
+  const [videoInputValue, setVideoInputValue] = useState<string>('');
   const { toast } = useToast();
 
   const loadData = useCallback(() => {
@@ -39,6 +43,12 @@ export default function Home() {
       setWorkLogs(loadedLogs);
       setUphTargets(loadedTargets);
       setActiveTarget(loadedActiveTarget);
+
+      // Initialize input values from today's log if it exists
+      const today = loadedLogs.find(log => log.date === formatDateISO(new Date()));
+      setDocInputValue(today?.documentsCompleted?.toString() ?? '');
+      setVideoInputValue(today?.videoSessionsCompleted?.toString() ?? '');
+
       console.log('[Home] Data loaded:', { logs: loadedLogs.length, targets: loadedTargets.length, active: !!loadedActiveTarget });
     } catch (error) {
       console.error('[Home] Error loading data:', error);
@@ -59,6 +69,14 @@ export default function Home() {
         loadData();
      }
   }, [loadData]);
+
+   // Update input values when workLogs change (e.g., after save)
+   useEffect(() => {
+    const today = workLogs.find(log => log.date === formatDateISO(new Date()));
+    setDocInputValue(today?.documentsCompleted?.toString() ?? '');
+    setVideoInputValue(today?.videoSessionsCompleted?.toString() ?? '');
+  }, [workLogs]);
+
 
   // --- Action Handlers ---
 
@@ -114,51 +132,128 @@ export default function Home() {
     }
   }, [toast]); // Add toast
 
-  // --- Quick Update Handlers ---
-  const handleQuickUpdate = (field: 'documentsCompleted' | 'videoSessionsCompleted', increment: number) => {
+  // --- Quick Update Handlers --- Refactored
+   const handleQuickUpdate = (field: 'documentsCompleted' | 'videoSessionsCompleted', value: number | string) => {
       const todayDateStr = formatDateISO(new Date());
       const todayLog = workLogs.find(log => log.date === todayDateStr);
 
       if (!todayLog) {
           console.warn("[Home] Quick Update: No log found for today to update.");
           toast({
-            variant: "destructive",
-            title: "Quick Update Failed",
-            description: "No work log found for today. Please add one first.",
+              variant: "destructive",
+              title: "Quick Update Failed",
+              description: "No work log found for today. Please add one first.",
           });
           return;
       }
 
-      const currentValue = todayLog[field] || 0;
-      const updatedValue = currentValue + increment;
+      let newValue: number;
+      if (typeof value === 'string') {
+         // If value is string, it comes from input, parse it
+         newValue = parseInt(value, 10);
+         if (isNaN(newValue)) {
+              console.warn("[Home] Quick Update: Invalid input value:", value);
+              // Optionally reset input to current value or show specific toast
+              // For now, just ignore invalid input
+                if (field === 'documentsCompleted') setDocInputValue(todayLog.documentsCompleted.toString());
+                if (field === 'videoSessionsCompleted') setVideoInputValue(todayLog.videoSessionsCompleted.toString());
+              return;
+         }
+      } else {
+           // If value is number, it comes from +/- buttons (increment)
+            const currentValue = todayLog[field] || 0;
+            newValue = currentValue + value; // Apply increment
+      }
+
 
        // Prevent negative values
-       if (updatedValue < 0) {
-           console.warn(`[Home] Quick Update: Attempted to decrement ${field} below zero.`);
+       if (newValue < 0) {
+           console.warn(`[Home] Quick Update: Attempted to set ${field} below zero.`);
             // Optionally show a different toast or just do nothing
             toast({
                 variant: "default",
                 title: "Limit Reached",
                 description: `Cannot decrease ${field === 'documentsCompleted' ? 'documents' : 'videos'} below zero.`,
             });
+            // Reset input value if coming from input
+            if (typeof value === 'string') {
+                if (field === 'documentsCompleted') setDocInputValue(todayLog.documentsCompleted.toString());
+                if (field === 'videoSessionsCompleted') setVideoInputValue(todayLog.videoSessionsCompleted.toString());
+            }
            return;
        }
 
       const updatedLogData: DailyWorkLog = { // Ensure full DailyWorkLog type
           ...todayLog,
-          [field]: updatedValue,
+          [field]: newValue,
       };
 
       // Call the save handler which updates state
       try {
            handleSaveWorkLog(updatedLogData);
-           console.log(`[Home] Quick Update: Updated ${field} to ${updatedValue}`);
+           console.log(`[Home] Quick Update: Updated ${field} to ${newValue}`);
+           // Update local input state ONLY if the change came from buttons
+           if (typeof value !== 'string') {
+                if (field === 'documentsCompleted') setDocInputValue(newValue.toString());
+                if (field === 'videoSessionsCompleted') setVideoInputValue(newValue.toString());
+           }
            // Optional success toast (might be too noisy)
-           // toast({ title: "Quick Update", description: `${field === 'documentsCompleted' ? 'Documents' : 'Videos'} updated to ${updatedValue}.` });
+           // toast({ title: "Quick Update", description: `${field === 'documentsCompleted' ? 'Documents' : 'Videos'} updated to ${newValue}.` });
       } catch(error) {
           console.error(`[Home] Quick Update Failed for ${field}:`, error);
           // Error toast is handled within handleSaveWorkLog
+          // Revert input value on save error if coming from input
+           if (typeof value === 'string') {
+                if (field === 'documentsCompleted') setDocInputValue(todayLog.documentsCompleted.toString());
+                if (field === 'videoSessionsCompleted') setVideoInputValue(todayLog.videoSessionsCompleted.toString());
+           }
       }
+  };
+
+  // Specific handlers for input changes
+  const handleDocInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    // Allow empty input for clearing, otherwise only digits
+    if (val === '' || /^\d+$/.test(val)) {
+      setDocInputValue(val);
+    }
+  };
+
+  const handleVideoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+     const val = e.target.value;
+     if (val === '' || /^\d+$/.test(val)) {
+       setVideoInputValue(val);
+     }
+  };
+
+  // Handlers for when input loses focus (onBlur) to trigger save
+   const handleDocInputBlur = () => {
+       // Only save if the value is a valid number and different from the current log
+       const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
+       if (todayLog && docInputValue !== todayLog.documentsCompleted.toString() && docInputValue !== '') {
+           handleQuickUpdate('documentsCompleted', docInputValue);
+       } else if (docInputValue === '' && todayLog && todayLog.documentsCompleted !== 0) {
+           // Handle clearing the input - set to 0
+           handleQuickUpdate('documentsCompleted', '0');
+       } else if (docInputValue === '' && todayLog) {
+           // If input is cleared but value was already 0, reset display just in case
+           setDocInputValue('0');
+       } else if (!todayLog) {
+            setDocInputValue(''); // Clear if no log exists
+       }
+   };
+
+  const handleVideoInputBlur = () => {
+       const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
+       if (todayLog && videoInputValue !== todayLog.videoSessionsCompleted.toString() && videoInputValue !== '') {
+            handleQuickUpdate('videoSessionsCompleted', videoInputValue);
+        } else if (videoInputValue === '' && todayLog && todayLog.videoSessionsCompleted !== 0) {
+            handleQuickUpdate('videoSessionsCompleted', '0');
+        } else if (videoInputValue === '' && todayLog) {
+           setVideoInputValue('0');
+       } else if (!todayLog) {
+            setVideoInputValue('');
+       }
   };
 
 
@@ -187,7 +282,8 @@ export default function Home() {
                     <CardHeader>
                         <CardTitle>Quick Update Today's Counts</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col sm:flex-row gap-4 sm:gap-8">
+                    {/* Make CardContent a flex container to center items */}
+                    <CardContent className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-center justify-center py-6"> {/* Added padding and centering */}
                         {/* Document Count */}
                         <div className="flex items-center gap-2">
                             <Label htmlFor="quick-update-docs" className="min-w-[80px] sm:min-w-[auto]">Documents:</Label>
@@ -202,9 +298,18 @@ export default function Home() {
                             >
                                 <Minus className="h-4 w-4"/>
                             </Button>
-                            <span className="text-lg font-medium w-10 text-center tabular-nums">
-                                {todayLog.documentsCompleted}
-                            </span>
+                             {/* Replace span with Input */}
+                             <Input
+                                id="quick-update-docs-input"
+                                type="number" // Use number type for better mobile experience potentially
+                                value={docInputValue}
+                                onChange={handleDocInputChange}
+                                onBlur={handleDocInputBlur} // Save on blur
+                                className="h-9 w-16 text-center tabular-nums text-lg font-medium" // Adjusted width and height
+                                disabled={isLoading}
+                                min="0" // Prevent negative input via browser
+                                aria-label="Document count input"
+                             />
                             <Button
                                 id="quick-update-docs-plus"
                                 aria-label="Increase document count"
@@ -231,9 +336,18 @@ export default function Home() {
                             >
                                 <Minus className="h-4 w-4"/>
                             </Button>
-                            <span className="text-lg font-medium w-10 text-center tabular-nums">
-                                {todayLog.videoSessionsCompleted}
-                            </span>
+                             {/* Replace span with Input */}
+                             <Input
+                                 id="quick-update-videos-input"
+                                 type="number"
+                                 value={videoInputValue}
+                                 onChange={handleVideoInputChange}
+                                 onBlur={handleVideoInputBlur} // Save on blur
+                                 className="h-9 w-16 text-center tabular-nums text-lg font-medium" // Adjusted width and height
+                                 disabled={isLoading}
+                                 min="0"
+                                 aria-label="Video count input"
+                              />
                             <Button
                                 id="quick-update-videos-plus"
                                 aria-label="Increase video count"
@@ -253,8 +367,11 @@ export default function Home() {
                     <CardHeader>
                         <CardTitle className="text-muted-foreground">Log Not Found</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <p className="text-muted-foreground">No work log found for today. Add one on the 'Log / Targets' page to enable quick updates.</p>
+                     {/* Center content vertically and horizontally */}
+                     <CardContent className="flex items-center justify-center h-full py-6">
+                         <p className="text-muted-foreground text-center">
+                             No work log found for today. Add one on the 'Log / Targets' page to enable quick updates.
+                         </p>
                     </CardContent>
                 </Card>
             )}
@@ -279,3 +396,6 @@ export default function Home() {
     </div>
   );
 }
+
+
+    
