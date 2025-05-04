@@ -25,23 +25,31 @@ AccordionItem.displayName = "AccordionItem"
 const AccordionTrigger = React.forwardRef<
   React.ElementRef<typeof AccordionPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger> & { hideChevron?: boolean }
->(({ className, children, hideChevron, ...props }, ref) => (
+>(({ className, children, hideChevron, asChild = false, ...props }, ref) => ( // Destructure asChild, default to false
   <AccordionPrimitive.Header className="flex">
     <AccordionPrimitive.Trigger
       ref={ref}
+      asChild={asChild} // Pass asChild to the primitive
       className={cn(
-        "flex flex-1 items-center justify-between py-4 font-medium transition-all hover:underline",
-        // Add conditional rotation only if chevron is shown AND asChild is false
-        !hideChevron && !props.asChild && "[&[data-state=open]>svg]:rotate-180",
-        className
+        // Apply base trigger styles only if not using asChild
+        !asChild && "flex flex-1 items-center justify-between py-4 font-medium transition-all hover:underline",
+        // Apply icon rotation styles only if not using asChild and not hiding chevron
+        !asChild && !hideChevron && "[&[data-state=open]>svg]:rotate-180",
+        className // Allow className overrides
       )}
       {...props}
     >
-      {children}
-       {/* Conditionally render the ChevronDown icon ONLY if hideChevron and asChild are false */}
-       {!hideChevron && !props.asChild && (
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200" />
-       )}
+      {asChild ? (
+        children // If asChild, render only the single child passed down
+      ) : (
+        <>
+          {children}
+          {/* If not asChild, render children and the chevron icon (if not hidden) */}
+          {!hideChevron && (
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200" />
+          )}
+        </>
+      )}
     </AccordionPrimitive.Trigger>
   </AccordionPrimitive.Header>
 ))
