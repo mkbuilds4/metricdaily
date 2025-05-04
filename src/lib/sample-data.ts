@@ -10,31 +10,31 @@ const yesterday = subDays(today, 1);
 const twoDaysAgo = subDays(today, 2);
 const tomorrow = addDays(today, 1); // For potential future logs if needed
 
-// Sample UPH Targets
+// Sample UPH Targets - Updated based on user request
 // IMPORTANT: Ensure IDs are unique and simple if used directly
 export const sampleUPHTargets: UPHTarget[] = [
   {
-    id: 'std-1', // Simple ID for sample data
-    name: 'Standard Shift',
-    targetUPH: 15.0,
-    docsPerUnit: 5,
-    videosPerUnit: 2,
+    id: 'meeting-1', // Simple ID for sample data
+    name: 'Meeting',
+    targetUPH: 9.0,
+    docsPerUnit: 10,
+    videosPerUnit: 1.5,
     isActive: true, // Make the first one active by default
   },
   {
-    id: 'peak-1',
-    name: 'Peak Hours',
-    targetUPH: 18.5,
-    docsPerUnit: 4,
+    id: 'minimum-1',
+    name: 'Minimum',
+    targetUPH: 7.5,
+    docsPerUnit: 10,
     videosPerUnit: 1.5,
     isActive: false,
   },
   {
-    id: 'easy-1',
-    name: 'Easy Day',
-    targetUPH: 12.0,
-    docsPerUnit: 6,
-    videosPerUnit: 3,
+    id: 'outstanding-1',
+    name: 'Outstanding',
+    targetUPH: 10.5,
+    docsPerUnit: 10,
+    videosPerUnit: 1.5,
     isActive: false,
   },
 ];
@@ -53,7 +53,7 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     hoursWorked: 7.25, // Example calculation
     documentsCompleted: 62, // Example data
     videoSessionsCompleted: 25, // Example data
-    targetId: sampleUPHTargets[0].id, // Associate with the first sample target
+    targetId: sampleUPHTargets[0].id, // Associate with the first sample target ('meeting-1')
     notes: 'Started a bit late, focused on docs.',
   },
   // Yesterday's Log
