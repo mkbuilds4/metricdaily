@@ -8,7 +8,12 @@ import { formatDateISO } from './utils'; // Use consistent date formatting
 const today = new Date();
 const yesterday = subDays(today, 1);
 const twoDaysAgo = subDays(today, 2);
-const tomorrow = addDays(today, 1); // For potential future logs if needed
+const threeDaysAgo = subDays(today, 3);
+const fourDaysAgo = subDays(today, 4);
+const fiveDaysAgo = subDays(today, 5);
+const sixDaysAgo = subDays(today, 6);
+const sevenDaysAgo = subDays(today, 7);
+
 
 // Sample UPH Targets - Updated based on user request
 // IMPORTANT: Ensure IDs are unique and simple if used directly
@@ -82,10 +87,23 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     targetId: sampleUPHTargets[0].id,
     notes: 'More video calls this day.',
   },
-   // Add a log from earlier in the week for Weekly Avg testing
+   // Log from 3 days ago
   {
-    id: 'log-earlier-week',
-    date: formatDateISO(subDays(today, 4)), // 4 days ago
+    id: 'log-3daysago',
+    date: formatDateISO(threeDaysAgo),
+    startTime: '14:00',
+    endTime: '22:00',
+    breakDurationMinutes: 60,
+    hoursWorked: 7.00,
+    documentsCompleted: 65,
+    videoSessionsCompleted: 90,
+    targetId: sampleUPHTargets[0].id,
+    notes: 'Standard day.',
+  },
+   // Log from 4 days ago
+  {
+    id: 'log-4daysago',
+    date: formatDateISO(fourDaysAgo),
     startTime: '14:00',
     endTime: '22:30',
     breakDurationMinutes: 65,
@@ -95,7 +113,45 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     targetId: sampleUPHTargets[0].id,
     notes: 'Average day.',
   },
+  // Log from 5 days ago
+  {
+    id: 'log-5daysago',
+    date: formatDateISO(fiveDaysAgo),
+    startTime: '13:30',
+    endTime: '22:30',
+    breakDurationMinutes: 60,
+    hoursWorked: 8.00,
+    documentsCompleted: 85,
+    videoSessionsCompleted: 110,
+    targetId: sampleUPHTargets[0].id,
+    notes: 'Worked a full 8 hours.',
+  },
+  // Log from 6 days ago
+  {
+    id: 'log-6daysago',
+    date: formatDateISO(sixDaysAgo),
+    startTime: '14:15',
+    endTime: '22:00',
+    breakDurationMinutes: 45,
+    hoursWorked: 7.00,
+    documentsCompleted: 68,
+    videoSessionsCompleted: 88,
+    targetId: sampleUPHTargets[0].id,
+    notes: 'Shorter break.',
+  },
+   // Log from 7 days ago
+  {
+    id: 'log-7daysago',
+    date: formatDateISO(sevenDaysAgo),
+    startTime: '14:00',
+    endTime: '22:30',
+    breakDurationMinutes: 65,
+    hoursWorked: 7.25,
+    documentsCompleted: 72,
+    videoSessionsCompleted: 100,
+    targetId: sampleUPHTargets[0].id,
+    notes: 'End of the previous week.',
+  },
 ];
 
 // You can add more sample logs or targets as needed.
-
