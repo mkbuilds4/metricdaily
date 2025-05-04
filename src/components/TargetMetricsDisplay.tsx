@@ -1,12 +1,11 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Trash2, BookOpen, Video, Clock, ChevronDown } from 'lucide-react';
+import { Trash2, BookOpen, Video, Clock, ChevronDown, ArrowUp, ArrowDown, Minus as MinusIcon } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { parse, addDays, addHours, format, addMinutes, isValid } from 'date-fns';
+import { parse, isValid, format } from 'date-fns';
 import {
     Accordion,
     AccordionContent,
@@ -151,7 +150,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
       const isBehindSchedule = timeAheadBehindMinutes !== null && timeAheadBehindMinutes < 0;
       const isAheadSchedule = timeAheadBehindMinutes !== null && timeAheadBehindMinutes > 0;
-      const isOnSchedule = timeAheadBehindMinutes !== null && Math.abs(timeDifferenceMinutes) < 0.05; // Use tolerance for float comparison
+      const isOnSchedule = timeAheadBehindMinutes !== null && Math.abs(timeAheadBehindMinutes) < 0.05; // Use tolerance for float comparison - **FIXED TYPO HERE**
 
       return (
         <Card key={`${log.id}-${target.id}`} className="flex flex-col justify-between">
@@ -236,9 +235,12 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         const summaryTarget = activeTarget ?? (allTargets.length > 0 ? allTargets[0] : null);
 
         let overallUPHForSummary: number | null = null;
+        let currentUPHMetrics: { currentUnits: number, currentUPH: number } | null = null;
+
         if (summaryTarget && isToday && currentTime) {
             // Today: show UPH based on time elapsed so far
-            overallUPHForSummary = calculateCurrentMetrics(log, summaryTarget, currentTime).currentUPH;
+            currentUPHMetrics = calculateCurrentMetrics(log, summaryTarget, currentTime);
+            overallUPHForSummary = currentUPHMetrics.currentUPH;
         } else if (summaryTarget && !isToday) {
             // Previous: show average UPH for the whole logged duration
             overallUPHForSummary = calculateDailyUPH(log, summaryTarget);
@@ -292,26 +294,27 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                              <p className="text-lg font-semibold">{log.videoSessionsCompleted}</p>
                          </div>
                      </div>
+                      {/* Today Only: Current Units Now */}
+                      {isToday && currentUPHMetrics && (
+                           <div className="flex items-center space-x-2">
+                               {/* Add an icon if desired */}
+                               <div>
+                                 <p className="text-sm text-muted-foreground">Units Now ({summaryTargetName})</p>
+                                 <p className="text-lg font-semibold">{currentUPHMetrics.currentUnits.toFixed(2)}</p>
+                              </div>
+                           </div>
+                      )}
                      {/* Overall UPH (Current or Avg depending on context) */}
                      {overallUPHForSummary !== null && (
                          <div className="flex items-center space-x-2">
                              <Clock className="h-5 w-5 text-muted-foreground" />
                              <div>
-                                 <p className="text-sm text-muted-foreground">{isToday ? `Current Daily UPH` : `Avg UPH`} ({summaryTargetName})</p>
+                                 <p className="text-sm text-muted-foreground">{isToday ? `Current Daily UPH` : `Avg Daily UPH`} ({summaryTargetName})</p>
                                  <p className="text-lg font-semibold">{overallUPHForSummary.toFixed(2)}</p>
                              </div>
                          </div>
                      )}
-                     {/* Total Units Completed (Shown for both now for clarity) */}
-                      {summaryTarget && (
-                           <div className="flex items-center space-x-2">
-                               {/* You can add an icon if desired, e.g., Sigma */}
-                               <div>
-                                 <p className="text-sm text-muted-foreground">Total Units ({summaryTargetName})</p>
-                                 <p className="text-lg font-semibold">{calculateDailyUnits(log, summaryTarget).toFixed(2)}</p>
-                              </div>
-                           </div>
-                      )}
+
                  </CardContent>
                  {/* Optional Notes */}
                  {log.notes && (
@@ -355,13 +358,16 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date} className="border-b bg-muted/20 rounded-md">
                          {/* Previous Log Trigger */}
-                         <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50" hideChevron>
-                            <div className="flex items-center justify-between w-full gap-4">
+                         <AccordionTrigger
+                              className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50"
+                              hideChevron // Hide the default chevron
+                            >
+                              <div className="flex items-center justify-between w-full gap-4">
                                 <div className="flex-grow">
-                                    {/* Pass all targets for summary calculation */}
-                                    <PreviousLogTriggerSummary log={log} allTargets={sortedTargets} />
+                                  {/* Pass all targets for summary calculation */}
+                                  <PreviousLogTriggerSummary log={log} allTargets={sortedTargets} />
                                 </div>
-                                <Button
+                                 <Button
                                     variant="ghost"
                                     size="icon"
                                     className="text-destructive hover:text-destructive h-8 w-8 mr-2 shrink-0" // Added shrink-0
@@ -371,9 +377,10 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 >
                                     <Trash2 className="h-4 w-4" />
                                 </Button>
-                                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                            </div>
-                         </AccordionTrigger>
+                                {/* Use custom chevron placement */}
+                                 <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                              </div>
+                            </AccordionTrigger>
                         <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-md">
                              {/* Render the detailed breakdown inside the content */}
                              {renderLogSummaryCard(log, false, sortedTargets)}
