@@ -5,57 +5,70 @@ import React from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import TargetMetricsDisplay from './TargetMetricsDisplay'; // The component handling the display logic
+import { AlertCircle } from 'lucide-react'; // Import AlertCircle
 
 // --- Component Props ---
 
 interface ProductivityDashboardProps {
-  // Receive only the specific logs this instance should display
-  initialWorkLogs: DailyWorkLog[]; // e.g., just today's log for the main dashboard
+  initialWorkLogs: DailyWorkLog[]; // Only today's log (or empty array)
   initialUphTargets: UPHTarget[];
   initialActiveTarget: UPHTarget | null;
-  deleteWorkLogAction: (id: string) => void; // For deleting today's log from dashboard
-  // Optional: Add quick update handlers if they are implemented here
-  // handleQuickUpdate?: (field: 'documentsCompleted' | 'videoSessionsCompleted', increment: number) => void;
+  deleteWorkLogAction: (id: string) => void;
 }
 
 // --- Component ---
 
 const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
-  initialWorkLogs = [], // Should be just today's log (or empty) when used on home page
+  initialWorkLogs = [],
   initialUphTargets = [],
   initialActiveTarget = null,
   deleteWorkLogAction,
 }) => {
 
+  const todayLog = initialWorkLogs.length > 0 ? initialWorkLogs[0] : null;
+  // Find the target specifically associated with today's log, if it exists
+  const logTarget = todayLog?.targetId
+    ? initialUphTargets.find(t => t.id === todayLog.targetId)
+    : null;
+  // Determine the target to display: log's target if found, otherwise active target
+  const displayTarget = logTarget ?? initialActiveTarget;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Today's Metrics</CardTitle>
-         {/* Display Active Target Info or other context */}
-         {initialActiveTarget ? (
+         {/* Display Target Info */}
+         {displayTarget ? (
              <CardDescription className="text-sm mt-1">
-                Current Active Target: <span className="font-medium">{initialActiveTarget.name}</span> (Goal UPH: {initialActiveTarget.targetUPH})
+                Metrics calculated against: <span className="font-medium">{displayTarget.name}</span> (Goal UPH: {displayTarget.targetUPH.toFixed(1)})
+                {!logTarget && initialActiveTarget && todayLog?.targetId && (
+                  <span className="text-xs text-muted-foreground ml-1">(Log's original target missing, using active)</span>
+                )}
              </CardDescription>
-            ) : initialUphTargets.length > 0 ? ( // Only show if targets exist but none active
-            <CardDescription className="text-sm text-destructive mt-1">
-                No active UPH target set. Define or activate one in Log / Targets.
-            </CardDescription>
-            ) : null // Don't show anything if no targets defined yet
+            ) : initialUphTargets.length > 0 && !displayTarget ? ( // Targets exist but none active or associated
+             <CardDescription className="text-sm text-destructive mt-1 flex items-center gap-1">
+                 <AlertCircle className="h-4 w-4" /> No active UPH target set and log has no target. Define/activate one.
+             </CardDescription>
+            ) : initialUphTargets.length === 0 ? ( // No targets defined at all
+             <CardDescription className="text-sm text-muted-foreground mt-1">
+                 No UPH targets defined yet. Add one in Log / Targets.
+             </CardDescription>
+            ) : null
         }
+             {/* Message if no log exists for today */}
              {initialWorkLogs.length === 0 && (
                  <CardDescription className="text-sm text-muted-foreground mt-2">
-                     No work log recorded for today yet. Add one in Log / Targets.
+                     No work log recorded for today yet. Add one in Log / Targets to see metrics.
                 </CardDescription>
             )}
       </CardHeader>
       <CardContent>
-        {/* Render the TargetMetricsDisplay, passing only today's log */}
-        {/* It will inherently only show the "Today" section based on the passed logs */}
+        {/* Render the TargetMetricsDisplay, passing today's log and all targets */}
         <TargetMetricsDisplay
-            allWorkLogs={initialWorkLogs} // Pass today's log(s)
-            targets={initialUphTargets}
-            deleteWorkLogAction={deleteWorkLogAction} // Pass delete action down
-            showTodaySection={true} // Explicitly show today section
+            allWorkLogs={initialWorkLogs} // Pass only today's log
+            targets={initialUphTargets} // Pass all available targets for context/comparison
+            deleteWorkLogAction={deleteWorkLogAction}
+            showTodaySection={true}
          />
       </CardContent>
     </Card>

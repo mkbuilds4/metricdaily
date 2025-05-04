@@ -1,8 +1,9 @@
+
 /**
  * Represents a single day's work log entry.
  */
 export interface DailyWorkLog {
-  id: string; // Unique identifier, typically generated (e.g., UUID)
+  id: string; // Unique identifier, typically generated
   date: string; // Format: 'YYYY-MM-DD'
   startTime: string; // Format: 'HH:mm' (24-hour)
   endTime: string; // Format: 'HH:mm' (24-hour)
@@ -10,6 +11,7 @@ export interface DailyWorkLog {
   hoursWorked: number; // Calculated from startTime, endTime, and breakDurationMinutes
   documentsCompleted: number;
   videoSessionsCompleted: number;
+  targetId?: string; // Optional: Link to the UPHTarget active when logging
   notes?: string; // Optional notes for the day
 }
 
@@ -25,3 +27,4 @@ export interface UPHTarget {
   videosPerUnit: number; // How many video sessions are required to complete one unit *for this target*
   isActive: boolean; // Indicates if this is the currently active target for calculations
 }
+
