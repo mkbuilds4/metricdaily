@@ -1,9 +1,11 @@
+
 "use client"
 
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
 import { PanelLeft } from "lucide-react"
+import NextLink from "next/link" // Import NextLink
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -84,7 +86,9 @@ const SidebarProvider = React.forwardRef<
         }
 
         // This sets the cookie to keep the sidebar state.
-        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+        if (typeof window !== 'undefined') {
+          document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+        }
       },
       [setOpenProp, open]
     )
@@ -98,18 +102,20 @@ const SidebarProvider = React.forwardRef<
 
     // Adds a keyboard shortcut to toggle the sidebar.
     React.useEffect(() => {
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (
-          event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-          (event.metaKey || event.ctrlKey)
-        ) {
-          event.preventDefault()
-          toggleSidebar()
-        }
-      }
+       if (typeof window !== 'undefined') {
+           const handleKeyDown = (event: KeyboardEvent) => {
+            if (
+              event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
+              (event.metaKey || event.ctrlKey)
+            ) {
+              event.preventDefault()
+              toggleSidebar()
+            }
+          }
 
-      window.addEventListener("keydown", handleKeyDown)
-      return () => window.removeEventListener("keydown", handleKeyDown)
+          window.addEventListener("keydown", handleKeyDown)
+          return () => window.removeEventListener("keydown", handleKeyDown)
+       }
     }, [toggleSidebar])
 
     // We add a state so that we can do data-state="expanded" or "collapsed".
@@ -316,10 +322,10 @@ SidebarRail.displayName = "SidebarRail"
 
 const SidebarInset = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"main">
->(({ className, ...props }, ref) => {
+  React.ComponentProps<"div"> // Changed from main to div
+>(({ className, ...props }, ref) => { // Changed main to div
   return (
-    <main
+    <div // Changed main to div
       ref={ref}
       className={cn(
         "relative flex min-h-svh flex-1 flex-col bg-background",
@@ -533,13 +539,17 @@ const sidebarMenuButtonVariants = cva(
   }
 )
 
+// Define the props for SidebarMenuButton including href
+type SidebarMenuButtonProps = React.ComponentProps<"button"> & {
+  asChild?: boolean
+  isActive?: boolean
+  tooltip?: string | React.ComponentProps<typeof TooltipContent>
+  href?: string // Add href prop
+} & VariantProps<typeof sidebarMenuButtonVariants>
+
 const SidebarMenuButton = React.forwardRef<
-  HTMLButtonElement,
-  React.ComponentProps<"button"> & {
-    asChild?: boolean
-    isActive?: boolean
-    tooltip?: string | React.ComponentProps<typeof TooltipContent>
-  } & VariantProps<typeof sidebarMenuButtonVariants>
+  HTMLButtonElement | HTMLAnchorElement, // Can be button or anchor
+  SidebarMenuButtonProps
 >(
   (
     {
@@ -549,41 +559,57 @@ const SidebarMenuButton = React.forwardRef<
       size = "default",
       tooltip,
       className,
+      href, // Destructure href
+      children, // Destructure children
       ...props
     },
     ref
   ) => {
-    const Comp = asChild ? Slot : "button"
-    const { isMobile, state } = useSidebar()
+    const { isMobile, state, setOpenMobile } = useSidebar() // Get setOpenMobile to close mobile sidebar on navigation
 
-    const button = (
-      <Comp
-        ref={ref}
-        data-sidebar="menu-button"
-        data-size={size}
-        data-active={isActive}
-        className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
-        {...props}
-      />
-    )
+    const commonProps = {
+      "data-sidebar": "menu-button",
+      "data-size": size,
+      "data-active": isActive,
+      className: cn(sidebarMenuButtonVariants({ variant, size }), className),
+      onClick: (e: React.MouseEvent<HTMLElement>) => {
+          if (isMobile) {
+              setOpenMobile(false); // Close mobile sidebar on click
+          }
+          (props as any).onClick?.(e); // Call original onClick if provided
+      },
+      ...props,
+    }
 
+    // Determine the component type based on whether href is provided
+    const Comp = asChild ? Slot : (href ? NextLink : 'button')
+
+    const buttonContent = (
+      <Comp ref={ref as any} {...commonProps} {...(href ? { href } : {})}>
+        {children}
+      </Comp>
+    );
+
+    // Handle Tooltip logic
     if (!tooltip) {
-      return button
+      return buttonContent;
     }
 
     if (typeof tooltip === "string") {
-      tooltip = {
-        children: tooltip,
-      }
+        tooltip = {
+            children: tooltip,
+            className: cn("whitespace-nowrap", (tooltip as React.ComponentProps<typeof TooltipContent>).className) // Ensure tooltip content doesn't wrap
+        };
     }
 
     return (
       <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipTrigger asChild>{buttonContent}</TooltipTrigger>
         <TooltipContent
           side="right"
           align="center"
-          hidden={state !== "collapsed" || isMobile}
+          // Show tooltip only when collapsed and not on mobile
+          hidden={state === "expanded" || isMobile}
           {...tooltip}
         />
       </Tooltip>
@@ -591,6 +617,7 @@ const SidebarMenuButton = React.forwardRef<
   }
 )
 SidebarMenuButton.displayName = "SidebarMenuButton"
+
 
 const SidebarMenuAction = React.forwardRef<
   HTMLButtonElement,

@@ -2,7 +2,7 @@
 'use client'; // Required for usePathname
 
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Inter as FontSans } from 'next/font/google'; // Changed font import
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import {
@@ -20,15 +20,11 @@ import {
 } from '@/components/ui/sidebar';
 import { Home, Settings, List, History, BarChart } from 'lucide-react'; // Import icons
 import { usePathname } from 'next/navigation'; // Import usePathname
+import { cn } from "@/lib/utils"; // Import cn utility
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const fontSans = FontSans({ // Changed variable name
   subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
+  variable: '--font-sans', // Changed CSS variable name
 });
 
 // Metadata can still be defined in layout for static parts
@@ -46,13 +42,18 @@ export default function RootLayout({
   const pathname = usePathname(); // Get the current path
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning> {/* Add suppressHydrationWarning if needed */}
       <head>
         {/* Metadata tags can be placed here directly or managed via page metadata objects */}
         <title>Metric Daily</title>
         <meta name="description" content="Track your daily metrics." />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={cn(
+          "min-h-screen bg-background font-sans antialiased", // Use font-sans
+          fontSans.variable // Apply font variable
+        )}
+      >
         <SidebarProvider defaultOpen={true}>
           <Sidebar side="left" variant="sidebar" collapsible="icon">
             <SidebarHeader>
@@ -107,9 +108,10 @@ export default function RootLayout({
              </SidebarFooter> */}
           </Sidebar>
           <SidebarInset>
-            <div className="p-4 md:p-6 lg:p-8"> {/* Consistent padding */}
-                 {children}
-            </div>
+            {/* Use main tag for semantic structure and apply padding here */}
+             <main className="p-4 md:p-6 lg:p-8">
+               {children}
+             </main>
           </SidebarInset>
         </SidebarProvider>
         <Toaster />
