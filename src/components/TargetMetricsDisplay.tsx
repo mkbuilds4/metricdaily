@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Trash2, BookOpen, Video, Clock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'; // Added pagination icons
+import { Trash2, BookOpen, Video, Clock, ChevronDown } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { parse, addDays, addHours, format, addMinutes, isValid } from 'date-fns';
 import {
@@ -30,31 +30,29 @@ import {
     formatFriendlyDate,
     calculateRemainingUnits,
     calculateCurrentMetrics,
+    calculateTimeAheadBehindSchedule, // Import the new function
+    formatTimeAheadBehind, // Import the new formatter
 } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
-import PreviousLogTriggerSummary from './PreviousLogTriggerSummary';
-import { cn } from '@/lib/utils'; // Import cn
+import PreviousLogTriggerSummary from './PreviousLogTriggerSummary'; // Import the component for previous log triggers
+import { cn } from '@/lib/utils';
 
-const ITEMS_PER_PAGE = 10; // Number of previous logs to show per page
 
 interface TargetMetricsDisplayProps {
   allWorkLogs: DailyWorkLog[];
   targets: UPHTarget[];
   deleteWorkLogAction: (id: string) => void;
-  showTodaySection?: boolean;
-  paginatePreviousLogs?: boolean; // New prop to enable/disable pagination
+  showTodaySection?: boolean; // New prop to control today's section visibility
 }
 
 const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   allWorkLogs = [],
   targets = [],
   deleteWorkLogAction,
-  showTodaySection = true,
-  paginatePreviousLogs = false, // Default to false
+  showTodaySection = true, // Default to showing today's section
 }) => {
   const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
-  const [currentPage, setCurrentPage] = useState(1); // State for pagination
 
   useEffect(() => {
     // Defer setting current time until client-side mount
@@ -66,7 +64,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   }, []);
 
 
-  const { todayLog, paginatedPreviousLogs, totalPages } = useMemo(() => {
+  const { todayLog, previousLogsByDate } = useMemo(() => {
     const todayDateStr = formatDateISO(new Date());
     let foundTodayLog: DailyWorkLog | null = null;
     const prevLogsMap: Record<string, DailyWorkLog[]> = {};
@@ -98,33 +96,17 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         }
     });
 
-    // Create the initial grouped array, sorted
-    const allPrevLogsGrouped = Object.entries(prevLogsMap)
+    // Use only the first log found for each previous date for the accordion trigger/content
+    const prevLogsGrouped = Object.entries(prevLogsMap)
                                 .map(([date, logs]) => ({ date, log: logs[0] })) // Ensure 'log' property exists
-                                .sort((a, b) => b.date.localeCompare(a.date)); // Sort dates descending (most recent first)
-
-
-    // --- Pagination Logic ---
-    let paginatedLogs: typeof allPrevLogsGrouped = allPrevLogsGrouped;
-    let calculatedTotalPages = 1;
-
-    if (paginatePreviousLogs && allPrevLogsGrouped.length > 0) {
-        calculatedTotalPages = Math.ceil(allPrevLogsGrouped.length / ITEMS_PER_PAGE);
-        const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-        const endIndex = startIndex + ITEMS_PER_PAGE;
-        paginatedLogs = allPrevLogsGrouped.slice(startIndex, endIndex);
-    } else {
-         // If not paginating, still calculate total pages as 1 if there are items
-         calculatedTotalPages = allPrevLogsGrouped.length > 0 ? 1 : 0;
-    }
+                                .sort((a, b) => b.date.localeCompare(a.date)); // Sort dates descending
 
 
     return {
         todayLog: showTodaySection ? foundTodayLog : null,
-        paginatedPreviousLogs: paginatedLogs,
-        totalPages: calculatedTotalPages
+        previousLogsByDate: prevLogsGrouped
     };
-  }, [allWorkLogs, showTodaySection, paginatePreviousLogs, currentPage]); // Add pagination deps
+  }, [allWorkLogs, showTodaySection]);
 
 
   const sortedTargets = useMemo(() => [...targets].sort((a, b) => a.targetUPH - b.targetUPH), [targets]);
@@ -140,23 +122,10 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     }
     try {
       deleteWorkLogAction(log.id);
-      // No toast here, handled by the caller page
-      // toast({
-      //   title: "Log Deleted",
-      //   description: `Work log for ${formattedLogDate} deleted successfully.`,
-      // });
-       // If the deleted log was on the current page, potentially adjust page number
-       if (paginatedPreviousLogs.length === 1 && currentPage > 1) {
-            setCurrentPage(currentPage - 1);
-       }
+      // Toast handled by parent component
     } catch (error) {
       console.error("Failed to delete work log:", error);
-      // Let caller handle toast
-      // toast({
-      //   variant: "destructive",
-      //   title: "Deletion Failed",
-      //   description: error instanceof Error ? error.message : "Could not delete the work log.",
-      // });
+      // Toast handled by parent component
     }
   };
 
@@ -169,22 +138,27 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
       let projectedTimeResult = { projectedTime: '-', remainingDuration: '-' };
       let currentMetrics = { currentUnits: 0, currentUPH: 0 };
+      let timeAheadBehindMinutes: number | null = null;
+
 
        if (isToday && currentTime) {
            projectedTimeResult = calculateProjectedGoalHitTime(log, target, currentTime);
            currentMetrics = calculateCurrentMetrics(log, target, currentTime); // Includes current UPH based on time elapsed
+           timeAheadBehindMinutes = calculateTimeAheadBehindSchedule(log, target, currentTime); // Calculate time ahead/behind
        }
 
-      const isBehind = totalDifferenceUnits < 0;
+      const isBehindSchedule = timeAheadBehindMinutes !== null && timeAheadBehindMinutes < 0;
+      const isAheadSchedule = timeAheadBehindMinutes !== null && timeAheadBehindMinutes > 0;
+      const isOnSchedule = timeAheadBehindMinutes !== null && timeAheadBehindMinutes === 0;
 
       return (
         <Card key={`${log.id}-${target.id}`} className="flex flex-col justify-between">
             <CardHeader className="pb-2">
                  <div className="flex justify-between items-start">
                     <CardTitle className="text-lg font-semibold">{target.name}</CardTitle>
-                     {/* Show +/- only for previous logs card */}
+                     {/* Show +/- units vs goal only for previous logs card */}
                      {!isToday && (
-                         <span className={`text-base font-medium ${isBehind ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
+                         <span className={`text-base font-medium ${totalDifferenceUnits < 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
                             {(totalDifferenceUnits >= 0 ? '+' : '') + totalDifferenceUnits.toFixed(2)} Units
                          </span>
                      )}
@@ -210,10 +184,23 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             <p className="text-muted-foreground">Est. Goal Hit</p>
                             <p className="font-medium">{projectedTimeResult.projectedTime}</p>
                         </div>
+                         {/* Display Time Ahead/Behind */}
                          <div>
+                            <p className="text-muted-foreground">Schedule Status</p>
+                            <p className={cn(
+                                "font-medium",
+                                isAheadSchedule && "text-green-600 dark:text-green-500",
+                                isBehindSchedule && "text-red-600 dark:text-red-500",
+                                isOnSchedule && "text-foreground" // Or maybe muted-foreground
+                                )}>
+                                {formatTimeAheadBehind(timeAheadBehindMinutes)}
+                             </p>
+                         </div>
+                         {/* Removed Remaining Duration to avoid confusion with Schedule Status */}
+                         {/* <div>
                              <p className="text-muted-foreground">Time Remaining</p>
                              <p className="font-medium">{projectedTimeResult.remainingDuration}</p>
-                         </div>
+                         </div> */}
                     </>
                  ) : ( // Previous log view shows summary stats for the completed day
                      <>
@@ -231,7 +218,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                        </div>
                        <div>
                          <p className="text-muted-foreground">+/- Goal</p>
-                          <p className={`font-medium ${isBehind ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
+                          <p className={`font-medium ${totalDifferenceUnits < 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
                              {(totalDifferenceUnits >= 0 ? '+' : '') + totalDifferenceUnits.toFixed(2)}
                           </p>
                       </div>
@@ -314,8 +301,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                              </div>
                          </div>
                      )}
-                     {/* Total Units Completed (Shown for both contexts now) */}
-                      {summaryTarget && ( // Only show if there's a target context
+                     {/* Total Units Completed (Shown only for previous day now) */}
+                      {!isToday && summaryTarget && (
                            <div className="flex items-center space-x-2">
                                {/* You can add an icon if desired, e.g., Sigma */}
                                <div>
@@ -354,17 +341,17 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       )}
 
       {/* Separator if both Today and Previous logs are shown */}
-      {showTodaySection && todayLog && paginatedPreviousLogs.length > 0 && <Separator className="my-6" />}
+      {showTodaySection && todayLog && previousLogsByDate.length > 0 && <Separator className="my-6" />}
 
-      {/* === Previous Logs Section (with Accordion and Pagination) === */}
-      {paginatedPreviousLogs.length > 0 && (
+      {/* === Previous Logs Section (with Accordion) === */}
+      {previousLogsByDate.length > 0 && (
         <div>
            {/* Show Title only if needed (e.g., on previous logs page) */}
            {(!showTodaySection || (showTodaySection && todayLog)) && (
                 <h3 className="text-xl font-semibold mb-3">Previous Logs</h3>
            )}
            <Accordion type="multiple" className="w-full space-y-1">
-               {paginatedPreviousLogs.map(({ date, log }) => (
+               {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date} className="border-b bg-muted/20 rounded-md">
                         {/* Custom Trigger using asChild */}
                         <AccordionTrigger asChild className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50">
@@ -373,6 +360,16 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                {/* Pass all targets for summary calculation */}
                                <PreviousLogTriggerSummary log={log} allTargets={sortedTargets} />
                              </div>
+                              <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive h-8 w-8 mr-2 shrink-0" // Added shrink-0
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteLog(log); }} // Stop propagation here too
+                                  title="Delete This Log"
+                                  aria-label="Delete This Log"
+                              >
+                                  <Trash2 className="h-4 w-4" />
+                              </Button>
                              {/* Chevron managed by AccordionTrigger default rendering */}
                              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
                            </div>
@@ -391,38 +388,11 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     </AccordionItem>
                 ))}
            </Accordion>
-
-           {/* Pagination Controls */}
-           {paginatePreviousLogs && totalPages > 1 && (
-                <div className="flex items-center justify-center space-x-2 mt-4">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                    >
-                        <ChevronLeft className="h-4 w-4" />
-                        Previous
-                    </Button>
-                    <span className="text-sm text-muted-foreground">
-                        Page {currentPage} of {totalPages}
-                    </span>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages}
-                    >
-                        Next
-                        <ChevronRight className="h-4 w-4" />
-                    </Button>
-                </div>
-            )}
         </div>
       )}
 
       {/* === Messages for No Data === */}
-       {(!showTodaySection || !todayLog) && paginatedPreviousLogs.length === 0 && (
+       {(!showTodaySection || !todayLog) && previousLogsByDate.length === 0 && (
            <p className="text-center text-muted-foreground">No work logs found.</p>
        )}
        {targets.length === 0 && (
@@ -434,5 +404,3 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
-
-    
