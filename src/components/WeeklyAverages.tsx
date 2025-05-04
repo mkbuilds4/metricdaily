@@ -31,13 +31,15 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
 
     const logsThisWeek = allWorkLogs.filter(log => {
       try {
-        const logDate = parseISO(log.date); // Assuming date is 'YYYY-MM-DD'
+        // Ensure date is treated as local time by adding time component
+        const logDate = parseISO(log.date + 'T00:00:00');
         return isValid(logDate) && isWithinInterval(logDate, { start: weekStart, end: weekEnd });
       } catch (e) {
         console.warn(`Invalid date format for log: ${log.id}, date: ${log.date}`);
         return false;
       }
     });
+
 
     if (logsThisWeek.length === 0) {
       return 0; // No logs this week to average
@@ -67,7 +69,8 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
       <CardHeader>
         <CardTitle>Weekly Average UPH</CardTitle>
         <CardDescription>
-          Average Units Per Hour this week ({weekStartDateFormatted} - {weekEndDateFormatted}). Based on active target and logged days.
+           {/* Tooltip now only shows the date range */}
+          {weekStartDateFormatted} - {weekEndDateFormatted}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -76,7 +79,8 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
         ) : (
           <div className="text-2xl font-bold tabular-nums">
             {weeklyAverageUPH > 0 ? weeklyAverageUPH.toFixed(2) : '-'}
-            <span className="text-sm font-normal text-muted-foreground ml-1">Avg UPH</span>
+            {/* Unit label changed to UPH */}
+            <span className="text-sm font-normal text-muted-foreground ml-1">UPH</span>
           </div>
         )}
       </CardContent>
