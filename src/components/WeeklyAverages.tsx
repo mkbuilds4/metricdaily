@@ -72,7 +72,7 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
   const weekEndDateFormatted = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'MMM d');
 
   return (
-    <Card>
+    <Card> {/* Wrap in Card */}
       <CardHeader>
         <CardTitle>Weekly Average UPH</CardTitle>
         <CardDescription>

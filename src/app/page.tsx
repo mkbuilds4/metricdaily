@@ -179,86 +179,96 @@ export default function Home() {
     <div className="w-full max-w-7xl mx-auto space-y-8">
         <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Daily Dashboard</h1>
 
-        {/* --- Quick Update Section --- */}
-        {todayLog ? (
-            <Card>
-                <CardHeader>
-                    <CardTitle>Quick Update Today's Counts</CardTitle>
-                 </CardHeader>
-                <CardContent className="flex flex-col sm:flex-row gap-4 sm:gap-8">
-                    {/* Document Count */}
-                    <div className="flex items-center gap-2">
-                        <Label htmlFor="quick-update-docs" className="min-w-[80px] sm:min-w-[auto]">Documents:</Label>
-                        <Button
-                            id="quick-update-docs-minus"
-                            aria-label="Decrease document count"
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handleQuickUpdate('documentsCompleted', -1)}
-                            disabled={isLoading} // Disable while saving potentially
-                        >
-                            <Minus className="h-4 w-4"/>
-                        </Button>
-                        <span className="text-lg font-medium w-10 text-center tabular-nums">
-                            {todayLog.documentsCompleted}
-                        </span>
-                        <Button
-                             id="quick-update-docs-plus"
-                             aria-label="Increase document count"
-                             variant="outline"
-                             size="icon"
-                             className="h-8 w-8"
-                            onClick={() => handleQuickUpdate('documentsCompleted', 1)}
-                            disabled={isLoading}
-                        >
-                             <Plus className="h-4 w-4"/>
-                        </Button>
-                    </div>
-                    {/* Video Count */}
-                     <div className="flex items-center gap-2">
-                        <Label htmlFor="quick-update-videos" className="min-w-[80px] sm:min-w-[auto]">Videos:</Label>
-                        <Button
-                            id="quick-update-videos-minus"
-                            aria-label="Decrease video count"
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handleQuickUpdate('videoSessionsCompleted', -1)}
-                             disabled={isLoading}
-                         >
-                            <Minus className="h-4 w-4"/>
-                        </Button>
-                         <span className="text-lg font-medium w-10 text-center tabular-nums">
-                            {todayLog.videoSessionsCompleted}
-                        </span>
-                        <Button
-                            id="quick-update-videos-plus"
-                            aria-label="Increase video count"
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handleQuickUpdate('videoSessionsCompleted', 1)}
-                            disabled={isLoading}
-                        >
-                            <Plus className="h-4 w-4"/>
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-        ) : (
-             <Card className="border-dashed border-muted-foreground">
-                <CardHeader>
-                    <CardTitle className="text-muted-foreground">Log Not Found</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-muted-foreground">No work log found for today. Add one on the 'Log / Targets' page to enable quick updates.</p>
-                 </CardContent>
-            </Card>
-        )}
+        {/* Grid container for Quick Update and Weekly Averages */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* --- Quick Update Section --- */}
+            {todayLog ? (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Quick Update Today's Counts</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col sm:flex-row gap-4 sm:gap-8">
+                        {/* Document Count */}
+                        <div className="flex items-center gap-2">
+                            <Label htmlFor="quick-update-docs" className="min-w-[80px] sm:min-w-[auto]">Documents:</Label>
+                            <Button
+                                id="quick-update-docs-minus"
+                                aria-label="Decrease document count"
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleQuickUpdate('documentsCompleted', -1)}
+                                disabled={isLoading} // Disable while saving potentially
+                            >
+                                <Minus className="h-4 w-4"/>
+                            </Button>
+                            <span className="text-lg font-medium w-10 text-center tabular-nums">
+                                {todayLog.documentsCompleted}
+                            </span>
+                            <Button
+                                id="quick-update-docs-plus"
+                                aria-label="Increase document count"
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleQuickUpdate('documentsCompleted', 1)}
+                                disabled={isLoading}
+                            >
+                                <Plus className="h-4 w-4"/>
+                            </Button>
+                        </div>
+                        {/* Video Count */}
+                        <div className="flex items-center gap-2">
+                            <Label htmlFor="quick-update-videos" className="min-w-[80px] sm:min-w-[auto]">Videos:</Label>
+                            <Button
+                                id="quick-update-videos-minus"
+                                aria-label="Decrease video count"
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleQuickUpdate('videoSessionsCompleted', -1)}
+                                disabled={isLoading}
+                            >
+                                <Minus className="h-4 w-4"/>
+                            </Button>
+                            <span className="text-lg font-medium w-10 text-center tabular-nums">
+                                {todayLog.videoSessionsCompleted}
+                            </span>
+                            <Button
+                                id="quick-update-videos-plus"
+                                aria-label="Increase video count"
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleQuickUpdate('videoSessionsCompleted', 1)}
+                                disabled={isLoading}
+                            >
+                                <Plus className="h-4 w-4"/>
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            ) : (
+                <Card className="border-dashed border-muted-foreground">
+                    <CardHeader>
+                        <CardTitle className="text-muted-foreground">Log Not Found</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-muted-foreground">No work log found for today. Add one on the 'Log / Targets' page to enable quick updates.</p>
+                    </CardContent>
+                </Card>
+            )}
 
+            {/* Weekly Averages Component */}
+            <WeeklyAverages
+                allWorkLogs={workLogs}
+                targets={uphTargets}
+                activeTarget={activeTarget}
+            />
+        </div>
 
-        {/* Productivity Dashboard - Now only shows Today's Metrics */}
+        {/* --- Productivity Dashboard --- */}
+        {/* This remains below the grid */}
         <ProductivityDashboard
           initialWorkLogs={todayLog ? [todayLog] : []} // Pass only today's log (or empty array)
           initialUphTargets={uphTargets}
@@ -266,15 +276,6 @@ export default function Home() {
           deleteWorkLogAction={handleDeleteWorkLog} // Pass delete action
         />
 
-        {/* Weekly Averages Component */}
-        <WeeklyAverages
-            allWorkLogs={workLogs}
-            targets={uphTargets}
-            activeTarget={activeTarget}
-        />
-
     </div>
   );
 }
-
-      
