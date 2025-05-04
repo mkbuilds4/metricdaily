@@ -1,6 +1,7 @@
+
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -27,9 +28,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Edit, CheckCircle, XCircle } from 'lucide-react'; // Icons
+import { Trash2, Edit, CheckCircle, XCircle, ArrowUpDown } from 'lucide-react'; // Icons
 import { useToast } from "@/hooks/use-toast";
 import type { UPHTarget } from '@/types'; // Assuming type is defined
+import { cn } from '@/lib/utils'; // Import cn for conditional classes
 
 // Zod Schema updated for docsPerUnit and videosPerUnit
 const targetFormSchema = z.object({
@@ -51,6 +53,10 @@ interface UPHTargetManagerProps {
   setActiveUPHTargetAction: (id: string) => UPHTarget; // Returns the activated target
 }
 
+// Define sortable columns
+type SortableColumn = keyof Pick<UPHTarget, 'name' | 'targetUPH' | 'docsPerUnit' | 'videosPerUnit'>;
+type SortDirection = 'asc' | 'desc';
+
 // --- Component ---
 const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     targets: initialTargets = [],
@@ -66,10 +72,40 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
   // Use local state for targets to enable immediate UI updates
   const [localTargets, setLocalTargets] = useState<UPHTarget[]>(initialTargets);
 
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<SortableColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+
   // Sync local state when the initial prop changes (e.g., after parent reloads data)
   useEffect(() => {
     setLocalTargets(initialTargets);
   }, [initialTargets]);
+
+  // Memoized sorted targets
+  const sortedTargets = useMemo(() => {
+    if (!sortColumn) {
+      // Default sort or maintain original order if no column selected
+      return [...localTargets];
+    }
+
+    return [...localTargets].sort((a, b) => {
+      const valA = a[sortColumn];
+      const valB = b[sortColumn];
+
+      let comparison = 0;
+      if (typeof valA === 'string' && typeof valB === 'string') {
+        comparison = valA.localeCompare(valB);
+      } else if (typeof valA === 'number' && typeof valB === 'number') {
+        comparison = valA - valB;
+      } else {
+        // Fallback for mixed or unexpected types
+        comparison = String(valA).localeCompare(String(valB));
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [localTargets, sortColumn, sortDirection]);
 
 
   const form = useForm<TargetFormData>({
@@ -81,6 +117,14 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
       videosPerUnit: 1,
     },
   });
+
+  // --- Sorting Handler ---
+  const handleSort = useCallback((column: SortableColumn) => {
+    setSortDirection(prevDirection =>
+      sortColumn === column && prevDirection === 'asc' ? 'desc' : 'asc'
+    );
+    setSortColumn(column);
+  }, [sortColumn]); // Depend on sortColumn to correctly toggle direction
 
   // --- Form Handling ---
   const openEditDialog = (target: UPHTarget) => {
@@ -218,6 +262,16 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     }
   };
 
+  // Helper to render sort icon
+  const renderSortIcon = (column: SortableColumn) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />;
+    }
+    return sortDirection === 'asc' ?
+      <ArrowUpDown className="ml-2 h-4 w-4" /> : // Could use ArrowUp/ArrowDown for clearer indication
+      <ArrowUpDown className="ml-2 h-4 w-4" />;
+  };
+
 
   return (
     <Card>
@@ -311,20 +365,41 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
           <TableHeader>
             <TableRow>
               <TableHead>Active</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Target UPH</TableHead>
-              <TableHead>Docs / Unit</TableHead>
-              <TableHead>Videos / Unit</TableHead>
+              {/* Make headers clickable for sorting */}
+              <TableHead>
+                 <Button variant="ghost" onClick={() => handleSort('name')} className="px-0 hover:bg-transparent">
+                   Name
+                   {renderSortIcon('name')}
+                 </Button>
+              </TableHead>
+              <TableHead>
+                 <Button variant="ghost" onClick={() => handleSort('targetUPH')} className="px-0 hover:bg-transparent">
+                   Target UPH
+                   {renderSortIcon('targetUPH')}
+                 </Button>
+              </TableHead>
+              <TableHead>
+                 <Button variant="ghost" onClick={() => handleSort('docsPerUnit')} className="px-0 hover:bg-transparent">
+                   Docs / Unit
+                   {renderSortIcon('docsPerUnit')}
+                 </Button>
+              </TableHead>
+              <TableHead>
+                 <Button variant="ghost" onClick={() => handleSort('videosPerUnit')} className="px-0 hover:bg-transparent">
+                   Videos / Unit
+                   {renderSortIcon('videosPerUnit')}
+                 </Button>
+              </TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {localTargets.length === 0 && (
+            {sortedTargets.length === 0 && ( // Use sortedTargets here
                  <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground">No UPH targets defined yet.</TableCell>
                 </TableRow>
             )}
-            {localTargets.map((target) => (
+            {sortedTargets.map((target) => ( // Use sortedTargets here
               <TableRow key={target.id} className={target.isActive ? 'bg-accent/10' : ''}>
                 <TableCell>
                   {target.isActive ? (
@@ -381,3 +456,4 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
 };
 
 export default UPHTargetManager;
+
