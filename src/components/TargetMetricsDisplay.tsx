@@ -43,6 +43,7 @@ interface TargetMetricsDisplayProps {
   targets: UPHTarget[];
   deleteWorkLogAction: (id: string) => void;
   showTodaySection?: boolean; // New prop to control today's section visibility
+  paginatePreviousLogs?: boolean; // Prop to enable pagination (optional)
 }
 
 const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
@@ -50,6 +51,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   targets = [],
   deleteWorkLogAction,
   showTodaySection = true, // Default to showing today's section
+  paginatePreviousLogs = false, // Default to not paginating
 }) => {
   const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
@@ -149,7 +151,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
       const isBehindSchedule = timeAheadBehindMinutes !== null && timeAheadBehindMinutes < 0;
       const isAheadSchedule = timeAheadBehindMinutes !== null && timeAheadBehindMinutes > 0;
-      const isOnSchedule = timeAheadBehindMinutes !== null && timeAheadBehindMinutes === 0;
+      const isOnSchedule = timeAheadBehindMinutes !== null && Math.abs(timeDifferenceMinutes) < 0.05; // Use tolerance for float comparison
 
       return (
         <Card key={`${log.id}-${target.id}`} className="flex flex-col justify-between">
@@ -180,10 +182,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             <p className="text-muted-foreground">Target Units</p>
                             <p className="font-medium">{totalRequiredUnits.toFixed(2)}</p>
                         </div>
-                        <div>
-                            <p className="text-muted-foreground">Est. Goal Hit</p>
-                            <p className="font-medium">{projectedTimeResult.projectedTime}</p>
-                        </div>
                          {/* Display Time Ahead/Behind */}
                          <div>
                             <p className="text-muted-foreground">Schedule Status</p>
@@ -196,11 +194,14 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 {formatTimeAheadBehind(timeAheadBehindMinutes)}
                              </p>
                          </div>
-                         {/* Removed Remaining Duration to avoid confusion with Schedule Status */}
-                         {/* <div>
-                             <p className="text-muted-foreground">Time Remaining</p>
-                             <p className="font-medium">{projectedTimeResult.remainingDuration}</p>
-                         </div> */}
+                        {/* Combined Estimated Goal Hit Time and Remaining Work */}
+                         <div className="col-span-2"> {/* Span across both columns */}
+                             <p className="text-muted-foreground">Est. Goal Hit Time / Remaining Work</p>
+                             <p className="font-medium">
+                                {projectedTimeResult.projectedTime}
+                                {projectedTimeResult.remainingDuration !== '-' && ` (${projectedTimeResult.remainingDuration})`}
+                             </p>
+                         </div>
                     </>
                  ) : ( // Previous log view shows summary stats for the completed day
                      <>
@@ -261,13 +262,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                          </div>
                          {/* Delete button only inside previous log accordion content */}
                          {!isToday && (
-                           <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2"
-                              onClick={(e) => { e.stopPropagation(); handleDeleteLog(log); }} // Stop propagation to prevent accordion toggle
-                              title="Delete This Log"
-                              aria-label="Delete This Log"
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive h-8 w-8 absolute top-2 right-2"
+                                onClick={(e) => { e.stopPropagation(); handleDeleteLog(log); }} // Stop propagation to prevent accordion toggle
+                                title="Delete This Log"
+                                aria-label="Delete This Log"
                             >
                                 <Trash2 className="h-4 w-4" />
                            </Button>
@@ -301,8 +302,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                              </div>
                          </div>
                      )}
-                     {/* Total Units Completed (Shown only for previous day now) */}
-                      {!isToday && summaryTarget && (
+                     {/* Total Units Completed (Shown for both now for clarity) */}
+                      {summaryTarget && (
                            <div className="flex items-center space-x-2">
                                {/* You can add an icon if desired, e.g., Sigma */}
                                <div>
@@ -353,27 +354,26 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
            <Accordion type="multiple" className="w-full space-y-1">
                {previousLogsByDate.map(({ date, log }) => (
                     <AccordionItem value={date} key={date} className="border-b bg-muted/20 rounded-md">
-                        {/* Custom Trigger using asChild */}
-                        <AccordionTrigger asChild className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50">
-                           <div className="flex items-center justify-between w-full gap-4">
-                             <div className="flex-grow">
-                               {/* Pass all targets for summary calculation */}
-                               <PreviousLogTriggerSummary log={log} allTargets={sortedTargets} />
-                             </div>
-                              <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="text-destructive hover:text-destructive h-8 w-8 mr-2 shrink-0" // Added shrink-0
-                                  onClick={(e) => { e.stopPropagation(); handleDeleteLog(log); }} // Stop propagation here too
-                                  title="Delete This Log"
-                                  aria-label="Delete This Log"
-                              >
-                                  <Trash2 className="h-4 w-4" />
-                              </Button>
-                             {/* Chevron managed by AccordionTrigger default rendering */}
-                             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                           </div>
-                        </AccordionTrigger>
+                         {/* Previous Log Trigger */}
+                         <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50" hideChevron>
+                            <div className="flex items-center justify-between w-full gap-4">
+                                <div className="flex-grow">
+                                    {/* Pass all targets for summary calculation */}
+                                    <PreviousLogTriggerSummary log={log} allTargets={sortedTargets} />
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-destructive hover:text-destructive h-8 w-8 mr-2 shrink-0" // Added shrink-0
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteLog(log); }} // Stop propagation here too
+                                    title="Delete This Log"
+                                    aria-label="Delete This Log"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                            </div>
+                         </AccordionTrigger>
                         <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-md">
                              {/* Render the detailed breakdown inside the content */}
                              {renderLogSummaryCard(log, false, sortedTargets)}
