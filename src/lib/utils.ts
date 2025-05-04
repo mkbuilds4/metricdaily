@@ -244,6 +244,61 @@ export function formatTimeAheadBehind(timeDifferenceMinutes: number | null): str
     }
 }
 
+/**
+ * Calculates the estimated time the target goal will be hit based on current progress and time ahead/behind.
+ * Adds the amount of time *behind* schedule to the scheduled end time.
+ * Subtracts the amount of time *ahead* schedule from the scheduled end time.
+ * Returns '-' if the goal is already met or calculation isn't possible.
+ *
+ * @param log - Today's DailyWorkLog object.
+ * @param timeDifferenceMinutes - The result from `calculateTimeAheadBehindSchedule`.
+ * @returns Formatted time string (e.g., "10:45 PM") or '-' or 'Goal Met'.
+ */
+export function calculateProjectedGoalHitTime(
+    log: DailyWorkLog | null,
+    timeDifferenceMinutes: number | null
+): string {
+    if (!log || timeDifferenceMinutes === null || !Number.isFinite(timeDifferenceMinutes)) {
+        return '-';
+    }
+
+    // Parse scheduled end time
+    const dateStr = log.date;
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(log.endTime) || !timeRegex.test(log.startTime)) return '-'; // Need both start and end
+
+    let shiftEndDate = parse(`${dateStr} ${log.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+    const shiftStartDate = parse(`${dateStr} ${log.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+
+    if (!isValid(shiftEndDate) || !isValid(shiftStartDate)) return '-';
+
+    // Handle overnight shift for end date calculation
+    if (shiftEndDate < shiftStartDate) {
+        shiftEndDate = addDays(shiftEndDate, 1);
+    }
+
+    // If already ahead of schedule by more than a tiny margin
+    if (timeDifferenceMinutes > 0.05) {
+        // Calculate when they would have hit the goal
+        const projectedTime = addMinutes(shiftEndDate, -timeDifferenceMinutes); // Subtract time ahead
+         // If projected time is in the past (meaning goal met)
+        if (projectedTime <= new Date()) {
+            return 'Goal Met';
+        }
+        return format(projectedTime, 'h:mm a');
+    }
+    // If behind schedule or on schedule
+    else {
+        // Add the time behind (which is negative, so addMinutes subtracts)
+        const projectedTime = addMinutes(shiftEndDate, -timeDifferenceMinutes);
+        // If projected time is in the past relative to now (meaning goal met), though this case is less likely if behind
+        if (projectedTime <= new Date() && timeDifferenceMinutes < -0.05) {
+             return 'Goal Met';
+        }
+        return format(projectedTime, 'h:mm a');
+    }
+}
+
 
 // --- Calculation Helper Functions ---
 
@@ -482,4 +537,5 @@ export function calculateCurrentMetrics(
         currentUPH: currentActualUPH,
     };
 }
+
 

@@ -1,5 +1,4 @@
 
-
 'use client'; // Required for usePathname
 
 import type { Metadata } from 'next';
@@ -51,7 +50,7 @@ export default function RootLayout({
       </head>
       <body
         className={cn(
-          "min-h-screen bg-background font-sans antialiased", // Use font-sans
+          "min-h-screen bg-background font-sans antialiased overflow-hidden", // Use font-sans, prevent body scroll
           fontSans.variable // Apply font variable
         )}
       >
@@ -108,7 +107,7 @@ export default function RootLayout({
                </SidebarMenuButton>
              </SidebarFooter> */}
           </Sidebar>
-          <SidebarInset>
+          <SidebarInset className="overflow-y-auto h-screen"> {/* Allow scrolling within the inset */}
             {/* Use main tag for semantic structure and apply padding here */}
              <main className="p-4 md:p-6 lg:p-8">
                {children}

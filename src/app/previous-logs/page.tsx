@@ -21,6 +21,7 @@ export default function PreviousLogsPage() {
 
   // Load data needed for this page
   const loadData = useCallback(() => {
+     if (typeof window === 'undefined') return; // Don't run on server
     console.log('[PreviousLogsPage] Loading data...');
     setIsLoading(true);
     try {
@@ -54,6 +55,7 @@ export default function PreviousLogsPage() {
   }, [loadData]);
 
   const handleDeleteWorkLog = useCallback((id: string) => {
+     if (typeof window === 'undefined') return;
     try {
       deleteWorkLog(id);
       setPreviousLogs(prev => prev.filter(log => log.id !== id)); // Update local state
@@ -71,14 +73,14 @@ export default function PreviousLogsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4">
+      <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4 md:p-6 lg:p-8"> {/* Added padding */}
         <p className="text-xl text-muted-foreground">Loading Previous Logs...</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-8">
+    <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8"> {/* Added padding */}
       <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Previous Work Logs</h1>
 
       {/* Use TargetMetricsDisplay to show the list of previous logs */}
@@ -97,4 +99,3 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
-    

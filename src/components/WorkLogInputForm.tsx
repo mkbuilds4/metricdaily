@@ -64,25 +64,18 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
   useEffect(() => {
     setIsClient(true);
     // Fetch active target ID on mount
-    const target = getActiveUPHTarget();
-    setActiveTargetId(target?.id);
+    if (typeof window !== 'undefined') {
+        const target = getActiveUPHTarget();
+        setActiveTargetId(target?.id);
+    }
   }, []);
 
   const isEditingToday = existingLog && existingLog.date === formatDateISO(new Date());
 
   const form = useForm<WorkLogFormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: existingLog && isEditingToday && isValid(parse(existingLog.date, 'yyyy-MM-dd', new Date())) ? {
-        date: parse(existingLog.date, 'yyyy-MM-dd', new Date()),
-        startTime: existingLog.startTime,
-        endTime: existingLog.endTime,
-        breakDurationMinutes: existingLog.breakDurationMinutes,
-        documentsCompleted: existingLog.documentsCompleted,
-        videoSessionsCompleted: existingLog.videoSessionsCompleted,
-        notes: existingLog.notes ?? '',
-        targetId: existingLog.targetId, // Keep existing targetId if editing
-    } : {
-        date: isClient ? new Date() : undefined, // Set date only on client
+    defaultValues: {
+        date: undefined, // Initialize as undefined
         startTime: '14:00',
         endTime: '22:30',
         breakDurationMinutes: 65,
@@ -95,7 +88,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
 
    // Update form defaults if existingLog changes or becomes available after mount
    useEffect(() => {
-    if (existingLog && isEditingToday) {
+    if (existingLog && isEditingToday && isClient) { // Ensure client-side
         const parsedDate = parse(existingLog.date, 'yyyy-MM-dd', new Date());
         if (isValid(parsedDate)) {
             form.reset({
@@ -111,26 +104,28 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
             const hours = calculateHoursWorked(existingLog.date, existingLog.startTime, existingLog.endTime, existingLog.breakDurationMinutes);
             setCalculatedHours(hours);
         }
-    } else if (!existingLog) {
-        // Optionally reset to defaults if the log being edited is removed
-        // resetToDefaults(); // Be cautious with this to avoid unwanted resets
+    } else if (!existingLog && isClient) { // Only reset if not editing and on client
+        resetToDefaults();
     }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [existingLog]);
+   }, [existingLog, isClient]); // Add isClient dependency
 
 
     // Handle client-side hydration and initial calculation
    useEffect(() => {
-        if (isClient && !form.getValues('date')) {
-             form.setValue('date', new Date(), { shouldDirty: false, shouldValidate: false });
-        }
-        const initialValues = form.getValues();
-        if (isValid(initialValues.date)) {
-            const hours = calculateHoursWorked(initialValues.date, initialValues.startTime, initialValues.endTime, initialValues.breakDurationMinutes);
-            setCalculatedHours(hours);
+        if (isClient) { // Only run on client
+            if (!form.getValues('date')) { // Set default date if not already set
+                 form.setValue('date', new Date(), { shouldDirty: false, shouldValidate: false });
+            }
+            // Initial calculation if values are present
+            const initialValues = form.getValues();
+            if (isValid(initialValues.date)) {
+                const hours = calculateHoursWorked(initialValues.date, initialValues.startTime, initialValues.endTime, initialValues.breakDurationMinutes);
+                setCalculatedHours(hours);
+            }
         }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [isClient]);
+   }, [isClient]); // Rerun only when isClient changes
 
 
   const watchStartTime = form.watch('startTime');
@@ -270,7 +265,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6"> {/* Responsive gap */}
                 {/* Date Picker */}
                 <FormField
                 control={form.control}
@@ -297,7 +292,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                         <Calendar
                             mode="single"
                             selected={field.value}
-                            onSelect={(date) => field.onChange(date)}
+                            onSelect={(date) => date && field.onChange(date)} // Ensure date is not null/undefined
                             disabled={(date) => date > new Date() || date < new Date('2023-01-01')}
                             initialFocus
                         />
@@ -319,7 +314,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
             </div>
 
             {/* Time and Break Inputs */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6"> {/* Responsive gap */}
                 <FormField control={form.control} name="startTime" render={({ field }) => (
                     <FormItem> <FormLabel>Start Time (HH:mm)</FormLabel> <FormControl><Input type="time" {...field} /></FormControl> <FormMessage /> </FormItem>
                 )}/>
@@ -332,7 +327,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
             </div>
 
             {/* Work Completed Inputs */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6"> {/* Responsive gap */}
                 <FormField control={form.control} name="documentsCompleted" render={({ field }) => (
                     <FormItem> <FormLabel>Documents Completed</FormLabel> <FormControl><Input type="number" placeholder="0" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} min="0" /></FormControl> <FormMessage /> </FormItem>
                 )}/>

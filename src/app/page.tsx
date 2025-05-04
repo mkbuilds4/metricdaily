@@ -47,6 +47,8 @@ export default function Home() {
   const { toast } = useToast();
 
   const loadData = useCallback((showLoadingIndicator = true) => {
+    if (typeof window === 'undefined') return; // Don't run on server
+
     if (showLoadingIndicator) {
       setIsLoading(true);
     }
@@ -96,6 +98,7 @@ export default function Home() {
 
   // --- Action Handlers ---
   const handleSaveWorkLog = useCallback((logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }) => {
+    if (typeof window === 'undefined') return {} as DailyWorkLog; // Type assertion might be needed
     try {
       const savedLog = saveWorkLog(logData);
       loadData(false); // Reload data without showing loading spinner for smoother UX
@@ -113,6 +116,7 @@ export default function Home() {
   }, [loadData, toast]);
 
   const handleDeleteWorkLog = useCallback((id: string) => {
+     if (typeof window === 'undefined') return;
     try {
         deleteWorkLog(id);
         loadData(false); // Reload data without spinner
@@ -130,6 +134,7 @@ export default function Home() {
 
   // --- Quick Update Handlers ---
    const handleQuickUpdate = (field: 'documentsCompleted' | 'videoSessionsCompleted', value: number | string) => {
+      if (typeof window === 'undefined') return; // Guard against server-side execution
       const todayDateStr = formatDateISO(new Date());
       const todayLog = workLogs.find(log => log.date === todayDateStr);
 
@@ -178,12 +183,10 @@ export default function Home() {
 
       try {
            handleSaveWorkLog(updatedLogData);
-           if (typeof value !== 'string') {
-                if (field === 'documentsCompleted') setDocInputValue(newValue.toString());
-                if (field === 'videoSessionsCompleted') setVideoInputValue(newValue.toString());
-           }
+           // No need to update input values here, effect hook handles it
       } catch(error) {
            if (typeof value === 'string') {
+                // Revert input on error
                 if (field === 'documentsCompleted') setDocInputValue(todayLog.documentsCompleted.toString());
                 if (field === 'videoSessionsCompleted') setVideoInputValue(todayLog.videoSessionsCompleted.toString());
            }
@@ -192,6 +195,7 @@ export default function Home() {
 
   // --- Sample Data / Clear Data Handlers ---
   const handleLoadSampleData = () => {
+     if (typeof window === 'undefined') return;
     console.log('[Home] handleLoadSampleData called');
     try {
       const loaded = loadSampleData();
@@ -218,6 +222,7 @@ export default function Home() {
   };
 
   const handleClearAllData = () => {
+     if (typeof window === 'undefined') return;
     console.log('[Home] handleClearAllData called');
     try {
       clearAllData();
@@ -240,34 +245,38 @@ export default function Home() {
   // --- Input Change/Blur Handlers (Keep as is) ---
   const handleDocInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
+    // Allow empty string or numbers
     if (val === '' || /^\d+$/.test(val)) setDocInputValue(val);
   };
   const handleVideoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
      const val = e.target.value;
+      // Allow empty string or numbers
      if (val === '' || /^\d+$/.test(val)) setVideoInputValue(val);
   };
   const handleDocInputBlur = () => {
        const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
-       if (todayLog && docInputValue !== todayLog.documentsCompleted.toString() && docInputValue !== '') {
-           handleQuickUpdate('documentsCompleted', docInputValue);
-       } else if (docInputValue === '' && todayLog && todayLog.documentsCompleted !== 0) {
-           handleQuickUpdate('documentsCompleted', '0');
-       } else if (docInputValue === '' && todayLog) {
-           setDocInputValue('0');
-       } else if (!todayLog) {
-            setDocInputValue('');
+       const currentValStr = todayLog?.documentsCompleted?.toString() ?? '0';
+       const inputValStr = docInputValue.trim() === '' ? '0' : docInputValue.trim(); // Treat empty as 0 on blur
+
+       if (todayLog && inputValStr !== currentValStr) {
+            handleQuickUpdate('documentsCompleted', inputValStr); // Save the cleaned value
+       } else if (!todayLog && docInputValue.trim() !== '') {
+            setDocInputValue(''); // Clear input if no log exists
+       } else if (inputValStr === '0') {
+            setDocInputValue('0'); // Ensure display shows '0' if entered/blurred as empty
        }
    };
   const handleVideoInputBlur = () => {
        const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
-       if (todayLog && videoInputValue !== todayLog.videoSessionsCompleted.toString() && videoInputValue !== '') {
-            handleQuickUpdate('videoSessionsCompleted', videoInputValue);
-        } else if (videoInputValue === '' && todayLog && todayLog.videoSessionsCompleted !== 0) {
-            handleQuickUpdate('videoSessionsCompleted', '0');
-        } else if (videoInputValue === '' && todayLog) {
-           setVideoInputValue('0');
-       } else if (!todayLog) {
-            setVideoInputValue('');
+       const currentValStr = todayLog?.videoSessionsCompleted?.toString() ?? '0';
+       const inputValStr = videoInputValue.trim() === '' ? '0' : videoInputValue.trim(); // Treat empty as 0 on blur
+
+       if (todayLog && inputValStr !== currentValStr) {
+            handleQuickUpdate('videoSessionsCompleted', inputValStr); // Save the cleaned value
+       } else if (!todayLog && videoInputValue.trim() !== '') {
+            setVideoInputValue(''); // Clear input if no log exists
+       } else if (inputValStr === '0') {
+           setVideoInputValue('0'); // Ensure display shows '0' if entered/blurred as empty
        }
   };
 
@@ -316,7 +325,7 @@ export default function Home() {
 
   // --- Main Dashboard Render ---
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-8">
+    <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8"> {/* Added padding */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 md:mb-8">
             <h1 className="text-3xl md:text-4xl font-bold text-center sm:text-left">Daily Dashboard</h1>
             {/* Clear Data Button with Confirmation */}
@@ -364,9 +373,9 @@ export default function Home() {
                                 onClick={() => handleQuickUpdate('documentsCompleted', -1)} disabled={isLoading}
                             > <Minus className="h-4 w-4"/> </Button>
                              <Input
-                                id="quick-update-docs-input" type="number" value={docInputValue} onChange={handleDocInputChange} onBlur={handleDocInputBlur}
-                                className="h-9 w-16 text-center tabular-nums text-lg font-medium [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                disabled={isLoading} min="0" aria-label="Document count input"
+                                id="quick-update-docs-input" type="text" inputMode="numeric" pattern="[0-9]*" value={docInputValue} onChange={handleDocInputChange} onBlur={handleDocInputBlur}
+                                className="h-9 w-16 text-center tabular-nums text-lg font-medium appearance-none" // Removed number appearance styles
+                                disabled={isLoading} aria-label="Document count input"
                              />
                             <Button
                                 id="quick-update-docs-plus" aria-label="Increase document count" variant="outline" size="icon" className="h-8 w-8"
@@ -381,9 +390,9 @@ export default function Home() {
                                 onClick={() => handleQuickUpdate('videoSessionsCompleted', -1)} disabled={isLoading}
                             > <Minus className="h-4 w-4"/> </Button>
                              <Input
-                                 id="quick-update-videos-input" type="number" value={videoInputValue} onChange={handleVideoInputChange} onBlur={handleVideoInputBlur}
-                                 className="h-9 w-16 text-center tabular-nums text-lg font-medium [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                 disabled={isLoading} min="0" aria-label="Video count input"
+                                 id="quick-update-videos-input" type="text" inputMode="numeric" pattern="[0-9]*" value={videoInputValue} onChange={handleVideoInputChange} onBlur={handleVideoInputBlur}
+                                 className="h-9 w-16 text-center tabular-nums text-lg font-medium appearance-none" // Removed number appearance styles
+                                 disabled={isLoading} aria-label="Video count input"
                               />
                             <Button
                                 id="quick-update-videos-plus" aria-label="Increase video count" variant="outline" size="icon" className="h-8 w-8"

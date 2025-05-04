@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useMemo } from 'react';
@@ -74,9 +73,9 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
           {weekStartDateFormatted} - {weekEndDateFormatted}
         </CardDescription>
       </CardHeader>
-      <CardContent className="pt-2"> {/* Reduced top padding in content */}
+      <CardContent className="pt-2 flex items-center justify-center h-[calc(100%-4.5rem)]"> {/* Adjust padding and height, center content */}
         {weeklyAverageUPH === null ? (
-          <p className="text-muted-foreground text-sm"> {/* Ensure text size matches other card */}
+          <p className="text-muted-foreground text-sm text-center"> {/* Center text */}
             No active target set or no logs available for this week.
           </p>
         ) : (
@@ -92,4 +91,3 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
 };
 
 export default WeeklyAverages;
-

@@ -27,6 +27,7 @@ export default function LogInputPage() {
 
   // Load data needed for this page
   const loadData = useCallback(() => {
+    if (typeof window === 'undefined') return; // Don't run on server
     console.log('[LogInputPage] Loading data...');
     setIsLoading(true);
     try {
@@ -63,6 +64,7 @@ export default function LogInputPage() {
   // --- Action Handlers (Pass client-side actions to components) ---
 
   const handleSaveWorkLog = useCallback((logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }) => {
+    if (typeof window === 'undefined') return {} as DailyWorkLog; // Type assertion might be needed
     try {
       const savedLog = saveWorkLog(logData);
       // Update local state for today's log if it was saved
@@ -79,6 +81,7 @@ export default function LogInputPage() {
   }, []); // Removed toast dependency here as it's handled in the action
 
   const handleAddTarget = useCallback((targetData: Omit<UPHTarget, 'id' | 'isActive'>) => {
+    if (typeof window === 'undefined') return {} as UPHTarget;
     try {
       const newTarget = addUPHTarget(targetData);
       setUphTargets(prev => [...prev, newTarget]); // Update local state
@@ -95,6 +98,7 @@ export default function LogInputPage() {
   }, [toast]); // Add toast dependency
 
   const handleUpdateTarget = useCallback((targetData: UPHTarget) => {
+    if (typeof window === 'undefined') return {} as UPHTarget;
     try {
       const updatedTarget = updateUPHTarget(targetData);
       setUphTargets(prev => prev.map(t => t.id === updatedTarget.id ? updatedTarget : t));
@@ -114,6 +118,7 @@ export default function LogInputPage() {
   }, [toast]); // Add toast dependency
 
    const handleDeleteTarget = useCallback((id: string) => {
+     if (typeof window === 'undefined') return;
     try {
        const targetToDelete = uphTargets.find(t => t.id === id);
        if (targetToDelete?.isActive) {
@@ -146,6 +151,7 @@ export default function LogInputPage() {
   }, [uphTargets, activeTarget, toast]); // Add toast and other deps
 
   const handleSetActiveTarget = useCallback((id: string) => {
+     if (typeof window === 'undefined') return {} as UPHTarget;
     try {
       const newActiveTarget = setActiveUPHTarget(id);
       setUphTargets(prev => prev.map(t => ({...t, isActive: t.id === newActiveTarget.id})));
@@ -166,14 +172,14 @@ export default function LogInputPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4">
+      <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4 md:p-6 lg:p-8"> {/* Added padding */}
         <p className="text-xl text-muted-foreground">Loading Input Form...</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-8"> {/* Adjusted max-width */}
+    <div className="w-full max-w-4xl mx-auto space-y-8 p-4 md:p-6 lg:p-8"> {/* Added padding, adjusted max-width */}
       <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Log Work & Manage Targets</h1>
 
       {/* Work Log Input Form */}
@@ -193,5 +199,3 @@ export default function LogInputPage() {
     </div>
   );
 }
-
-      

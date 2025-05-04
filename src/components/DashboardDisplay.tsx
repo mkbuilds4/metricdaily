@@ -41,26 +41,32 @@ const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
          {displayTarget ? (
              <CardDescription className="text-sm mt-1">
                 Metrics calculated against: <span className="font-medium">{displayTarget.name}</span> (Goal UPH: {displayTarget.targetUPH.toFixed(1)})
+                {/* Clarify if fallback target is used */}
                 {!logTarget && initialActiveTarget && todayLog?.targetId && (
                   <span className="text-xs text-muted-foreground ml-1">(Log's original target missing, using active)</span>
                 )}
+                 {!logTarget && initialActiveTarget && !todayLog?.targetId && todayLog && (
+                   <span className="text-xs text-muted-foreground ml-1">(Using active target)</span>
+                )}
              </CardDescription>
-            ) : initialUphTargets.length > 0 && !displayTarget ? ( // Targets exist but none active or associated
+            ) : todayLog && initialUphTargets.length > 0 ? ( // Log exists, targets exist, but no active/associated one found
              <CardDescription className="text-sm text-destructive mt-1 flex items-center gap-1">
                  <AlertCircle className="h-4 w-4" /> No active UPH target set and log has no target. Define/activate one.
              </CardDescription>
-            ) : initialUphTargets.length === 0 ? ( // No targets defined at all
+            ) : !todayLog && initialUphTargets.length === 0 ? ( // No log AND no targets
+                 <CardDescription className="text-sm text-muted-foreground mt-2">
+                    No work log recorded for today and no UPH targets defined yet.
+                </CardDescription>
+            ) : !todayLog ? ( // No log but targets exist
+                 <CardDescription className="text-sm text-muted-foreground mt-2">
+                     No work log recorded for today yet. Add one in Log / Targets to see metrics.
+                </CardDescription>
+            ) : initialUphTargets.length === 0 ? ( // Log exists but no targets defined
              <CardDescription className="text-sm text-muted-foreground mt-1">
                  No UPH targets defined yet. Add one in Log / Targets.
              </CardDescription>
             ) : null
         }
-             {/* Message if no log exists for today */}
-             {initialWorkLogs.length === 0 && (
-                 <CardDescription className="text-sm text-muted-foreground mt-2">
-                     No work log recorded for today yet. Add one in Log / Targets to see metrics.
-                </CardDescription>
-            )}
       </CardHeader>
       <CardContent>
         {/* Render the TargetMetricsDisplay, passing today's log and all targets */}
@@ -68,7 +74,7 @@ const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
             allWorkLogs={initialWorkLogs} // Pass only today's log
             targets={initialUphTargets} // Pass all available targets for context/comparison
             deleteWorkLogAction={deleteWorkLogAction}
-            showTodaySection={true}
+            showTodaySection={true} // Only show today's section in this instance
          />
       </CardContent>
     </Card>

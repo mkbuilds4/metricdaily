@@ -5,7 +5,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import type { DailyWorkLog, UPHTarget } from '@/types';
-import { calculateCurrentMetrics, calculateRequiredUnitsForTarget, formatTimeAheadBehind, calculateTimeAheadBehindSchedule, formatFriendlyDate } from '@/lib/utils';
+import { calculateCurrentMetrics, calculateRequiredUnitsForTarget, formatTimeAheadBehind, calculateTimeAheadBehindSchedule, formatFriendlyDate, formatDurationFromMinutes, calculateProjectedGoalHitTime } from '@/lib/utils';
 import { format, parse, isValid } from 'date-fns';
 import { AlertCircle } from 'lucide-react'; // Import icon
 import { cn } from '@/lib/utils'; // Import cn utility
@@ -19,9 +19,12 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
-    setCurrentTime(new Date());
-    const timerId = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timerId);
+    // Ensure this runs only on the client
+    if (typeof window !== 'undefined') {
+        setCurrentTime(new Date());
+        const timerId = setInterval(() => setCurrentTime(new Date()), 60000); // Update every minute
+        return () => clearInterval(timerId);
+    }
   }, []);
 
   // The target to use for calculation is the active one for today's progress
@@ -30,20 +33,22 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
   const progressData = useMemo(() => {
     // Require today's log, the calculated target, and current time
     if (!todayLog || !targetForCalc || !currentTime) {
-      return { currentUnits: 0, targetUnits: 0, percentage: 0, currentUPH: 0, timeDiff: null };
+      return { currentUnits: 0, targetUnits: 0, percentage: 0, currentUPH: 0, timeDiff: null, projectedHitTimeFormatted: '-' };
     }
 
     const { currentUnits, currentUPH } = calculateCurrentMetrics(todayLog, targetForCalc, currentTime);
     const targetUnitsForDuration = calculateRequiredUnitsForTarget(todayLog.hoursWorked, targetForCalc.targetUPH);
     const percentage = targetUnitsForDuration > 0 ? Math.min(100, Math.max(0, (currentUnits / targetUnitsForDuration) * 100)) : 0;
     const timeDiff = calculateTimeAheadBehindSchedule(todayLog, targetForCalc, currentTime);
+    const projectedHitTimeFormatted = calculateProjectedGoalHitTime(todayLog, timeDiff);
 
     return {
         currentUnits,
         targetUnits: targetUnitsForDuration,
         percentage: parseFloat(percentage.toFixed(1)),
         currentUPH,
-        timeDiff
+        timeDiff,
+        projectedHitTimeFormatted
     };
   }, [todayLog, targetForCalc, currentTime]);
 
@@ -95,23 +100,39 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 pt-2">
-        <div className="flex justify-between items-baseline text-sm">
-           <span className="text-muted-foreground">Units Now / Target:</span>
-           <span className="font-medium tabular-nums">{progressData.currentUnits.toFixed(2)} / {progressData.targetUnits.toFixed(2)}</span>
+         {/* Progress Bar and Percentage */}
+        <div className="flex items-center gap-3">
+            <Progress value={progressData.percentage} aria-label={`${progressData.percentage}% complete towards target units`} className="h-3 flex-1" />
+            <span className="font-semibold tabular-nums">{progressData.percentage}%</span>
         </div>
-         <div className="flex items-center gap-3">
-             <Progress value={progressData.percentage} aria-label={`${progressData.percentage}% complete towards target units`} className="h-3 flex-1" />
-             <span className="font-semibold tabular-nums">{progressData.percentage}%</span>
-         </div>
-         <div className="flex justify-between items-baseline text-xs text-muted-foreground">
-             <span>Current UPH: {progressData.currentUPH.toFixed(2)}</span>
-             <span>Schedule: <span className={cn(
-                 "font-medium",
-                 progressData.timeDiff !== null && progressData.timeDiff > 0 && "text-green-600",
-                 progressData.timeDiff !== null && progressData.timeDiff < 0 && "text-red-600"
-                )}>{formatTimeAheadBehind(progressData.timeDiff)}</span>
-             </span>
-         </div>
+        {/* Metrics Grid - Adjust columns for responsiveness */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 text-sm">
+             <div className="flex flex-col">
+                 <span className="text-muted-foreground">Units Now</span>
+                 <span className="font-medium tabular-nums">{progressData.currentUnits.toFixed(2)}</span>
+             </div>
+             <div className="flex flex-col">
+                 <span className="text-muted-foreground">Target Units</span>
+                 <span className="font-medium tabular-nums">{progressData.targetUnits.toFixed(2)}</span>
+             </div>
+              <div className="flex flex-col">
+                <span className="text-muted-foreground">Current UPH</span>
+                 <span className="font-medium tabular-nums">{progressData.currentUPH.toFixed(2)}</span>
+             </div>
+             <div className="flex flex-col">
+                <span className="text-muted-foreground">Schedule</span>
+                 <span className={cn(
+                    "font-medium",
+                    progressData.timeDiff !== null && progressData.timeDiff > 0 && "text-green-600 dark:text-green-500",
+                    progressData.timeDiff !== null && progressData.timeDiff < 0 && "text-red-600 dark:text-red-500"
+                    )}>{formatTimeAheadBehind(progressData.timeDiff)}
+                 </span>
+             </div>
+             <div className="flex flex-col col-span-2 sm:col-span-2"> {/* Span 2 cols on small, 2 on sm */}
+                <span className="text-muted-foreground">Est. Goal Hit Time</span>
+                <span className="font-medium tabular-nums">{progressData.projectedHitTimeFormatted}</span>
+             </div>
+        </div>
       </CardContent>
     </Card>
   );
