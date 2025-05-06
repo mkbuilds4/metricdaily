@@ -15,12 +15,12 @@ import {
   clearAllData, // Import clear data action
 } from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget } from '@/types';
-import { formatDateISO, calculateHoursWorked } from '@/lib/utils';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Minus, Plus, Info, Trash2, BarChart, PlayCircle } from 'lucide-react'; // Added icons
+import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee } from 'lucide-react'; // Added Coffee icon
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 import {
@@ -255,7 +255,9 @@ export default function Home() {
     const todayDateStr = formatDateISO(new Date());
     const defaultStartTime = '14:00';
     const defaultEndTime = '22:30';
-    const defaultBreakMinutes = 65;
+    // Grace period is implicitly handled by starting break count from actual break taken
+    // Or, if you want to explicitly add it to breakDurationMinutes:
+    const defaultBreakMinutes = 5; // Start with 5 min grace
     const defaultHoursWorked = calculateHoursWorked(todayDateStr, defaultStartTime, defaultEndTime, defaultBreakMinutes);
 
     const newLog: Omit<DailyWorkLog, 'id'> & { hoursWorked: number } = {
@@ -274,7 +276,7 @@ export default function Home() {
       handleSaveWorkLog(newLog);
       toast({
         title: "New Day Started",
-        description: `Work log for ${todayDateStr} created with default times.`,
+        description: `Work log for ${todayDateStr} created with default times and 5 min grace period.`,
       });
     } catch (error) {
       // Error handling is within handleSaveWorkLog
@@ -319,6 +321,40 @@ export default function Home() {
            setVideoInputValue('0'); // Ensure display shows '0' if entered/blurred as empty
        }
   };
+
+  const handleAddBreak = useCallback((breakMinutes: number) => {
+    if (typeof window === 'undefined') return;
+    const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
+    if (!todayLog) {
+      toast({
+        variant: "destructive",
+        title: "Cannot Add Break",
+        description: "No work log found for today. Start a new day first.",
+      });
+      return;
+    }
+
+    const newBreakDuration = todayLog.breakDurationMinutes + breakMinutes;
+    // Recalculate hours worked with the new break time
+    const newHoursWorked = calculateHoursWorked(todayLog.date, todayLog.startTime, todayLog.endTime, newBreakDuration);
+
+    const updatedLogData: DailyWorkLog = {
+      ...todayLog,
+      breakDurationMinutes: newBreakDuration,
+      hoursWorked: newHoursWorked, // Update hoursWorked
+    };
+
+    try {
+      handleSaveWorkLog(updatedLogData);
+      toast({
+        title: "Break Added",
+        description: `${breakMinutes} minutes added to your break time. Total break: ${formatDurationFromMinutes(newBreakDuration * 60)}.`,
+      });
+    } catch (error) {
+      // Error handled by handleSaveWorkLog
+    }
+  }, [workLogs, handleSaveWorkLog, toast]);
+
 
   // --- Derived State ---
   const todayLog = workLogs.find(log => log.date === formatDateISO(new Date())) || null;
@@ -387,54 +423,75 @@ export default function Home() {
         </div>
 
         {/* Grid container for Quick Update and Weekly Averages */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8"> {/* Changed to 3 cols */}
             {/* --- Quick Update Section --- */}
             {todayLog ? (
-                <Card>
+                <Card className="md:col-span-2"> {/* Quick Update takes 2 cols on md+ */}
                     <CardHeader>
                         <CardTitle>Quick Update Today's Counts</CardTitle>
                          <CardDescription>
                             Log Date: {formatDateISO(new Date())}
                          </CardDescription>
                     </CardHeader>
-                    <CardContent className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-center justify-center py-6">
-                        <div className="flex items-center gap-2">
+                    <CardContent className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-start justify-center py-6">
+                        <div className="flex flex-col items-center gap-2">
                             <Label htmlFor="quick-update-docs-input" className="min-w-[80px] sm:min-w-[auto]">Documents:</Label>
-                            <Button
-                                id="quick-update-docs-minus" aria-label="Decrease document count" variant="outline" size="icon" className="h-8 w-8"
-                                onClick={() => handleQuickUpdate('documentsCompleted', -1)} disabled={isLoading}
-                            > <Minus className="h-4 w-4"/> </Button>
-                             <Input
-                                id="quick-update-docs-input" type="text" inputMode="numeric" pattern="[0-9]*" value={docInputValue} onChange={handleDocInputChange} onBlur={handleDocInputBlur}
-                                className="h-9 w-16 text-center tabular-nums text-lg font-medium appearance-none"
-                                disabled={isLoading} aria-label="Document count input"
-                             />
-                            <Button
-                                id="quick-update-docs-plus" aria-label="Increase document count" variant="outline" size="icon" className="h-8 w-8"
-                                onClick={() => handleQuickUpdate('documentsCompleted', 1)} disabled={isLoading}
-                            > <Plus className="h-4 w-4"/> </Button>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    id="quick-update-docs-minus" aria-label="Decrease document count" variant="outline" size="icon" className="h-8 w-8"
+                                    onClick={() => handleQuickUpdate('documentsCompleted', -1)} disabled={isLoading}
+                                > <Minus className="h-4 w-4"/> </Button>
+                                 <Input
+                                    id="quick-update-docs-input" type="text" inputMode="numeric" pattern="[0-9]*" value={docInputValue} onChange={handleDocInputChange} onBlur={handleDocInputBlur}
+                                    className="h-9 w-16 text-center tabular-nums text-lg font-medium appearance-none"
+                                    disabled={isLoading} aria-label="Document count input"
+                                 />
+                                <Button
+                                    id="quick-update-docs-plus" aria-label="Increase document count" variant="outline" size="icon" className="h-8 w-8"
+                                    onClick={() => handleQuickUpdate('documentsCompleted', 1)} disabled={isLoading}
+                                > <Plus className="h-4 w-4"/> </Button>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-col items-center gap-2">
                             <Label htmlFor="quick-update-videos-input" className="min-w-[80px] sm:min-w-[auto]">Videos:</Label>
-                            <Button
-                                id="quick-update-videos-minus" aria-label="Decrease video count" variant="outline" size="icon" className="h-8 w-8"
-                                onClick={() => handleQuickUpdate('videoSessionsCompleted', -1)} disabled={isLoading}
-                            > <Minus className="h-4 w-4"/> </Button>
-                             <Input
-                                 id="quick-update-videos-input" type="text" inputMode="numeric" pattern="[0-9]*" value={videoInputValue} onChange={handleVideoInputChange} onBlur={handleVideoInputBlur}
-                                 className="h-9 w-16 text-center tabular-nums text-lg font-medium appearance-none"
-                                 disabled={isLoading} aria-label="Video count input"
-                              />
-                            <Button
-                                id="quick-update-videos-plus" aria-label="Increase video count" variant="outline" size="icon" className="h-8 w-8"
-                                onClick={() => handleQuickUpdate('videoSessionsCompleted', 1)} disabled={isLoading}
-                            > <Plus className="h-4 w-4"/> </Button>
+                             <div className="flex items-center gap-2">
+                                <Button
+                                    id="quick-update-videos-minus" aria-label="Decrease video count" variant="outline" size="icon" className="h-8 w-8"
+                                    onClick={() => handleQuickUpdate('videoSessionsCompleted', -1)} disabled={isLoading}
+                                > <Minus className="h-4 w-4"/> </Button>
+                                 <Input
+                                     id="quick-update-videos-input" type="text" inputMode="numeric" pattern="[0-9]*" value={videoInputValue} onChange={handleVideoInputChange} onBlur={handleVideoInputBlur}
+                                     className="h-9 w-16 text-center tabular-nums text-lg font-medium appearance-none"
+                                     disabled={isLoading} aria-label="Video count input"
+                                  />
+                                <Button
+                                    id="quick-update-videos-plus" aria-label="Increase video count" variant="outline" size="icon" className="h-8 w-8"
+                                    onClick={() => handleQuickUpdate('videoSessionsCompleted', 1)} disabled={isLoading}
+                                > <Plus className="h-4 w-4"/> </Button>
+                            </div>
                         </div>
                     </CardContent>
+                     <CardFooter className="flex flex-col items-center gap-2 pt-2 pb-4">
+                        <Label className="text-sm font-medium">Log Break Time</Label>
+                        <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => handleAddBreak(15)} disabled={isLoading || !todayLog}>
+                                <Coffee className="mr-2 h-4 w-4" /> Add 15 min
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => handleAddBreak(30)} disabled={isLoading || !todayLog}>
+                                <Coffee className="mr-2 h-4 w-4" /> Add 30 min
+                            </Button>
+                        </div>
+                        {todayLog && (
+                             <p className="text-xs text-muted-foreground mt-1">
+                                Current Total Break: {formatDurationFromMinutes(todayLog.breakDurationMinutes * 60)}
+                                {todayLog.breakDurationMinutes === 5 && " (Grace Period)"}
+                             </p>
+                        )}
+                    </CardFooter>
                 </Card>
             ) : (
                 // No todayLog, but other data (targets/previous logs) might exist
-                <Card className="border-dashed border-muted-foreground">
+                <Card className="border-dashed border-muted-foreground md:col-span-2">
                     <CardHeader>
                         <CardTitle className="text-muted-foreground">Log Not Found for Today</CardTitle>
                     </CardHeader>
@@ -451,7 +508,7 @@ export default function Home() {
                 </Card>
             )}
 
-            {/* Weekly Averages Component */}
+            {/* Weekly Averages Component - takes 1 col */}
             <WeeklyAverages
                 allWorkLogs={workLogs}
                 targets={uphTargets}

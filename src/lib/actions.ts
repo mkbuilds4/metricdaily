@@ -3,7 +3,7 @@
 // Client-side actions interacting with localStorage.
 
 import type { DailyWorkLog, UPHTarget } from '@/types';
-import { formatDateISO } from '@/lib/utils'; // Import utility
+import { formatDateISO, calculateHoursWorked } from '@/lib/utils'; // Import utility
 import { sampleWorkLogs, sampleUPHTargets } from './sample-data'; // Import sample data
 
 // --- Constants for localStorage keys ---
@@ -68,14 +68,30 @@ export function getWorkLogs(): DailyWorkLog[] {
 
 /**
  * Saves (adds or updates) a work log entry in localStorage.
+ * If logData includes breakDurationMinutes, it implies hoursWorked should be recalculated.
  */
 export function saveWorkLog(
-  logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }
+  logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked?: number } // hoursWorked is optional, will be recalculated if break changes
 ): DailyWorkLog {
   console.log('[Client Action] saveWorkLog called with:', logData);
 
-  if (logData.hoursWorked === undefined || isNaN(logData.hoursWorked) || logData.hoursWorked < 0) {
-    throw new Error('Hours worked must be a non-negative number.');
+  // Recalculate hoursWorked if breakDurationMinutes is part of the update or if it's a new log.
+  // If hoursWorked is explicitly provided and breakDurationMinutes is not, use the provided hoursWorked.
+  let finalHoursWorked: number;
+  if (logData.breakDurationMinutes !== undefined) {
+      finalHoursWorked = calculateHoursWorked(logData.date, logData.startTime, logData.endTime, logData.breakDurationMinutes);
+  } else if (logData.hoursWorked !== undefined) {
+      finalHoursWorked = logData.hoursWorked;
+  } else {
+      // This case should ideally not happen if called correctly (e.g., from form submission or break update)
+      // Fallback to calculating from existing break if updating, or default if new.
+      const existingLog = logData.id ? getWorkLogs().find(l => l.id === logData.id) : null;
+      finalHoursWorked = calculateHoursWorked(logData.date, logData.startTime, logData.endTime, existingLog?.breakDurationMinutes ?? 65);
+  }
+
+
+  if (finalHoursWorked < 0) { // Allow 0 hours worked (e.g. full day break)
+    throw new Error('Calculated hours worked cannot be negative.');
   }
   if (logData.documentsCompleted === undefined || isNaN(logData.documentsCompleted) || logData.documentsCompleted < 0) {
     throw new Error('Documents completed must be a non-negative number.');
@@ -91,8 +107,6 @@ export function saveWorkLog(
        const targets = getUPHTargets();
        if (!targets.some(t => t.id === logData.targetId)) {
            console.warn(`[Client Action] Target ID "${logData.targetId}" provided for log does not exist. Saving log without association.`);
-           // Don't throw error, just save without the association or save with null/undefined targetId
-           // delete logData.targetId; // Or set to undefined
        }
    }
 
@@ -101,16 +115,20 @@ export function saveWorkLog(
   let savedLog: DailyWorkLog;
   let operation: 'added' | 'updated' = 'added';
 
+  // Create a complete log entry with the final calculated hoursWorked
+  const completeLogData = { ...logData, hoursWorked: finalHoursWorked };
+
+
   if (logData.id) {
     const index = logs.findIndex((log) => log.id === logData.id);
     if (index > -1) {
-      savedLog = { ...logs[index], ...logData };
+      savedLog = { ...logs[index], ...completeLogData }; // Use completeLogData
       logs[index] = savedLog;
       console.log('[Client Action] Updated log using provided ID:', logData.id);
       operation = 'updated';
     } else {
       console.warn('[Client Action] Log ID provided but not found, adding as new:', logData.id);
-      savedLog = { ...logData, id: generateLocalId() };
+      savedLog = { ...completeLogData, id: generateLocalId() }; // Use completeLogData
       logs.push(savedLog);
        operation = 'added';
     }
@@ -118,14 +136,13 @@ export function saveWorkLog(
     const existingLogIndex = logs.findIndex(log => log.date === logData.date);
     if (existingLogIndex > -1) {
         const existingId = logs[existingLogIndex].id;
-        // Preserve the original targetId if not explicitly provided in logData
         const targetIdToKeep = logData.targetId ?? logs[existingLogIndex].targetId;
-        savedLog = { ...logs[existingLogIndex], ...logData, id: existingId, targetId: targetIdToKeep };
+        savedLog = { ...logs[existingLogIndex], ...completeLogData, id: existingId, targetId: targetIdToKeep }; // Use completeLogData
         logs[existingLogIndex] = savedLog;
         console.log('[Client Action] Updated existing log found by date:', logData.date, ' ID:', existingId);
         operation = 'updated';
     } else {
-        savedLog = { ...logData, id: generateLocalId() };
+        savedLog = { ...completeLogData, id: generateLocalId() }; // Use completeLogData
         logs.push(savedLog);
         console.log('[Client Action] Added new log with ID:', savedLog.id);
          operation = 'added';
@@ -344,4 +361,30 @@ export function clearAllData(): void {
     window.localStorage.removeItem(WORK_LOGS_KEY);
     window.localStorage.removeItem(UPH_TARGETS_KEY);
     console.log('[Client Action] All data cleared.');
+}
+
+/**
+ * Archives today's work log by simply ensuring it's saved.
+ * The main logic of distinguishing today vs previous is in page components.
+ * This function ensures today's log is persisted.
+ */
+export function archiveTodayLog(): DailyWorkLog | null {
+    if (typeof window === 'undefined') return null;
+    const todayDateStr = formatDateISO(new Date());
+    const logs = getWorkLogs();
+    const todayLog = logs.find(log => log.date === todayDateStr);
+
+    if (todayLog) {
+        // Today's log already exists and is saved by `saveWorkLog` calls.
+        // No specific "archival" action beyond normal saving is needed
+        // as `getWorkLogs` and `getPreviousLogs` on pages handle filtering.
+        console.log("[Client Action] archiveTodayLog: Today's log already exists and is part of workLogs.", todayLog);
+        // Optionally re-save it if there's a chance it could be modified elsewhere without saving
+        // but current flow should handle this.
+        // saveWorkLog(todayLog); // This would re-trigger calculations, might not be necessary
+        return todayLog;
+    } else {
+        console.log("[Client Action] archiveTodayLog: No log found for today to archive.");
+        return null;
+    }
 }
