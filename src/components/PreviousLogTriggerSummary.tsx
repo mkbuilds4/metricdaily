@@ -50,7 +50,7 @@ const PreviousLogTriggerSummary: React.FC<PreviousLogTriggerSummaryProps> = ({ l
                  <span>{log.videoSessionsCompleted}</span>
              </div>
               {/* Display Calculated UPH for each target */}
-             {allTargets.map(target => {
+             {allTargets && allTargets.map(target => { // Add null check for allTargets
                  const uphForTarget = calculateDailyUPH(log, target);
                  // Only show UPH if it's calculable and positive
                  if (uphForTarget > 0) {
@@ -84,3 +84,4 @@ const PreviousLogTriggerSummary: React.FC<PreviousLogTriggerSummaryProps> = ({ l
 };
 
 export default PreviousLogTriggerSummary;
+

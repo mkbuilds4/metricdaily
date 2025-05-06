@@ -22,7 +22,7 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
     // Ensure this runs only on the client
     if (typeof window !== 'undefined') {
         setCurrentTime(new Date());
-        const timerId = setInterval(() => setCurrentTime(new Date()), 60000); // Update every minute
+        const timerId = setInterval(() => setCurrentTime(new Date()), 1000); // Update every second
         return () => clearInterval(timerId);
     }
   }, []);
@@ -139,4 +139,5 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
 };
 
 export default DailyProgressIndicator;
+
 

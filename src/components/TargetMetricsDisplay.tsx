@@ -1,6 +1,7 @@
+
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Trash2, BookOpen, Video, Clock, ChevronDown, ArrowUp, ArrowDown, Minus as MinusIcon, AlertCircle, Target as TargetIcon } from 'lucide-react';
@@ -27,13 +28,13 @@ import {
     formatDateISO,
     formatFriendlyDate,
     calculateRemainingUnits,
-    calculateCurrentMetrics,
+    calculateCurrentMetrics, // Import the new function
     calculateTimeAheadBehindSchedule, // Import the schedule calculation function
     formatTimeAheadBehind, // Import the formatting function
     calculateProjectedGoalHitTime, // Use the updated calculation
 } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
-import PreviousLogTriggerSummary from './PreviousLogTriggerSummary';
+import PreviousLogTriggerSummary from './PreviousLogTriggerSummary'; // Import the component for previous log triggers
 import { cn } from '@/lib/utils';
 
 
@@ -59,7 +60,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     // Ensure this runs only on the client
      if (typeof window !== 'undefined') {
          setCurrentTime(new Date());
-         const timerId = setInterval(() => setCurrentTime(new Date()), 60000); // Update every minute
+         const timerId = setInterval(() => setCurrentTime(new Date()), 1000); // Update every second
          return () => clearInterval(timerId);
      }
   }, []);
@@ -96,7 +97,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
     // Group previous logs by date, taking only the first log entry for that date
     const prevLogsGrouped = Object.entries(prevLogsMap)
-                                .map(([date, logs]) => ({ date, log: logs[0] })) // Assign the first log to 'log' property
+                                .map(([date, logsForDate]) => ({ date, log: logsForDate[0] })) // Assign the first log to 'log' property
                                 .sort((a, b) => b.date.localeCompare(a.date)); // Sort dates descending
 
     return {
@@ -381,9 +382,11 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
                     return (
                     <AccordionItem value={date} key={date} className="border-none bg-muted/20 rounded-md overflow-hidden">
-                           <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50" hideChevron>
-                              {/* Pass all targets for context in summary */}
-                              <PreviousLogTriggerSummary log={log} allTargets={targets} onDelete={handleDeleteLog} />
+                           <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50" asChild>
+                               <div className="flex items-center justify-between w-full">
+                                   <PreviousLogTriggerSummary log={log} allTargets={targets} onDelete={handleDeleteLog} />
+                                   <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                               </div>
                            </AccordionTrigger>
                         <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-md">
                             {/* Render detailed breakdown for all defined targets, calculated against log's context */}
