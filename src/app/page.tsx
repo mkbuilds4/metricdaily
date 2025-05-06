@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link'; // Import Link
 import ProductivityDashboard from '@/components/DashboardDisplay';
 import WeeklyAverages from '@/components/WeeklyAverages';
 import DailyProgressIndicator from '@/components/DailyProgressIndicator';
@@ -20,7 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain } from 'lucide-react'; // Added Brain for Training
+import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain, Edit3 } from 'lucide-react'; // Added Edit3
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton'; 
 import {
@@ -252,7 +253,7 @@ export default function Home() {
     const todayDateStr = formatDateISO(new Date());
     const defaultStartTime = '14:00';
     const defaultEndTime = '22:30';
-    const defaultBreakMinutes = 5; 
+    const defaultBreakMinutes = 65; 
     const defaultTrainingMinutes = 0; // Initialize training to 0
     const totalNonWorkMinutes = defaultBreakMinutes + defaultTrainingMinutes;
     const defaultHoursWorked = calculateHoursWorked(todayDateStr, defaultStartTime, defaultEndTime, totalNonWorkMinutes);
@@ -406,13 +407,21 @@ export default function Home() {
         <BarChart className="h-16 w-16 text-muted-foreground mb-4" />
         <h1 className="text-3xl md:text-4xl font-bold mb-4">Welcome to Metric Daily!</h1>
         <p className="text-lg text-muted-foreground mb-8">
-          It looks like you don't have any data yet. Get started by adding your first work log and UPH target, or load some sample data to explore the features.
+          It looks like you don't have any data yet. You can load sample data to explore, or set up your own tracking.
         </p>
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-4">
           <Button onClick={handleLoadSampleData} size="lg">
             <Plus className="mr-2 h-5 w-5" /> Load Sample Data
           </Button>
+           <Button asChild size="lg" variant="outline">
+            <Link href="/log-input">
+                <Edit3 className="mr-2 h-5 w-5" /> Set Up & Start Tracking
+            </Link>
+          </Button>
         </div>
+         <p className="text-sm text-muted-foreground mt-8">
+            To start tracking, you'll need to define at least one UPH Target and log your first day's work on the 'Log / Targets' page.
+        </p>
       </div>
     );
   }
@@ -571,3 +580,5 @@ export default function Home() {
   );
 }
 
+
+    
