@@ -15,12 +15,12 @@ import {
   clearAllData, // Import clear data action
 } from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget } from '@/types';
-import { formatDateISO } from '@/lib/utils';
+import { formatDateISO, calculateHoursWorked } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Minus, Plus, Info, Trash2, BarChart } from 'lucide-react'; // Added icons
+import { Minus, Plus, Info, Trash2, BarChart, PlayCircle } from 'lucide-react'; // Added icons
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 import {
@@ -241,6 +241,46 @@ export default function Home() {
     }
   };
 
+  const handleStartNewDay = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (!activeTarget) {
+      toast({
+        variant: "destructive",
+        title: "Cannot Start New Day",
+        description: "No active UPH target found. Please set one on the 'Log / Targets' page.",
+      });
+      return;
+    }
+
+    const todayDateStr = formatDateISO(new Date());
+    const defaultStartTime = '14:00';
+    const defaultEndTime = '22:30';
+    const defaultBreakMinutes = 65;
+    const defaultHoursWorked = calculateHoursWorked(todayDateStr, defaultStartTime, defaultEndTime, defaultBreakMinutes);
+
+    const newLog: Omit<DailyWorkLog, 'id'> & { hoursWorked: number } = {
+      date: todayDateStr,
+      startTime: defaultStartTime,
+      endTime: defaultEndTime,
+      breakDurationMinutes: defaultBreakMinutes,
+      hoursWorked: defaultHoursWorked,
+      documentsCompleted: 0,
+      videoSessionsCompleted: 0,
+      targetId: activeTarget.id,
+      notes: 'New day started from dashboard.',
+    };
+
+    try {
+      handleSaveWorkLog(newLog);
+      toast({
+        title: "New Day Started",
+        description: `Work log for ${todayDateStr} created with default times.`,
+      });
+    } catch (error) {
+      // Error handling is within handleSaveWorkLog
+    }
+  }, [activeTarget, handleSaveWorkLog, toast]);
+
 
   // --- Input Change/Blur Handlers (Keep as is) ---
   const handleDocInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -312,12 +352,6 @@ export default function Home() {
           <Button onClick={handleLoadSampleData} size="lg">
             <Plus className="mr-2 h-5 w-5" /> Load Sample Data
           </Button>
-          {/* Optional: Link to Log Input page */}
-          {/* <Button asChild variant="outline" size="lg">
-            <a href="/log-input">
-              <List className="mr-2 h-5 w-5" /> Go to Log Input
-            </a>
-          </Button> */}
         </div>
       </div>
     );
@@ -325,10 +359,9 @@ export default function Home() {
 
   // --- Main Dashboard Render ---
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8"> {/* Added padding */}
+    <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 md:mb-8">
             <h1 className="text-3xl md:text-4xl font-bold text-center sm:text-left">Daily Dashboard</h1>
-            {/* Clear Data Button with Confirmation */}
             <AlertDialog>
                 <AlertDialogTrigger asChild>
                     <Button variant="destructive" size="sm">
@@ -365,7 +398,6 @@ export default function Home() {
                          </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-center justify-center py-6">
-                        {/* Document Count */}
                         <div className="flex items-center gap-2">
                             <Label htmlFor="quick-update-docs-input" className="min-w-[80px] sm:min-w-[auto]">Documents:</Label>
                             <Button
@@ -374,7 +406,7 @@ export default function Home() {
                             > <Minus className="h-4 w-4"/> </Button>
                              <Input
                                 id="quick-update-docs-input" type="text" inputMode="numeric" pattern="[0-9]*" value={docInputValue} onChange={handleDocInputChange} onBlur={handleDocInputBlur}
-                                className="h-9 w-16 text-center tabular-nums text-lg font-medium appearance-none" // Removed number appearance styles
+                                className="h-9 w-16 text-center tabular-nums text-lg font-medium appearance-none"
                                 disabled={isLoading} aria-label="Document count input"
                              />
                             <Button
@@ -382,7 +414,6 @@ export default function Home() {
                                 onClick={() => handleQuickUpdate('documentsCompleted', 1)} disabled={isLoading}
                             > <Plus className="h-4 w-4"/> </Button>
                         </div>
-                        {/* Video Count */}
                         <div className="flex items-center gap-2">
                             <Label htmlFor="quick-update-videos-input" className="min-w-[80px] sm:min-w-[auto]">Videos:</Label>
                             <Button
@@ -391,7 +422,7 @@ export default function Home() {
                             > <Minus className="h-4 w-4"/> </Button>
                              <Input
                                  id="quick-update-videos-input" type="text" inputMode="numeric" pattern="[0-9]*" value={videoInputValue} onChange={handleVideoInputChange} onBlur={handleVideoInputBlur}
-                                 className="h-9 w-16 text-center tabular-nums text-lg font-medium appearance-none" // Removed number appearance styles
+                                 className="h-9 w-16 text-center tabular-nums text-lg font-medium appearance-none"
                                  disabled={isLoading} aria-label="Video count input"
                               />
                             <Button
@@ -402,6 +433,7 @@ export default function Home() {
                     </CardContent>
                 </Card>
             ) : (
+                // No todayLog, but other data (targets/previous logs) might exist
                 <Card className="border-dashed border-muted-foreground">
                     <CardHeader>
                         <CardTitle className="text-muted-foreground">Log Not Found for Today</CardTitle>
@@ -409,8 +441,12 @@ export default function Home() {
                      <CardContent className="flex flex-col items-center justify-center h-full py-6 text-muted-foreground gap-4">
                          <Info className="h-8 w-8" />
                          <p className="text-center max-w-xs">
-                             No work log found for today ({formatDateISO(new Date())}). Add one on the 'Log / Targets' page to enable quick updates and see today's metrics.
+                             No work log found for today ({formatDateISO(new Date())}).
                          </p>
+                         <Button onClick={handleStartNewDay} disabled={isLoading || !activeTarget}>
+                            <PlayCircle className="mr-2 h-5 w-5" /> Start New Day
+                         </Button>
+                         {!activeTarget && <p className="text-xs text-destructive"> (Set an active target first)</p>}
                     </CardContent>
                 </Card>
             )}
@@ -432,13 +468,27 @@ export default function Home() {
          )}
 
         {/* --- Productivity Dashboard Display (Today's Log Details) --- */}
-        <ProductivityDashboard
-          initialWorkLogs={todayLog ? [todayLog] : []}
-          initialUphTargets={uphTargets}
-          initialActiveTarget={activeTarget}
-          deleteWorkLogAction={handleDeleteWorkLog}
-        />
-
+        {/* Conditionally render only if todayLog exists, or show a message */}
+        {todayLog ? (
+            <ProductivityDashboard
+                initialWorkLogs={[todayLog]}
+                initialUphTargets={uphTargets}
+                initialActiveTarget={activeTarget}
+                deleteWorkLogAction={handleDeleteWorkLog}
+            />
+        ) : hasInitialData && !isLoading ? ( // Show if other data exists but no today log
+            <Card>
+                <CardHeader>
+                    <CardTitle>Today's Metrics</CardTitle>
+                    <CardDescription>No work log for today yet.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col items-center justify-center h-32 text-muted-foreground">
+                    <Info className="h-8 w-8 mb-2" />
+                    <p>Start a new day or add a log on the 'Log / Targets' page to see today's metrics.</p>
+                </CardContent>
+            </Card>
+        ) : null}
     </div>
   );
 }
+
