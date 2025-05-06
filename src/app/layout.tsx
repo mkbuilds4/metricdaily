@@ -50,12 +50,19 @@ export default function RootLayout({
       return;
     }
 
-    const password = prompt("Please enter the password to access the Audit Log:");
-    if (password === process.env.NEXT_PUBLIC_AUDIT_LOG_PASSWORD) {
+    const auditLogPassword = process.env.NEXT_PUBLIC_AUDIT_LOG_PASSWORD;
+    if (!auditLogPassword) {
+        e.preventDefault();
+        alert("Audit Log password not configured by admin. Access denied.");
+        return;
+    }
+
+    const enteredPassword = prompt("Please enter the password to access the Audit Log:");
+    if (enteredPassword === auditLogPassword) {
       // Allow navigation (NextLink will handle it)
     } else {
       e.preventDefault(); // Prevent navigation
-      if (password !== null) { // Only show alert if user entered something (not cancelled)
+      if (enteredPassword !== null) { // Only show alert if user entered something (not cancelled)
         alert("Incorrect password. Access denied.");
       }
     }

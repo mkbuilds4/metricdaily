@@ -46,23 +46,22 @@ export default function AuditLogPage() {
           title: "Configuration Error",
           description: "Audit Log password is not set up.",
         });
-        addAuditLog('SECURITY_ACCESS_DENIED', 'Security', 'Audit Log access denied: Password not configured by admin.');
+        // No direct addAuditLog here to prevent loops if it's not initialized yet
+        // Consider logging this failure if authentication is attempted.
         router.push('/');
         return;
       }
       
-      // Simple check for demonstration. In a real app, use a proper hashing mechanism on client and compare with a pre-hashed password.
-      // This is NOT secure for production.
-      if (storedPasswordHash === auditLogPassword) { // Directly comparing plaintext passwords for simplicity here.
+      if (storedPasswordHash === auditLogPassword) { 
         setIsAuthenticated(true);
       } else {
         const enteredPassword = prompt("Please enter the password to access the Audit Log:");
         if (enteredPassword === auditLogPassword) {
-          localStorage.setItem('auditLogPasswordHash', enteredPassword); // Again, NOT secure for production.
+          localStorage.setItem('auditLogPasswordHash', enteredPassword); 
           setIsAuthenticated(true);
           addAuditLog('SECURITY_ACCESS_GRANTED', 'Security', 'Audit Log access granted.');
         } else {
-          if (enteredPassword !== null) { // Only log if user actually entered something
+          if (enteredPassword !== null) { 
             addAuditLog('SECURITY_ACCESS_DENIED', 'Security', 'Audit Log access denied: Incorrect password entered.');
             alert("Incorrect password. Access denied.");
           } else {
@@ -73,7 +72,7 @@ export default function AuditLogPage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, toast]); // Removed addAuditLog from dependency array as it causes infinite loop
+  }, [router, toast]); 
 
   const loadAuditLogs = useCallback(() => {
     if (typeof window === 'undefined' || !isAuthenticated) return;
