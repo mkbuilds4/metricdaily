@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import WorkLogInputForm from '@/components/WorkLogInputForm';
 import UPHTargetManager from '@/components/UPHTargetManager';
 import {
-  getWorkLogs, // Need today's log to pass to form if exists
+  getWorkLogs, 
   getActiveUPHTarget,
   saveWorkLog,
   getUPHTargets,
@@ -13,6 +13,7 @@ import {
   updateUPHTarget,
   deleteUPHTarget,
   setActiveUPHTarget,
+  duplicateUPHTarget, // Import new action
 } from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { formatDateISO } from '@/lib/utils';
@@ -21,13 +22,12 @@ import { useToast } from "@/hooks/use-toast";
 export default function LogInputPage() {
   const [todayLog, setTodayLog] = useState<DailyWorkLog | null>(null);
   const [uphTargets, setUphTargets] = useState<UPHTarget[]>([]);
-  const [activeTarget, setActiveTarget] = useState<UPHTarget | null>(null); // Keep track of active target for context maybe
+  const [activeTarget, setActiveTarget] = useState<UPHTarget | null>(null); 
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  // Load data needed for this page
   const loadData = useCallback(() => {
-    if (typeof window === 'undefined') return; // Don't run on server
+    if (typeof window === 'undefined') return; 
     console.log('[LogInputPage] Loading data...');
     setIsLoading(true);
     try {
@@ -53,7 +53,7 @@ export default function LogInputPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]); // Add toast dependency
+  }, [toast]); 
 
   useEffect(() => {
      if (typeof window !== 'undefined') {
@@ -61,30 +61,25 @@ export default function LogInputPage() {
      }
   }, [loadData]);
 
-  // --- Action Handlers (Pass client-side actions to components) ---
-
   const handleSaveWorkLog = useCallback((logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }) => {
-    if (typeof window === 'undefined') return {} as DailyWorkLog; // Type assertion might be needed
+    if (typeof window === 'undefined') return {} as DailyWorkLog; 
     try {
       const savedLog = saveWorkLog(logData);
-      // Update local state for today's log if it was saved
       if (savedLog.date === formatDateISO(new Date())) {
         setTodayLog(savedLog);
       }
-      // No need to update full logs array here, page focuses on today's input
       return savedLog;
     } catch (error) {
       console.error('[LogInputPage] Error saving work log:', error);
-      // Error toast is handled within the saveWorkLog action itself now
-      throw error; // Let the form handle displaying the error if needed
+      throw error; 
     }
-  }, []); // Removed toast dependency here as it's handled in the action
+  }, []); 
 
   const handleAddTarget = useCallback((targetData: Omit<UPHTarget, 'id' | 'isActive'>) => {
     if (typeof window === 'undefined') return {} as UPHTarget;
     try {
       const newTarget = addUPHTarget(targetData);
-      setUphTargets(prev => [...prev, newTarget]); // Update local state
+      setUphTargets(prev => [...prev, newTarget]); 
       return newTarget;
     } catch (error) {
       console.error('[LogInputPage] Error adding target:', error);
@@ -95,7 +90,7 @@ export default function LogInputPage() {
       });
       throw error;
     }
-  }, [toast]); // Add toast dependency
+  }, [toast]); 
 
   const handleUpdateTarget = useCallback((targetData: UPHTarget) => {
     if (typeof window === 'undefined') return {} as UPHTarget;
@@ -103,7 +98,7 @@ export default function LogInputPage() {
       const updatedTarget = updateUPHTarget(targetData);
       setUphTargets(prev => prev.map(t => t.id === updatedTarget.id ? updatedTarget : t));
       if (updatedTarget.isActive) {
-        setActiveTarget(updatedTarget); // Keep active target state synced
+        setActiveTarget(updatedTarget); 
       }
       return updatedTarget;
     } catch (error) {
@@ -115,7 +110,7 @@ export default function LogInputPage() {
       });
       throw error;
     }
-  }, [toast]); // Add toast dependency
+  }, [toast]); 
 
    const handleDeleteTarget = useCallback((id: string) => {
      if (typeof window === 'undefined') return;
@@ -131,14 +126,12 @@ export default function LogInputPage() {
        }
       deleteUPHTarget(id);
       setUphTargets(prev => prev.filter(t => t.id !== id));
-       // If the deleted target was the active one (though the check above should prevent this)
        if (activeTarget && activeTarget.id === id) {
-          setActiveTarget(null); // Clear active state locally
+          setActiveTarget(null); 
        }
        toast({ title: "Target Deleted", description: "UPH Target deleted successfully." });
     } catch (error) {
       console.error('[LogInputPage] Error deleting target:', error);
-      // Toasting is handled above or in the action itself for specific errors
       if (!(error instanceof Error && error.message.includes("Cannot delete"))) {
            toast({
                 variant: "destructive",
@@ -148,14 +141,14 @@ export default function LogInputPage() {
       }
       throw error;
     }
-  }, [uphTargets, activeTarget, toast]); // Add toast and other deps
+  }, [uphTargets, activeTarget, toast]); 
 
   const handleSetActiveTarget = useCallback((id: string) => {
      if (typeof window === 'undefined') return {} as UPHTarget;
     try {
       const newActiveTarget = setActiveUPHTarget(id);
       setUphTargets(prev => prev.map(t => ({...t, isActive: t.id === newActiveTarget.id})));
-      setActiveTarget(newActiveTarget); // Update local active target state
+      setActiveTarget(newActiveTarget); 
       toast({ title: "Target Activated", description: `"${newActiveTarget.name}" is now the active target.` });
       return newActiveTarget;
     } catch (error) {
@@ -167,34 +160,50 @@ export default function LogInputPage() {
        });
       throw error;
     }
-  }, [toast]); // Add toast dependency
+  }, [toast]); 
+
+  const handleDuplicateTarget = useCallback((id: string) => {
+    if (typeof window === 'undefined') return {} as UPHTarget;
+    try {
+      const duplicatedTarget = duplicateUPHTarget(id);
+      setUphTargets(prev => [...prev, duplicatedTarget]);
+      return duplicatedTarget;
+    } catch (error) {
+      console.error('[LogInputPage] Error duplicating target:', error);
+      toast({
+        variant: "destructive",
+        title: "Duplication Failed",
+        description: error instanceof Error ? error.message : "Could not duplicate the target.",
+      });
+      throw error;
+    }
+  }, [toast]);
 
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4 md:p-6 lg:p-8"> {/* Added padding */}
+      <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4 md:p-6 lg:p-8">
         <p className="text-xl text-muted-foreground">Loading Input Form...</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-8 p-4 md:p-6 lg:p-8"> {/* Added padding, adjusted max-width */}
+    <div className="w-full max-w-4xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
       <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Log Work & Manage Targets</h1>
 
-      {/* Work Log Input Form */}
       <WorkLogInputForm
         onWorkLogSaved={handleSaveWorkLog}
-        existingLog={todayLog} // Pass today's log if it exists
+        existingLog={todayLog}
       />
 
-      {/* UPH Target Manager */}
       <UPHTargetManager
         targets={uphTargets}
         addUPHTargetAction={handleAddTarget}
         updateUPHTargetAction={handleUpdateTarget}
         deleteUPHTargetAction={handleDeleteTarget}
         setActiveUPHTargetAction={handleSetActiveTarget}
+        duplicateUPHTargetAction={handleDuplicateTarget} // Pass new action
       />
     </div>
   );

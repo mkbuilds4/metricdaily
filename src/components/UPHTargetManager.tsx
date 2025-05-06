@@ -28,111 +28,91 @@ import {
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Edit, CheckCircle, XCircle, ArrowUpDown } from 'lucide-react'; // Icons
+import { Trash2, Edit, CheckCircle, XCircle, ArrowUpDown, Copy } from 'lucide-react'; // Added Copy icon
 import { useToast } from "@/hooks/use-toast";
-import type { UPHTarget } from '@/types'; // Assuming type is defined
-import { cn } from '@/lib/utils'; // Import cn for conditional classes
+import type { UPHTarget } from '@/types';
+import { cn } from '@/lib/utils';
 
-// Zod Schema updated for docsPerUnit and videosPerUnit to allow floats
 const targetFormSchema = z.object({
   name: z.string().min(1, { message: 'Target name is required.' }),
   targetUPH: z.coerce.number().positive({ message: 'Target UPH must be positive.' }),
-  // Allow any positive number (float)
   docsPerUnit: z.coerce.number().positive({ message: 'Docs per unit must be a positive number.' }),
-  // Allow any positive number (float)
   videosPerUnit: z.coerce.number().positive({ message: 'Videos per unit must be a positive number.' }),
 });
 
 type TargetFormData = z.infer<typeof targetFormSchema>;
 
-// --- Component Props ---
 interface UPHTargetManagerProps {
-  // Receive initial data and client-side action functions as props
   targets: UPHTarget[];
-  addUPHTargetAction: (data: Omit<UPHTarget, 'id' | 'isActive'>) => UPHTarget; // Now returns the new target synchronously
-  updateUPHTargetAction: (data: UPHTarget) => UPHTarget; // Returns updated target synchronously
-  deleteUPHTargetAction: (id: string) => void; // Synchronous delete
-  setActiveUPHTargetAction: (id: string) => UPHTarget; // Returns the activated target
+  addUPHTargetAction: (data: Omit<UPHTarget, 'id' | 'isActive'>) => UPHTarget;
+  updateUPHTargetAction: (data: UPHTarget) => UPHTarget;
+  deleteUPHTargetAction: (id: string) => void;
+  setActiveUPHTargetAction: (id: string) => UPHTarget;
+  duplicateUPHTargetAction: (id: string) => UPHTarget; // New prop for duplicating
 }
 
-// Define sortable columns
 type SortableColumn = keyof Pick<UPHTarget, 'name' | 'targetUPH' | 'docsPerUnit' | 'videosPerUnit'>;
 type SortDirection = 'asc' | 'desc';
 
-// --- Component ---
 const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     targets: initialTargets = [],
     addUPHTargetAction,
     updateUPHTargetAction,
     deleteUPHTargetAction,
     setActiveUPHTargetAction,
+    duplicateUPHTargetAction, // New prop
 }) => {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTarget, setEditingTarget] = useState<UPHTarget | null>(null);
-  const [isLoading, setIsLoading] = useState(false); // Keep for visual feedback during sync operations
-  // Use local state for targets to enable immediate UI updates
+  const [isLoading, setIsLoading] = useState(false);
   const [localTargets, setLocalTargets] = useState<UPHTarget[]>(initialTargets);
-
-  // Sorting state
   const [sortColumn, setSortColumn] = useState<SortableColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
-
-  // Sync local state when the initial prop changes (e.g., after parent reloads data)
   useEffect(() => {
     setLocalTargets(initialTargets);
   }, [initialTargets]);
 
-  // Memoized sorted targets
   const sortedTargets = useMemo(() => {
     if (!sortColumn) {
-      // Default sort or maintain original order if no column selected
-      // Ensure consistent default order (e.g., by name or targetUPH)
        return [...localTargets].sort((a, b) => a.name.localeCompare(b.name));
     }
-
     return [...localTargets].sort((a, b) => {
       const valA = a[sortColumn];
       const valB = b[sortColumn];
-
       let comparison = 0;
       if (typeof valA === 'string' && typeof valB === 'string') {
         comparison = valA.localeCompare(valB);
       } else if (typeof valA === 'number' && typeof valB === 'number') {
         comparison = valA - valB;
       } else {
-        // Fallback for mixed or unexpected types
         comparison = String(valA).localeCompare(String(valB));
       }
-
       return sortDirection === 'asc' ? comparison : -comparison;
     });
   }, [localTargets, sortColumn, sortDirection]);
-
 
   const form = useForm<TargetFormData>({
     resolver: zodResolver(targetFormSchema),
     defaultValues: {
       name: '',
-      targetUPH: 0, // Initialize with 0 to avoid undefined -> controlled error
-      docsPerUnit: 1, // Sensible default
-      videosPerUnit: 1, // Sensible default
+      targetUPH: 0,
+      docsPerUnit: 1,
+      videosPerUnit: 1,
     },
   });
 
-  // --- Sorting Handler ---
   const handleSort = useCallback((column: SortableColumn) => {
     setSortDirection(prevDirection =>
       sortColumn === column && prevDirection === 'asc' ? 'desc' : 'asc'
     );
     setSortColumn(column);
-  }, [sortColumn]); // Depend on sortColumn to correctly toggle direction
+  }, [sortColumn]);
 
-  // --- Form Handling ---
   const openEditDialog = (target: UPHTarget) => {
     setEditingTarget(target);
-    form.reset({ // Pre-fill form for editing
+    form.reset({
       name: target.name,
       targetUPH: target.targetUPH,
       docsPerUnit: target.docsPerUnit,
@@ -143,77 +123,59 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
 
   const openAddDialog = () => {
     setEditingTarget(null);
-    form.reset({ // Reset to defaults for adding
+    form.reset({
       name: '',
-      targetUPH: 0, // Initialize with 0
-      docsPerUnit: 1, // Default value
-      videosPerUnit: 1, // Default value
+      targetUPH: 0,
+      docsPerUnit: 1,
+      videosPerUnit: 1,
     });
     setIsDialogOpen(true);
   };
 
  const handleFormSubmit = (values: TargetFormData) => {
     setIsLoading(true);
-    // No need for previous state rollback with sync localStorage
-
     try {
       if (editingTarget) {
-        // === Call Client Action (Update) ===
         const updatedTargetData: UPHTarget = {
           ...editingTarget,
           ...values,
         };
-        const updatedTarget = updateUPHTargetAction(updatedTargetData); // Call sync action
-        // === Update Local State ===
+        const updatedTarget = updateUPHTargetAction(updatedTargetData);
         setLocalTargets(prev =>
           prev.map(t => (t.id === editingTarget.id ? updatedTarget : t))
         );
         toast({ title: "Target Updated", description: `"${values.name}" has been updated.` });
-
       } else {
-        // === Call Client Action (Add) ===
         const newTargetData: Omit<UPHTarget, 'id' | 'isActive'> = values;
-        const actualNewTarget = addUPHTargetAction(newTargetData); // Call sync action
-        // === Update Local State ===
+        const actualNewTarget = addUPHTargetAction(newTargetData);
         setLocalTargets(prev => [...prev, actualNewTarget]);
         toast({ title: "Target Added", description: `"${values.name}" has been added.` });
       }
-      setIsDialogOpen(false); // Close dialog on success
-      form.reset(); // Reset form fields
-      setEditingTarget(null); // Clear editing state
+      setIsDialogOpen(false);
+      form.reset();
+      setEditingTarget(null);
     } catch (error) {
       console.error("Failed to save target:", error);
-      // No rollback needed, but show error
       toast({
         variant: "destructive",
         title: "Save Failed",
         description: error instanceof Error ? error.message : "Could not save the UPH target.",
       });
-      // Keep dialog open on error?
-      // setIsDialogOpen(true);
     } finally {
       setIsLoading(false);
     }
   };
 
-
-  // --- Action Handlers ---
  const handleSetActive = (id: string) => {
     setIsLoading(true);
-
     try {
-      // === Call Client Action ===
       const newActiveTarget = setActiveUPHTargetAction(id);
-      // === Update Local State ===
-      // Update based on the result of the action which handles logic
       setLocalTargets(prev =>
           prev.map(t => ({ ...t, isActive: t.id === newActiveTarget.id }))
       );
       toast({ title: "Target Activated", description: "The selected target is now active." });
-
     } catch (error) {
       console.error("Failed to set active target:", error);
-      // No rollback needed
       toast({
         variant: "destructive",
         title: "Activation Failed",
@@ -224,10 +186,9 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     }
   };
 
-
  const handleDelete = (id: string, name: string) => {
     const targetToDelete = localTargets.find(t => t.id === id);
-    if (!targetToDelete) return; // Should not happen if UI is synced
+    if (!targetToDelete) return;
 
     if (targetToDelete.isActive) {
         toast({
@@ -237,24 +198,16 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
         });
         return;
     }
-
-    // Use browser confirm for simplicity
     if (!confirm(`Are you sure you want to delete the target "${name}"?`)) {
         return;
     }
-
     setIsLoading(true);
-
     try {
-      // === Call Client Action ===
       deleteUPHTargetAction(id);
-      // === Update Local State ===
       setLocalTargets(prev => prev.filter(t => t.id !== id));
       toast({ title: "Target Deleted", description: `"${name}" has been deleted.` });
-
     } catch (error) {
        console.error("Failed to delete target:", error);
-       // No rollback needed
        toast({
             variant: "destructive",
             title: "Deletion Failed",
@@ -265,13 +218,30 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     }
   };
 
-  // Helper to render sort icon
+  const handleDuplicate = (id: string) => {
+    setIsLoading(true);
+    try {
+      const duplicatedTarget = duplicateUPHTargetAction(id);
+      setLocalTargets(prev => [...prev, duplicatedTarget]);
+      toast({ title: "Target Duplicated", description: `"${duplicatedTarget.name}" has been created as a copy.` });
+    } catch (error) {
+      console.error("Failed to duplicate target:", error);
+      toast({
+        variant: "destructive",
+        title: "Duplication Failed",
+        description: error instanceof Error ? error.message : "Could not duplicate the target.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const renderSortIcon = (column: SortableColumn) => {
     if (sortColumn !== column) {
       return <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />;
     }
     return sortDirection === 'asc' ?
-      <ArrowUpDown className="ml-2 h-4 w-4" /> : // Could use ArrowUp/ArrowDown for clearer indication
+      <ArrowUpDown className="ml-2 h-4 w-4" /> :
       <ArrowUpDown className="ml-2 h-4 w-4" />;
   };
 
@@ -291,7 +261,6 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                 {editingTarget ? 'Modify the details of this UPH target.' : 'Define a new UPH target and how many items make one unit.'}
               </DialogDescription>
             </DialogHeader>
-            {/* Target Add/Edit Form */}
             <Form {...form}>
               <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4 py-4">
                  <FormField
@@ -314,14 +283,12 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         <FormItem>
                         <FormLabel>Target UPH</FormLabel>
                         <FormControl>
-                            {/* Ensure value passed is never undefined */}
                             <Input type="number" placeholder="e.g., 15.5" {...field} value={field.value ?? 0} onChange={field.onChange} step="0.1" min="0.1" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
                     )}
                     />
-                 {/* New Field: Docs per Unit */}
                  <FormField
                     control={form.control}
                     name="docsPerUnit"
@@ -329,14 +296,12 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         <FormItem>
                         <FormLabel>Documents per Unit</FormLabel>
                         <FormControl>
-                             {/* Ensure value passed is never undefined. Use step="any" to allow any float */}
                             <Input type="number" placeholder="e.g., 5.25" {...field} value={field.value ?? 0} onChange={field.onChange} step="any" min="0.000001" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
                     )}
                     />
-                 {/* New Field: Videos per Unit */}
                 <FormField
                     control={form.control}
                     name="videosPerUnit"
@@ -344,7 +309,6 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         <FormItem>
                         <FormLabel>Video Sessions per Unit</FormLabel>
                         <FormControl>
-                             {/* Ensure value passed is never undefined. Use step="any" to allow any float */}
                             <Input type="number" placeholder="e.g., 2.55" {...field} value={field.value ?? 0} onChange={field.onChange} step="any" min="0.000001" />
                         </FormControl>
                         <FormMessage />
@@ -365,13 +329,11 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
         </Dialog>
       </CardHeader>
       <CardContent>
-        {/* Targets List Table */}
-        <div className="overflow-x-auto"> {/* Added for horizontal scroll on small screens */}
+        <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[50px]">Active</TableHead> {/* Fixed width */}
-                  {/* Make headers clickable for sorting */}
+                  <TableHead className="w-[50px]">Active</TableHead>
                   <TableHead>
                      <Button variant="ghost" onClick={() => handleSort('name')} className="px-0 hover:bg-transparent">
                        Name
@@ -384,44 +346,41 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                        {renderSortIcon('targetUPH')}
                      </Button>
                   </TableHead>
-                  {/* New Column Header: Docs / Unit */}
-                  <TableHead className="hidden sm:table-cell"> {/* Hide on small screens */}
+                  <TableHead className="hidden sm:table-cell">
                      <Button variant="ghost" onClick={() => handleSort('docsPerUnit')} className="px-0 hover:bg-transparent">
                        Docs / Unit
                        {renderSortIcon('docsPerUnit')}
                      </Button>
                   </TableHead>
-                  {/* New Column Header: Videos / Unit */}
-                  <TableHead className="hidden sm:table-cell"> {/* Hide on small screens */}
+                  <TableHead className="hidden sm:table-cell">
                      <Button variant="ghost" onClick={() => handleSort('videosPerUnit')} className="px-0 hover:bg-transparent">
                        Videos / Unit
                        {renderSortIcon('videosPerUnit')}
                      </Button>
                   </TableHead>
-                  <TableHead className="w-[100px] text-right">Actions</TableHead> {/* Fixed width & align */}
+                  <TableHead className="w-[130px] text-right">Actions</TableHead> {/* Adjusted width for new button */}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedTargets.length === 0 && ( // Use sortedTargets here
+                {sortedTargets.length === 0 && (
                      <TableRow>
-                        {/* Adjust colSpan to include new columns */}
-                        <TableCell colSpan={6} className="text-center text-muted-foreground h-24">No UPH targets defined yet.</TableCell> {/* Increased height */}
+                        <TableCell colSpan={6} className="text-center text-muted-foreground h-24">No UPH targets defined yet.</TableCell>
                     </TableRow>
                 )}
-                {sortedTargets.map((target) => ( // Use sortedTargets here
+                {sortedTargets.map((target) => (
                   <TableRow key={target.id} className={target.isActive ? 'bg-accent/10' : ''}>
-                    <TableCell className="text-center"> {/* Center icon */}
+                    <TableCell className="text-center">
                       {target.isActive ? (
                         <CheckCircle className="h-5 w-5 text-accent mx-auto" />
                       ) : (
                          <Button
                             variant="ghost"
-                            size="icon" // Use icon size
+                            size="icon"
                             onClick={() => handleSetActive(target.id)}
                             disabled={isLoading}
                             title="Set as Active"
                             aria-label="Set as Active"
-                            className="p-1 h-8 w-8 mx-auto" // Adjust size/padding/margin
+                            className="p-1 h-8 w-8 mx-auto"
                             >
                            <XCircle className="h-5 w-5 text-muted-foreground hover:text-foreground" />
                         </Button>
@@ -429,11 +388,20 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                     </TableCell>
                     <TableCell className="font-medium">{target.name}</TableCell>
                     <TableCell>{target.targetUPH}</TableCell>
-                    {/* New Cell: Docs per Unit */}
                     <TableCell className="hidden sm:table-cell">{target.docsPerUnit}</TableCell>
-                     {/* New Cell: Videos per Unit */}
                     <TableCell className="hidden sm:table-cell">{target.videosPerUnit}</TableCell>
-                    <TableCell className="text-right"> {/* Align actions to the right */}
+                    <TableCell className="text-right">
+                       <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDuplicate(target.id)}
+                        disabled={isLoading}
+                        title="Duplicate Target"
+                        aria-label="Duplicate Target"
+                        className="h-8 w-8 mr-1"
+                        >
+                            <Copy className="h-4 w-4" />
+                        </Button>
                        <Button
                         variant="ghost"
                         size="icon"
@@ -441,7 +409,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         disabled={isLoading}
                         title="Edit Target"
                         aria-label="Edit Target"
-                        className="h-8 w-8 mr-1" // Add margin
+                        className="h-8 w-8 mr-1"
                         >
                             <Edit className="h-4 w-4" />
                         </Button>
