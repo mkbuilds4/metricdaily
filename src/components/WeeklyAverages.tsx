@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react'; // Added useEffect
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button'; // Import Button
 import { ChevronLeft, ChevronRight } from 'lucide-react'; // Import icons
@@ -39,12 +39,12 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
       return null; // No active target, no logs, or clientNow not ready
     }
 
-    const displayWeekStart = startOfWeek(currentDisplayDate, { weekStartsOn: 1 });
-    const displayWeekEnd = endOfWeek(currentDisplayDate, { weekStartsOn: 1 });
+    const displayWeekStart = startOfWeek(currentDisplayDate, { weekStartsOn: 1 }); // Monday
+    const displayWeekEnd = endOfWeek(currentDisplayDate, { weekStartsOn: 1 }); // Sunday
 
     const logsThisWeek = allWorkLogs.filter(log => {
       try {
-        const logDate = parseISO(log.date + 'T00:00:00');
+        const logDate = parseISO(log.date + 'T00:00:00'); // Ensure time component for accurate ISO parsing
         return isValid(logDate) && isWithinInterval(logDate, { start: displayWeekStart, end: displayWeekEnd });
       } catch (e) {
         console.warn(`Invalid date format for log: ${log.id}, date: ${log.date}`);
@@ -61,7 +61,7 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
 
     logsThisWeek.forEach(log => {
       const dailyUPH = calculateDailyUPH(log, activeTarget);
-      if (dailyUPH > 0) {
+      if (dailyUPH > 0) { // Only include days where UPH could be calculated
         totalUPHSum += dailyUPH;
         daysWithValidUPH++;
       }
@@ -86,7 +86,7 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
         <CardHeader className="pb-2">
           <CardTitle>Weekly Average UPH</CardTitle>
         </CardHeader>
-        <CardContent className="pt-2 flex items-center justify-center h-[calc(100%-4.5rem)]">
+        <CardContent className="pt-2 flex items-center justify-center h-[calc(100%-4.5rem)]"> {/* Adjust height if needed */}
           <p className="text-muted-foreground text-sm text-center">Loading...</p>
         </CardContent>
       </Card>
@@ -102,7 +102,7 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
       <CardHeader className="pb-2 flex flex-row items-center justify-between">
         <div>
             <CardTitle>Weekly Average UPH</CardTitle>
-            <CardDescription>
+            <CardDescription className="whitespace-nowrap"> {/* Prevent wrapping */}
             {weekStartDateFormatted} - {weekEndDateFormatted}
             </CardDescription>
         </div>
@@ -118,7 +118,7 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
       <CardContent className="pt-2 flex items-center justify-center h-[calc(100%-4.5rem-1rem)]"> {/* Adjusted height for header with buttons */}
         {weeklyAverageUPH === null ? (
           <p className="text-muted-foreground text-sm text-center">
-            No active target set or no logs available for this week.
+            No active target or no logs for this week.
           </p>
         ) : (
           <div className="text-2xl font-bold tabular-nums">
