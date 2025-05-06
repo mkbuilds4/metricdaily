@@ -6,8 +6,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogFooter, // Import DialogFooter
-  DialogClose, // Import DialogClose
+  DialogFooter,
+  DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { HelpCircle, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -184,13 +184,18 @@ const tutorialPages = [
           <li><strong>Log Non-Work Time:</strong> Remember to accurately log your breaks and any training time. This ensures your net work hours and UPH calculations are correct.</li>
           <li><strong>Adapt Your Targets:</strong> Create and adjust UPH targets as your goals or work requirements change. Having multiple targets helps you analyze performance under different conditions.</li>
            <li><strong>Theme Customization:</strong> You can change the application&apos;s theme (Light/Dark/System preference) using the toggle button located in the sidebar footer (bottom-left).</li>
+           <li><strong>Access This Guide:</strong> You can always access this guide by clicking the <HelpCircle className="inline-block h-4 w-4 align-text-bottom" /> icon in the sidebar footer.</li>
         </ul>
       </>
     )
   }
 ];
 
-const TutorialDialog: React.FC = () => {
+interface TutorialDialogProps {
+  contextualTriggerText?: string; // Optional text for a more descriptive trigger button
+}
+
+const TutorialDialog: React.FC<TutorialDialogProps> = ({ contextualTriggerText }) => {
   const [currentPage, setCurrentPage] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -215,19 +220,24 @@ const TutorialDialog: React.FC = () => {
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Open tutorial">
-          <HelpCircle className="h-5 w-5" />
-        </Button>
+        {contextualTriggerText ? (
+          <Button variant="outline" size="lg">
+            <HelpCircle className="mr-2 h-5 w-5" /> {contextualTriggerText}
+          </Button>
+        ) : (
+          <Button variant="ghost" size="icon" aria-label="Open tutorial">
+            <HelpCircle className="h-5 w-5" />
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[600px] md:max-w-[700px] lg:max-w-[800px] flex flex-col">
         <DialogHeader>
           <DialogTitle>Metric Daily Guide ({currentPageData.title})</DialogTitle>
           <DialogDescription>
-            Page {currentPage + 1} of {tutorialPages.length}. Use the buttons below to navigate.
+            Page {currentPage + 1} of {tutorialPages.length}. You can access this guide anytime via the <HelpCircle className="inline-block h-3.5 w-3.5 align-text-bottom" /> icon in the sidebar footer.
           </DialogDescription>
         </DialogHeader>
         <div className="prose prose-sm dark:prose-invert max-h-[60vh] overflow-y-auto pr-3 text-foreground flex-grow">
-          {/* Removed space-y-4 from here, as spacing is handled within content now */}
           <section>
             {currentPageData.content}
           </section>
@@ -246,7 +256,7 @@ const TutorialDialog: React.FC = () => {
               </Button>
             ) : (
               <DialogClose asChild>
-                <Button>Close</Button>
+                <Button>Close Guide</Button>
               </DialogClose>
             )}
           </div>

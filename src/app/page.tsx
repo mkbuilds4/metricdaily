@@ -301,8 +301,10 @@ export default function Home() {
             handleQuickUpdate('documentsCompleted', inputValStr); 
        } else if (!todayLog && docInputValue.trim() !== '') {
             setDocInputValue(''); 
-       } else if (inputValStr === '0') {
+       } else if (inputValStr === '0' && docInputValue.trim() !== '0') { // Ensure '0' stays if typed
             setDocInputValue('0'); 
+       } else if (inputValStr === '' && todayLog) { // Revert if cleared when log exists
+           setDocInputValue(currentValStr);
        }
    };
   const handleVideoInputBlur = () => {
@@ -314,8 +316,10 @@ export default function Home() {
             handleQuickUpdate('videoSessionsCompleted', inputValStr); 
        } else if (!todayLog && videoInputValue.trim() !== '') {
             setVideoInputValue(''); 
-       } else if (inputValStr === '0') {
+       } else if (inputValStr === '0' && videoInputValue.trim() !== '0') { // Ensure '0' stays if typed
            setVideoInputValue('0'); 
+       } else if (inputValStr === '' && todayLog) { // Revert if cleared when log exists
+            setVideoInputValue(currentValStr);
        }
   };
 
@@ -421,7 +425,7 @@ export default function Home() {
           </Button>
         </div>
          <div className="mt-8">
-          <TutorialDialog />
+           <TutorialDialog contextualTriggerText="View App Guide" />
         </div>
          <p className="text-sm text-muted-foreground mt-4">
             To start tracking, you&apos;ll need to define at least one UPH Target and log your first day&apos;s work on the &apos;Log / Targets&apos; page.
@@ -586,3 +590,4 @@ export default function Home() {
 
 
     
+
