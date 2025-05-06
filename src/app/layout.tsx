@@ -21,6 +21,8 @@ import {
 import { Home, Settings, List, History, BarChart } from 'lucide-react'; // Import icons
 import { usePathname } from 'next/navigation'; // Import usePathname
 import { cn } from "@/lib/utils"; // Import cn utility
+import { ThemeProvider } from '@/components/ThemeProvider'; // Import ThemeProvider
+import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
 
 const fontSans = FontSans({ // Changed variable name
   subsets: ['latin'],
@@ -54,67 +56,68 @@ export default function RootLayout({
           fontSans.variable // Apply font variable
         )}
       >
-        <SidebarProvider defaultOpen={true}>
-          <Sidebar side="left" variant="sidebar" collapsible="icon">
-            <SidebarHeader>
-                <SidebarTrigger />
-                {/* Can add Logo/Title here if needed */}
-            </SidebarHeader>
-            <SidebarContent>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                         {/* Link to dashboard (home page) */}
-                        <SidebarMenuButton href="/" isActive={pathname === '/'} tooltip="Dashboard">
-                            <Home />
-                            <span>Dashboard</span>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                        {/* Link to Log Input page */}
-                        <SidebarMenuButton href="/log-input" isActive={pathname === '/log-input'} tooltip="Log Input / Targets">
-                            <List />
-                            <span>Log / Targets</span>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                     <SidebarMenuItem>
-                         {/* Link to Previous Logs page */}
-                        <SidebarMenuButton href="/previous-logs" isActive={pathname === '/previous-logs'} tooltip="Previous Logs">
-                             <History />
-                             <span>Previous Logs</span>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    {/* Future: Weekly Averages link */}
-                    {/* <SidebarMenuItem>
-                        <SidebarMenuButton href="/weekly-averages" isActive={pathname === '/weekly-averages'} tooltip="Weekly Averages">
-                            <BarChart />
-                            <span>Weekly Averages</span>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem> */}
-                    {/* Future: Settings link */}
-                    {/* <SidebarMenuItem>
-                        <SidebarMenuButton href="/settings" isActive={pathname === '/settings'} tooltip="Settings">
-                            <Settings />
-                            <span>Settings</span>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem> */}
-                </SidebarMenu>
-            </SidebarContent>
-             {/* Optional Footer */}
-             {/* <SidebarFooter>
-               <SidebarMenuButton href="#" tooltip="Settings">
-                   <Settings />
-                   <span>Settings</span>
-               </SidebarMenuButton>
-             </SidebarFooter> */}
-          </Sidebar>
-          <SidebarInset className="overflow-y-auto h-screen"> {/* Allow scrolling within the inset */}
-            {/* Use main tag for semantic structure and apply padding here */}
-             <main className="p-4 md:p-6 lg:p-8">
-               {children}
-             </main>
-          </SidebarInset>
-        </SidebarProvider>
-        <Toaster />
+        <ThemeProvider
+            defaultTheme="system"
+            storageKey="metric-daily-theme"
+        >
+            <SidebarProvider defaultOpen={true}>
+            <Sidebar side="left" variant="sidebar" collapsible="icon">
+                <SidebarHeader>
+                    <SidebarTrigger />
+                    {/* Can add Logo/Title here if needed */}
+                </SidebarHeader>
+                <SidebarContent>
+                    <SidebarMenu>
+                        <SidebarMenuItem>
+                            {/* Link to dashboard (home page) */}
+                            <SidebarMenuButton href="/" isActive={pathname === '/'} tooltip="Dashboard">
+                                <Home />
+                                <span>Dashboard</span>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                            {/* Link to Log Input page */}
+                            <SidebarMenuButton href="/log-input" isActive={pathname === '/log-input'} tooltip="Log Input / Targets">
+                                <List />
+                                <span>Log / Targets</span>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                            {/* Link to Previous Logs page */}
+                            <SidebarMenuButton href="/previous-logs" isActive={pathname === '/previous-logs'} tooltip="Previous Logs">
+                                <History />
+                                <span>Previous Logs</span>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        {/* Future: Weekly Averages link */}
+                        {/* <SidebarMenuItem>
+                            <SidebarMenuButton href="/weekly-averages" isActive={pathname === '/weekly-averages'} tooltip="Weekly Averages">
+                                <BarChart />
+                                <span>Weekly Averages</span>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem> */}
+                        {/* Future: Settings link */}
+                        {/* <SidebarMenuItem>
+                            <SidebarMenuButton href="/settings" isActive={pathname === '/settings'} tooltip="Settings">
+                                <Settings />
+                                <span>Settings</span>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem> */}
+                    </SidebarMenu>
+                </SidebarContent>
+                <SidebarFooter className="flex items-center justify-center p-2">
+                    <ThemeToggle />
+                </SidebarFooter>
+            </Sidebar>
+            <SidebarInset className="overflow-y-auto h-screen"> {/* Allow scrolling within the inset */}
+                {/* Use main tag for semantic structure and apply padding here */}
+                <main className="p-4 md:p-6 lg:p-8">
+                {children}
+                </main>
+            </SidebarInset>
+            </SidebarProvider>
+            <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );
