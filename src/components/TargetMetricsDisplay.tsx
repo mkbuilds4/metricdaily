@@ -4,9 +4,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Trash2, BookOpen, Video, Clock, ChevronDown, ArrowUp, ArrowDown, Minus as MinusIcon, AlertCircle, Target as TargetIcon } from 'lucide-react';
+import { Trash2, BookOpen, Video, Clock, ChevronDown, ArrowUp, ArrowDown, Minus as MinusIcon, AlertCircle, Target as TargetIcon, Brain } from 'lucide-react'; // Added Brain
 import { useToast } from "@/hooks/use-toast";
-import { parse, isValid, format, addMinutes, addDays } from 'date-fns'; // Import addMinutes and addDays
+import { parse, isValid, format, addMinutes, addDays } from 'date-fns'; 
 import {
     Accordion,
     AccordionContent,
@@ -28,13 +28,14 @@ import {
     formatDateISO,
     formatFriendlyDate,
     calculateRemainingUnits,
-    calculateCurrentMetrics, // Import the new function
-    calculateTimeAheadBehindSchedule, // Import the schedule calculation function
-    formatTimeAheadBehind, // Import the formatting function
-    calculateProjectedGoalHitTime, // Use the updated calculation
+    calculateCurrentMetrics, 
+    calculateTimeAheadBehindSchedule, 
+    formatTimeAheadBehind, 
+    calculateProjectedGoalHitTime,
+    formatDurationFromMinutes, 
 } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
-import PreviousLogTriggerSummary from './PreviousLogTriggerSummary'; // Import the component for previous log triggers
+import PreviousLogTriggerSummary from './PreviousLogTriggerSummary'; 
 import { cn } from '@/lib/utils';
 
 
@@ -43,7 +44,7 @@ interface TargetMetricsDisplayProps {
   targets: UPHTarget[];
   deleteWorkLogAction: (id: string) => void;
   showTodaySection?: boolean;
-  paginatePreviousLogs?: boolean; // Prop to enable pagination (optional, not implemented here)
+  paginatePreviousLogs?: boolean; 
 }
 
 const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
@@ -57,10 +58,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
-    // Ensure this runs only on the client
      if (typeof window !== 'undefined') {
          setCurrentTime(new Date());
-         const timerId = setInterval(() => setCurrentTime(new Date()), 1000); // Update every second
+         const timerId = setInterval(() => setCurrentTime(new Date()), 1000); 
          return () => clearInterval(timerId);
      }
   }, []);
@@ -82,7 +82,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     if (!prevLogsMap[log.date]) {
                         prevLogsMap[log.date] = [];
                     }
-                     // Ensure only one log per date is stored for previous logs summary/accordion
                      if (prevLogsMap[log.date].length === 0) {
                         prevLogsMap[log.date].push(log);
                      }
@@ -95,10 +94,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         }
     });
 
-    // Group previous logs by date, taking only the first log entry for that date
     const prevLogsGrouped = Object.entries(prevLogsMap)
-                                .map(([date, logsForDate]) => ({ date, log: logsForDate[0] })) // Assign the first log to 'log' property
-                                .sort((a, b) => b.date.localeCompare(a.date)); // Sort dates descending
+                                .map(([date, logsForDate]) => ({ date, log: logsForDate[0] })) 
+                                .sort((a, b) => b.date.localeCompare(a.date)); 
 
     return {
         todayLog: showTodaySection ? foundTodayLog : null,
@@ -106,9 +104,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     };
   }, [allWorkLogs, showTodaySection]);
 
-  // Memoize active target finding
   const activeTarget = useMemo(() => targets.find(t => t.isActive) ?? (targets.length > 0 ? targets[0] : null), [targets]);
-  // Memoize sorted targets by UPH for consistent display order within days
   const sortedTargetsByUPH = useMemo(() => [...targets].sort((a, b) => a.targetUPH - b.targetUPH), [targets]);
 
 
@@ -116,22 +112,18 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
      const logDateObj = parse(log.date, 'yyyy-MM-dd', new Date());
      const formattedLogDate = isValid(logDateObj) ? formatFriendlyDate(logDateObj) : log.date;
 
-    // Replace confirm with ShadCN AlertDialog if needed
     if (!confirm(`Are you sure you want to delete the log for ${formattedLogDate}?`)) {
       return;
     }
     try {
       deleteWorkLogAction(log.id);
-      // Toast handled by parent component
     } catch (error) {
       console.error("Failed to delete work log:", error);
-      // Toast handled by parent component
     }
   };
 
 
   const renderTargetMetricCard = (log: DailyWorkLog, target: UPHTarget, isToday: boolean) => {
-      // Always calculate based on the specific target for this card
       const totalActualUnits = calculateDailyUnits(log, target);
       const totalRequiredUnits = calculateRequiredUnitsForTarget(log.hoursWorked, target.targetUPH);
       const totalDifferenceUnits = totalActualUnits - totalRequiredUnits;
@@ -139,16 +131,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
       let projectedHitTimeFormatted = '-';
       let currentMetrics = { currentUnits: 0, currentUPH: 0 };
-      let timeAheadBehindSeconds: number | null = null; // Changed to seconds
+      let timeAheadBehindSeconds: number | null = null; 
 
        if (isToday && currentTime) {
-           // Use the target FOR THIS CARD for real-time projections
            currentMetrics = calculateCurrentMetrics(log, target, currentTime);
-           // Calculate schedule status relative to THIS card's target
-           timeAheadBehindSeconds = calculateTimeAheadBehindSchedule(log, target, currentTime); // Now in seconds
-           projectedHitTimeFormatted = calculateProjectedGoalHitTime(log, timeAheadBehindSeconds); // Pass seconds
+           timeAheadBehindSeconds = calculateTimeAheadBehindSchedule(log, target, currentTime); 
+           projectedHitTimeFormatted = calculateProjectedGoalHitTime(log, timeAheadBehindSeconds); 
 
-           // Check if goal is already met relative to THIS card's target
            if (currentMetrics.currentUnits >= totalRequiredUnits) {
                projectedHitTimeFormatted = 'Goal Met';
            }
@@ -156,15 +145,14 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
       const isBehindSchedule = timeAheadBehindSeconds !== null && timeAheadBehindSeconds < 0;
       const isAheadSchedule = timeAheadBehindSeconds !== null && timeAheadBehindSeconds > 0;
-      const isOnSchedule = timeAheadBehindSeconds !== null && Math.abs(timeAheadBehindSeconds) < 1; // Use tolerance for float comparison (seconds)
+      const isOnSchedule = timeAheadBehindSeconds !== null && Math.abs(timeAheadBehindSeconds) < 1; 
 
 
       return (
         <Card key={`${log.id}-${target.id}`} className="flex flex-col justify-between">
             <CardHeader className="pb-2">
                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg font-semibold">{target.name}</CardTitle> {/* Show Target Name */}
-                    {/* Previous Days: Show +/- vs Goal */}
+                    <CardTitle className="text-lg font-semibold">{target.name}</CardTitle> 
                      {!isToday && (
                          <span className={cn(
                             "text-base font-medium",
@@ -179,7 +167,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
             <CardContent className="flex-grow grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                  {isToday ? (
                      <>
-                        {/* Today: Units Now and Schedule */}
                         <div>
                             <p className="text-muted-foreground">Units Now</p>
                             <p className="font-medium tabular-nums">{currentMetrics.currentUnits.toFixed(2)}</p>
@@ -187,10 +174,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                          <div>
                             <p className="text-muted-foreground">Schedule Status</p>
                             <p className={cn("font-medium tabular-nums", isAheadSchedule && "text-green-600 dark:text-green-500", isBehindSchedule && "text-red-600 dark:text-red-500", isOnSchedule && "text-foreground")}>
-                                {formatTimeAheadBehind(timeAheadBehindSeconds)} {/* Pass seconds */}
+                                {formatTimeAheadBehind(timeAheadBehindSeconds)} 
                              </p>
                          </div>
-                         {/* Est. Goal Hit Time Display */}
                          <div className="col-span-2">
                              <p className="text-muted-foreground">Est. Goal Hit Time</p>
                              <p className="font-medium tabular-nums">
@@ -200,7 +186,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     </>
                  ) : (
                      <>
-                        {/* Previous: Show completed units and avg UPH */}
                        <div>
                            <p className="text-muted-foreground">Units Completed</p>
                            <p className="font-medium tabular-nums">{totalActualUnits.toFixed(2)}</p>
@@ -230,9 +215,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   };
 
    const renderLogSummaryCard = (log: DailyWorkLog, isToday: boolean) => {
-        // Find the specific target associated with this log
         const logTarget = targets.find(t => t.id === log.targetId);
-        // Use the log's own target if available, otherwise use the active one for context
         const targetForSummaryCalc = logTarget ?? activeTarget;
 
         let summaryUPH: number | null = null;
@@ -242,7 +225,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
             if (isToday && currentTime) {
                 const metrics = calculateCurrentMetrics(log, targetForSummaryCalc, currentTime);
                 summaryUPH = metrics.currentUPH;
-                currentUnitsNow = metrics.currentUnits; // Get current units
+                currentUnitsNow = metrics.currentUnits; 
             } else if (!isToday) {
                 summaryUPH = calculateDailyUPH(log, targetForSummaryCalc);
             }
@@ -252,10 +235,12 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         const logDate = parse(log.date, 'yyyy-MM-dd', new Date());
         const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date;
         const totalUnits = targetForSummaryCalc ? calculateDailyUnits(log, targetForSummaryCalc) : 0;
+        const breakTimeFormatted = formatDurationFromMinutes(log.breakDurationMinutes * 60);
+        const trainingTimeFormatted = log.trainingDurationMinutes && log.trainingDurationMinutes > 0 ? formatDurationFromMinutes(log.trainingDurationMinutes * 60) : null;
 
 
         return (
-            <Card className="mb-4 relative"> {/* Added relative positioning for delete button */}
+            <Card className="mb-4 relative"> 
                  <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                          <div>
@@ -263,15 +248,15 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 {isToday ? `Today (${formattedLogDate})` : formattedLogDate}
                             </CardTitle>
                              <CardDescription>
-                                {log.hoursWorked.toFixed(2)} hrs ({log.startTime} - {log.endTime}, {log.breakDurationMinutes} min break)
-                                {/* Indicate which target is being used for the overall summary calculation */}
+                                {log.hoursWorked.toFixed(2)} hrs ({log.startTime} - {log.endTime})
+                                <br/>
+                                Break: {breakTimeFormatted}
+                                {trainingTimeFormatted && ` | Training: ${trainingTimeFormatted}`}
                                 {targetForSummaryCalc && ` (Context: ${summaryTargetName})`}
-                                {/* Warning if NO target could be determined for summary */}
                                 {!targetForSummaryCalc && targets.length > 0 && <span className="text-destructive ml-2">(Log target missing, no active target)</span>}
                                 {!targetForSummaryCalc && targets.length === 0 && <span className="text-muted-foreground ml-2">(No targets defined)</span>}
                             </CardDescription>
                          </div>
-                          {/* Delete button only shown for previous logs inside the Accordion content */}
                            {!isToday && (
                              <div className="absolute top-2 right-2">
                                  <Button
@@ -288,8 +273,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                            )}
                     </div>
                 </CardHeader>
-                 <CardContent className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"> {/* Responsive grid */}
-                     {/* Documents Completed */}
+                 <CardContent className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"> 
                      <div className="flex items-center space-x-2">
                         <BookOpen className="h-5 w-5 text-muted-foreground" />
                         <div>
@@ -297,7 +281,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             <p className="text-lg font-semibold">{log.documentsCompleted}</p>
                         </div>
                     </div>
-                     {/* Video Sessions Completed */}
                      <div className="flex items-center space-x-2">
                          <Video className="h-5 w-5 text-muted-foreground" />
                          <div>
@@ -305,7 +288,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                              <p className="text-lg font-semibold">{log.videoSessionsCompleted}</p>
                          </div>
                      </div>
-                      {/* Today Only: Current Units Now */}
                       {isToday && currentUnitsNow !== null && targetForSummaryCalc && (
                            <div className="flex items-center space-x-2">
                                 <TargetIcon className="h-5 w-5 text-muted-foreground" />
@@ -315,7 +297,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                               </div>
                            </div>
                       )}
-                      {/* Previous Only: Total Units Completed */}
                        {!isToday && targetForSummaryCalc && (
                            <div className="flex items-center space-x-2">
                                <TargetIcon className="h-5 w-5 text-muted-foreground" />
@@ -325,7 +306,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                               </div>
                            </div>
                        )}
-                     {/* Overall UPH (Current or Avg) */}
                      {summaryUPH !== null && targetForSummaryCalc && (
                          <div className="flex items-center space-x-2">
                              <Clock className="h-5 w-5 text-muted-foreground" />
@@ -336,7 +316,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                          </div>
                      )}
                  </CardContent>
-                 {/* Optional Notes */}
                  {log.notes && (
                     <CardFooter className="pt-3">
                         <p className="text-sm text-muted-foreground italic">Notes: {log.notes}</p>
@@ -348,14 +327,12 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* === Today's Log Section === */}
       {showTodaySection && todayLog && (
         <div>
           {renderLogSummaryCard(todayLog, true)}
 
            {targets.length > 0 ? (
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Today's breakdown: Pass today's log and each target */}
                 {sortedTargetsByUPH.map((target) => renderTargetMetricCard(todayLog, target, true))}
              </div>
             ) : (
@@ -364,40 +341,34 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         </div>
       )}
 
-      {/* Separator if both Today and Previous logs are shown */}
       {showTodaySection && todayLog && previousLogsByDate.length > 0 && <Separator className="my-6" />}
 
-      {/* === Previous Logs Section (with Accordion) === */}
       {previousLogsByDate.length > 0 && (
         <div>
-           {/* Conditional title based on whether today's section is shown */}
            {(!showTodaySection || (showTodaySection && !todayLog)) && (
                 <h3 className="text-xl font-semibold mb-3">Previous Logs</h3>
            )}
            <Accordion type="multiple" className="w-full space-y-1">
                {previousLogsByDate.map(({ date, log }) => {
-                    // Determine the target associated with the log, fallback to active if missing
                     const logTarget = targets.find(t => t.id === log.targetId);
-                    const targetForCalc = logTarget ?? activeTarget; // Target used for UPH/Unit calculations for this log's context
+                    const targetForCalc = logTarget ?? activeTarget; 
 
                     return (
                     <AccordionItem value={date} key={date} className="border-none bg-muted/20 rounded-md overflow-hidden">
                            <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50" asChild>
                                <div className="flex items-center justify-between w-full">
                                    <PreviousLogTriggerSummary log={log} allTargets={targets} onDelete={handleDeleteLog} />
-                                   {/* Chevron is now part of PreviousLogTriggerSummary or handled by AccordionTrigger internally depending on asChild */}
                                </div>
                            </AccordionTrigger>
                         <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-md">
-                            {/* Render detailed breakdown for all defined targets, calculated against log's context */}
                              {renderLogSummaryCard(log, false)}
-                              {!logTarget && targetForCalc && ( // Warning if log's specific target is missing, but we have a fallback
+                              {!logTarget && targetForCalc && ( 
                                  <div className="mb-4 flex items-center gap-2 text-sm text-orange-600 dark:text-orange-400 px-2 py-1 bg-orange-500/10 rounded-md">
                                      <AlertCircle className="h-4 w-4" />
                                      Target (ID: {log.targetId || 'None'}) associated with this log was not found. Metrics below use {targetForCalc === activeTarget ? `active target (${activeTarget?.name || 'None'})` : 'first available target'} as fallback.
                                  </div>
                              )}
-                              {!logTarget && !targetForCalc && targets.length > 0 && ( // Warning if log target missing AND no fallback
+                              {!logTarget && !targetForCalc && targets.length > 0 && ( 
                                 <div className="mb-4 flex items-center gap-2 text-sm text-destructive px-2 py-1 bg-destructive/10 rounded-md">
                                      <AlertCircle className="h-4 w-4" />
                                      Target (ID: {log.targetId || 'None'}) not found, and no active target set. Cannot calculate target-specific metrics accurately.
@@ -405,7 +376,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                               )}
                              {targets.length > 0 ? (
                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-                                    {/* Iterate through all targets to show comparison cards, using targetForCalc for calculations */}
                                     {sortedTargetsByUPH.map(displayTarget => renderTargetMetricCard(log, displayTarget, false))}
                                  </div>
                                 ) : (
@@ -419,7 +389,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         </div>
       )}
 
-      {/* === Messages for No Data === */}
        {(!showTodaySection || !todayLog) && previousLogsByDate.length === 0 && (
            <p className="text-center text-muted-foreground">No work logs found.</p>
        )}
@@ -428,3 +397,4 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
+

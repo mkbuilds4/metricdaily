@@ -55,10 +55,11 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     startTime: '14:00',
     endTime: '22:30',
     breakDurationMinutes: 65,
-    hoursWorked: 7.25, // Example calculation
-    documentsCompleted: 62, // Example data
-    videoSessionsCompleted: 85, // Increased video sessions
-    targetId: sampleUPHTargets[0].id, // Associate with the first sample target ('meeting-1')
+    trainingDurationMinutes: 5, // Sample training
+    hoursWorked: 7.17, // Example calculation (8.5h - 65m break - 5m train)
+    documentsCompleted: 62, 
+    videoSessionsCompleted: 85, 
+    targetId: sampleUPHTargets[0].id, 
     notes: 'Started a bit late, focused on docs.',
   },
   // Yesterday's Log
@@ -68,9 +69,10 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     startTime: '13:45',
     endTime: '22:15',
     breakDurationMinutes: 60,
+    trainingDurationMinutes: 0,
     hoursWorked: 7.5,
     documentsCompleted: 78,
-    videoSessionsCompleted: 105, // Increased video sessions
+    videoSessionsCompleted: 105, 
     targetId: sampleUPHTargets[0].id,
     notes: 'Good pace yesterday.',
   },
@@ -81,9 +83,10 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     startTime: '14:10',
     endTime: '22:40',
     breakDurationMinutes: 70,
-    hoursWorked: 7.17, // Example calculation for 8h 30m - 70m break
+    trainingDurationMinutes: 10,
+    hoursWorked: 7.0, // Example calculation for 8h 30m - 70m break - 10m train
     documentsCompleted: 55,
-    videoSessionsCompleted: 72, // Increased video sessions
+    videoSessionsCompleted: 72, 
     targetId: sampleUPHTargets[0].id,
     notes: 'More video calls this day.',
   },
@@ -94,6 +97,7 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     startTime: '14:00',
     endTime: '22:00',
     breakDurationMinutes: 60,
+    trainingDurationMinutes: 0,
     hoursWorked: 7.00,
     documentsCompleted: 65,
     videoSessionsCompleted: 90,
@@ -107,9 +111,10 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     startTime: '14:00',
     endTime: '22:30',
     breakDurationMinutes: 65,
+    trainingDurationMinutes: 0,
     hoursWorked: 7.25,
     documentsCompleted: 70,
-    videoSessionsCompleted: 95, // Increased video sessions
+    videoSessionsCompleted: 95, 
     targetId: sampleUPHTargets[0].id,
     notes: 'Average day.',
   },
@@ -120,7 +125,8 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     startTime: '13:30',
     endTime: '22:30',
     breakDurationMinutes: 60,
-    hoursWorked: 8.00,
+    trainingDurationMinutes: 15,
+    hoursWorked: 7.75, // 9h total - 60m break - 15m train
     documentsCompleted: 85,
     videoSessionsCompleted: 110,
     targetId: sampleUPHTargets[0].id,
@@ -133,6 +139,7 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     startTime: '14:15',
     endTime: '22:00',
     breakDurationMinutes: 45,
+    trainingDurationMinutes: 0,
     hoursWorked: 7.00,
     documentsCompleted: 68,
     videoSessionsCompleted: 88,
@@ -146,6 +153,7 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     startTime: '14:00',
     endTime: '22:30',
     breakDurationMinutes: 65,
+    trainingDurationMinutes: 0,
     hoursWorked: 7.25,
     documentsCompleted: 72,
     videoSessionsCompleted: 100,
@@ -155,3 +163,4 @@ export const sampleWorkLogs: DailyWorkLog[] = [
 ];
 
 // You can add more sample logs or targets as needed.
+

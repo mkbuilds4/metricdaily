@@ -11,8 +11,8 @@ import {
   saveWorkLog,
   deleteWorkLog,
   getUPHTargets,
-  loadSampleData, // Import sample data loader
-  clearAllData, // Import clear data action
+  loadSampleData, 
+  clearAllData, 
 } from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
@@ -20,9 +20,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee } from 'lucide-react'; // Added Coffee icon
+import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain } from 'lucide-react'; // Added Brain for Training
 import { useToast } from "@/hooks/use-toast";
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import { Skeleton } from '@/components/ui/skeleton'; 
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,11 +43,11 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [docInputValue, setDocInputValue] = useState<string>('');
   const [videoInputValue, setVideoInputValue] = useState<string>('');
-  const [hasInitialData, setHasInitialData] = useState(false); // Track if any data exists initially
+  const [hasInitialData, setHasInitialData] = useState(false); 
   const { toast } = useToast();
 
   const loadData = useCallback((showLoadingIndicator = true) => {
-    if (typeof window === 'undefined') return; // Don't run on server
+    if (typeof window === 'undefined') return; 
 
     if (showLoadingIndicator) {
       setIsLoading(true);
@@ -75,7 +75,7 @@ export default function Home() {
         title: "Error Loading Data",
         description: "Could not load work logs or targets from local storage.",
       });
-      setHasInitialData(false); // Assume no data if loading fails
+      setHasInitialData(false); 
     } finally {
       if (showLoadingIndicator) {
         setIsLoading(false);
@@ -88,7 +88,7 @@ export default function Home() {
         loadData();
      }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only once on mount
+  }, []); 
 
    useEffect(() => {
     const today = workLogs.find(log => log.date === formatDateISO(new Date()));
@@ -97,12 +97,12 @@ export default function Home() {
   }, [workLogs]);
 
   // --- Action Handlers ---
-  const handleSaveWorkLog = useCallback((logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number }) => {
-    if (typeof window === 'undefined') return {} as DailyWorkLog; // Type assertion might be needed
+  const handleSaveWorkLog = useCallback((logData: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { id?: string; hoursWorked?: number }) => {
+    if (typeof window === 'undefined') return {} as DailyWorkLog;
     try {
       const savedLog = saveWorkLog(logData);
-      loadData(false); // Reload data without showing loading spinner for smoother UX
-      setHasInitialData(true); // Assume data exists after saving
+      loadData(false); 
+      setHasInitialData(true); 
       return savedLog;
     } catch (error) {
       console.error('[Home] Error saving work log via quick update/dashboard:', error);
@@ -119,7 +119,7 @@ export default function Home() {
      if (typeof window === 'undefined') return;
     try {
         deleteWorkLog(id);
-        loadData(false); // Reload data without spinner
+        loadData(false); 
         toast({ title: "Log Deleted", description: "Work log deleted successfully." });
     } catch (error) {
         console.error('[Home] Error deleting work log:', error);
@@ -134,7 +134,7 @@ export default function Home() {
 
   // --- Quick Update Handlers ---
    const handleQuickUpdate = (field: 'documentsCompleted' | 'videoSessionsCompleted', value: number | string) => {
-      if (typeof window === 'undefined') return; // Guard against server-side execution
+      if (typeof window === 'undefined') return; 
       const todayDateStr = formatDateISO(new Date());
       const todayLog = workLogs.find(log => log.date === todayDateStr);
 
@@ -174,19 +174,16 @@ export default function Home() {
            return;
        }
 
-      // Ensure targetId is included when saving
       const updatedLogData: DailyWorkLog = {
           ...todayLog,
           [field]: newValue,
-          targetId: todayLog.targetId, // Keep the original targetId
+          targetId: todayLog.targetId, 
       };
 
       try {
            handleSaveWorkLog(updatedLogData);
-           // No need to update input values here, effect hook handles it
       } catch(error) {
            if (typeof value === 'string') {
-                // Revert input on error
                 if (field === 'documentsCompleted') setDocInputValue(todayLog.documentsCompleted.toString());
                 if (field === 'videoSessionsCompleted') setVideoInputValue(todayLog.videoSessionsCompleted.toString());
            }
@@ -204,7 +201,7 @@ export default function Home() {
           title: "Sample Data Loaded",
           description: "Sample work logs and targets have been added.",
         });
-        loadData(); // Reload data to reflect changes
+        loadData(); 
       } else {
         toast({
           title: "Sample Data Skipped",
@@ -230,7 +227,7 @@ export default function Home() {
         title: "Data Cleared",
         description: "All work logs and targets have been removed.",
       });
-      loadData(); // Reload to show empty state
+      loadData(); 
     } catch (error) {
       console.error('[Home] Error clearing data:', error);
       toast({
@@ -255,16 +252,17 @@ export default function Home() {
     const todayDateStr = formatDateISO(new Date());
     const defaultStartTime = '14:00';
     const defaultEndTime = '22:30';
-    // Grace period is implicitly handled by starting break count from actual break taken
-    // Or, if you want to explicitly add it to breakDurationMinutes:
-    const defaultBreakMinutes = 5; // Start with 5 min grace
-    const defaultHoursWorked = calculateHoursWorked(todayDateStr, defaultStartTime, defaultEndTime, defaultBreakMinutes);
+    const defaultBreakMinutes = 5; 
+    const defaultTrainingMinutes = 0; // Initialize training to 0
+    const totalNonWorkMinutes = defaultBreakMinutes + defaultTrainingMinutes;
+    const defaultHoursWorked = calculateHoursWorked(todayDateStr, defaultStartTime, defaultEndTime, totalNonWorkMinutes);
 
-    const newLog: Omit<DailyWorkLog, 'id'> & { hoursWorked: number } = {
+    const newLog: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { hoursWorked: number } = {
       date: todayDateStr,
       startTime: defaultStartTime,
       endTime: defaultEndTime,
       breakDurationMinutes: defaultBreakMinutes,
+      trainingDurationMinutes: defaultTrainingMinutes,
       hoursWorked: defaultHoursWorked,
       documentsCompleted: 0,
       videoSessionsCompleted: 0,
@@ -276,7 +274,7 @@ export default function Home() {
       handleSaveWorkLog(newLog);
       toast({
         title: "New Day Started",
-        description: `Work log for ${todayDateStr} created with default times and 5 min grace period.`,
+        description: `Work log for ${todayDateStr} created with default times.`,
       });
     } catch (error) {
       // Error handling is within handleSaveWorkLog
@@ -284,41 +282,38 @@ export default function Home() {
   }, [activeTarget, handleSaveWorkLog, toast]);
 
 
-  // --- Input Change/Blur Handlers (Keep as is) ---
   const handleDocInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    // Allow empty string or numbers
     if (val === '' || /^\d+$/.test(val)) setDocInputValue(val);
   };
   const handleVideoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
      const val = e.target.value;
-      // Allow empty string or numbers
      if (val === '' || /^\d+$/.test(val)) setVideoInputValue(val);
   };
   const handleDocInputBlur = () => {
        const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
        const currentValStr = todayLog?.documentsCompleted?.toString() ?? '0';
-       const inputValStr = docInputValue.trim() === '' ? '0' : docInputValue.trim(); // Treat empty as 0 on blur
+       const inputValStr = docInputValue.trim() === '' ? '0' : docInputValue.trim(); 
 
        if (todayLog && inputValStr !== currentValStr) {
-            handleQuickUpdate('documentsCompleted', inputValStr); // Save the cleaned value
+            handleQuickUpdate('documentsCompleted', inputValStr); 
        } else if (!todayLog && docInputValue.trim() !== '') {
-            setDocInputValue(''); // Clear input if no log exists
+            setDocInputValue(''); 
        } else if (inputValStr === '0') {
-            setDocInputValue('0'); // Ensure display shows '0' if entered/blurred as empty
+            setDocInputValue('0'); 
        }
    };
   const handleVideoInputBlur = () => {
        const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
        const currentValStr = todayLog?.videoSessionsCompleted?.toString() ?? '0';
-       const inputValStr = videoInputValue.trim() === '' ? '0' : videoInputValue.trim(); // Treat empty as 0 on blur
+       const inputValStr = videoInputValue.trim() === '' ? '0' : videoInputValue.trim(); 
 
        if (todayLog && inputValStr !== currentValStr) {
-            handleQuickUpdate('videoSessionsCompleted', inputValStr); // Save the cleaned value
+            handleQuickUpdate('videoSessionsCompleted', inputValStr); 
        } else if (!todayLog && videoInputValue.trim() !== '') {
-            setVideoInputValue(''); // Clear input if no log exists
+            setVideoInputValue(''); 
        } else if (inputValStr === '0') {
-           setVideoInputValue('0'); // Ensure display shows '0' if entered/blurred as empty
+           setVideoInputValue('0'); 
        }
   };
 
@@ -335,13 +330,13 @@ export default function Home() {
     }
 
     const newBreakDuration = todayLog.breakDurationMinutes + breakMinutes;
-    // Recalculate hours worked with the new break time
-    const newHoursWorked = calculateHoursWorked(todayLog.date, todayLog.startTime, todayLog.endTime, newBreakDuration);
+    const totalNonWorkMinutes = newBreakDuration + (todayLog.trainingDurationMinutes || 0);
+    const newHoursWorked = calculateHoursWorked(todayLog.date, todayLog.startTime, todayLog.endTime, totalNonWorkMinutes);
 
     const updatedLogData: DailyWorkLog = {
       ...todayLog,
       breakDurationMinutes: newBreakDuration,
-      hoursWorked: newHoursWorked, // Update hoursWorked
+      hoursWorked: newHoursWorked, 
     };
 
     try {
@@ -355,16 +350,46 @@ export default function Home() {
     }
   }, [workLogs, handleSaveWorkLog, toast]);
 
+  const handleAddTraining = useCallback((trainingMinutes: number) => {
+    if (typeof window === 'undefined') return;
+    const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
+    if (!todayLog) {
+      toast({
+        variant: "destructive",
+        title: "Cannot Add Training",
+        description: "No work log found for today. Start a new day first.",
+      });
+      return;
+    }
 
-  // --- Derived State ---
+    const newTrainingDuration = (todayLog.trainingDurationMinutes || 0) + trainingMinutes;
+    const totalNonWorkMinutes = todayLog.breakDurationMinutes + newTrainingDuration;
+    const newHoursWorked = calculateHoursWorked(todayLog.date, todayLog.startTime, todayLog.endTime, totalNonWorkMinutes);
+
+    const updatedLogData: DailyWorkLog = {
+      ...todayLog,
+      trainingDurationMinutes: newTrainingDuration,
+      hoursWorked: newHoursWorked,
+    };
+
+    try {
+      handleSaveWorkLog(updatedLogData);
+      toast({
+        title: "Training Time Added",
+        description: `${trainingMinutes} minutes added to your training time. Total training: ${formatDurationFromMinutes(newTrainingDuration * 60)}.`,
+      });
+    } catch (error) {
+      // Error handled by handleSaveWorkLog
+    }
+  }, [workLogs, handleSaveWorkLog, toast]);
+
+
   const todayLog = workLogs.find(log => log.date === formatDateISO(new Date())) || null;
 
-  // --- Render Logic ---
   if (isLoading) {
     return (
       <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
         <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Daily Dashboard</h1>
-        {/* Show Skeleton Loaders */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <Skeleton className="h-[200px] w-full" />
           <Skeleton className="h-[150px] w-full" />
@@ -375,7 +400,6 @@ export default function Home() {
     );
   }
 
-   // --- No Data State ---
    if (!hasInitialData) {
     return (
       <div className="w-full max-w-3xl mx-auto space-y-8 p-4 md:p-6 lg:p-8 text-center flex flex-col items-center justify-center min-h-[calc(100vh-15rem)]">
@@ -393,7 +417,6 @@ export default function Home() {
     );
   }
 
-  // --- Main Dashboard Render ---
   return (
     <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 md:mb-8">
@@ -422,11 +445,9 @@ export default function Home() {
             </AlertDialog>
         </div>
 
-        {/* Grid container for Quick Update and Weekly Averages */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8"> {/* Changed to 3 cols */}
-            {/* --- Quick Update Section --- */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8"> 
             {todayLog ? (
-                <Card className="md:col-span-2"> {/* Quick Update takes 2 cols on md+ */}
+                <Card className="md:col-span-2"> 
                     <CardHeader>
                         <CardTitle>Quick Update Today's Counts</CardTitle>
                          <CardDescription>
@@ -472,25 +493,30 @@ export default function Home() {
                         </div>
                     </CardContent>
                      <CardFooter className="flex flex-col items-center gap-2 pt-2 pb-4">
-                        <Label className="text-sm font-medium">Log Break Time</Label>
+                        <Label className="text-sm font-medium">Log Non-Work Time</Label>
                         <div className="flex gap-2">
                             <Button variant="outline" size="sm" onClick={() => handleAddBreak(15)} disabled={isLoading || !todayLog}>
-                                <Coffee className="mr-2 h-4 w-4" /> Add 15 min
+                                <Coffee className="mr-2 h-4 w-4" /> Break (15m)
                             </Button>
                             <Button variant="outline" size="sm" onClick={() => handleAddBreak(30)} disabled={isLoading || !todayLog}>
-                                <Coffee className="mr-2 h-4 w-4" /> Add 30 min
+                                <Coffee className="mr-2 h-4 w-4" /> Lunch (30m)
+                            </Button>
+                             <Button variant="outline" size="sm" onClick={() => handleAddTraining(5)} disabled={isLoading || !todayLog}>
+                                <Brain className="mr-2 h-4 w-4" /> Train (5m)
                             </Button>
                         </div>
                         {todayLog && (
                              <p className="text-xs text-muted-foreground mt-1">
-                                Current Total Break: {formatDurationFromMinutes(todayLog.breakDurationMinutes * 60)}
+                                Current Break: {formatDurationFromMinutes(todayLog.breakDurationMinutes * 60)}
                                 {todayLog.breakDurationMinutes === 5 && " (Grace Period)"}
+                                {todayLog.trainingDurationMinutes && todayLog.trainingDurationMinutes > 0 && 
+                                    ` | Training: ${formatDurationFromMinutes(todayLog.trainingDurationMinutes * 60)}`
+                                }
                              </p>
                         )}
                     </CardFooter>
                 </Card>
             ) : (
-                // No todayLog, but other data (targets/previous logs) might exist
                 <Card className="border-dashed border-muted-foreground md:col-span-2">
                     <CardHeader>
                         <CardTitle className="text-muted-foreground">Log Not Found for Today</CardTitle>
@@ -508,7 +534,6 @@ export default function Home() {
                 </Card>
             )}
 
-            {/* Weekly Averages Component - takes 1 col */}
             <WeeklyAverages
                 allWorkLogs={workLogs}
                 targets={uphTargets}
@@ -516,7 +541,6 @@ export default function Home() {
             />
         </div>
 
-         {/* --- Daily Progress Indicator --- */}
          {todayLog && activeTarget && (
              <DailyProgressIndicator
                  todayLog={todayLog}
@@ -524,8 +548,6 @@ export default function Home() {
              />
          )}
 
-        {/* --- Productivity Dashboard Display (Today's Log Details) --- */}
-        {/* Conditionally render only if todayLog exists, or show a message */}
         {todayLog ? (
             <ProductivityDashboard
                 initialWorkLogs={[todayLog]}
@@ -533,7 +555,7 @@ export default function Home() {
                 initialActiveTarget={activeTarget}
                 deleteWorkLogAction={handleDeleteWorkLog}
             />
-        ) : hasInitialData && !isLoading ? ( // Show if other data exists but no today log
+        ) : hasInitialData && !isLoading ? ( 
             <Card>
                 <CardHeader>
                     <CardTitle>Today's Metrics</CardTitle>

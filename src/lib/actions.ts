@@ -68,29 +68,26 @@ export function getWorkLogs(): DailyWorkLog[] {
 
 /**
  * Saves (adds or updates) a work log entry in localStorage.
- * If logData includes breakDurationMinutes, it implies hoursWorked should be recalculated.
+ * If logData includes breakDurationMinutes or trainingDurationMinutes, it implies hoursWorked should be recalculated.
  */
 export function saveWorkLog(
-  logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked?: number } // hoursWorked is optional, will be recalculated if break changes
+  logData: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { id?: string; hoursWorked?: number; trainingDurationMinutes?: number }
 ): DailyWorkLog {
   console.log('[Client Action] saveWorkLog called with:', logData);
 
-  // Recalculate hoursWorked if breakDurationMinutes is part of the update or if it's a new log.
-  // If hoursWorked is explicitly provided and breakDurationMinutes is not, use the provided hoursWorked.
+  const totalNonWorkMinutes = (logData.breakDurationMinutes || 0) + (logData.trainingDurationMinutes || 0);
+
   let finalHoursWorked: number;
-  if (logData.breakDurationMinutes !== undefined) {
-      finalHoursWorked = calculateHoursWorked(logData.date, logData.startTime, logData.endTime, logData.breakDurationMinutes);
-  } else if (logData.hoursWorked !== undefined) {
+  // If hoursWorked is explicitly provided (e.g., from quick update that doesn't modify time/break/training), use it.
+  // Otherwise, recalculate.
+  if (logData.hoursWorked !== undefined && logData.breakDurationMinutes === undefined && logData.trainingDurationMinutes === undefined) {
       finalHoursWorked = logData.hoursWorked;
   } else {
-      // This case should ideally not happen if called correctly (e.g., from form submission or break update)
-      // Fallback to calculating from existing break if updating, or default if new.
-      const existingLog = logData.id ? getWorkLogs().find(l => l.id === logData.id) : null;
-      finalHoursWorked = calculateHoursWorked(logData.date, logData.startTime, logData.endTime, existingLog?.breakDurationMinutes ?? 65);
+      finalHoursWorked = calculateHoursWorked(logData.date, logData.startTime, logData.endTime, totalNonWorkMinutes);
   }
 
 
-  if (finalHoursWorked < 0) { // Allow 0 hours worked (e.g. full day break)
+  if (finalHoursWorked < 0) {
     throw new Error('Calculated hours worked cannot be negative.');
   }
   if (logData.documentsCompleted === undefined || isNaN(logData.documentsCompleted) || logData.documentsCompleted < 0) {
@@ -102,7 +99,6 @@ export function saveWorkLog(
   if (!logData.date || !/^\d{4}-\d{2}-\d{2}$/.test(logData.date)) {
     throw new Error('Date must be in YYYY-MM-DD format.');
   }
-   // Check associated target exists if targetId is provided
    if (logData.targetId) {
        const targets = getUPHTargets();
        if (!targets.some(t => t.id === logData.targetId)) {
@@ -115,20 +111,31 @@ export function saveWorkLog(
   let savedLog: DailyWorkLog;
   let operation: 'added' | 'updated' = 'added';
 
-  // Create a complete log entry with the final calculated hoursWorked
-  const completeLogData = { ...logData, hoursWorked: finalHoursWorked };
+  // Create a complete log entry with the final calculated hoursWorked and ensure trainingDurationMinutes is included
+  const completeLogData: Omit<DailyWorkLog, 'id'> & { trainingDurationMinutes?: number } = {
+      date: logData.date,
+      startTime: logData.startTime,
+      endTime: logData.endTime,
+      breakDurationMinutes: logData.breakDurationMinutes || 0,
+      trainingDurationMinutes: logData.trainingDurationMinutes || 0,
+      // hoursWorked is handled below
+      documentsCompleted: logData.documentsCompleted,
+      videoSessionsCompleted: logData.videoSessionsCompleted,
+      targetId: logData.targetId,
+      notes: logData.notes,
+  };
 
 
   if (logData.id) {
     const index = logs.findIndex((log) => log.id === logData.id);
     if (index > -1) {
-      savedLog = { ...logs[index], ...completeLogData }; // Use completeLogData
+      savedLog = { ...logs[index], ...completeLogData, hoursWorked: finalHoursWorked };
       logs[index] = savedLog;
       console.log('[Client Action] Updated log using provided ID:', logData.id);
       operation = 'updated';
     } else {
       console.warn('[Client Action] Log ID provided but not found, adding as new:', logData.id);
-      savedLog = { ...completeLogData, id: generateLocalId() }; // Use completeLogData
+      savedLog = { ...completeLogData, id: generateLocalId(), hoursWorked: finalHoursWorked };
       logs.push(savedLog);
        operation = 'added';
     }
@@ -137,12 +144,14 @@ export function saveWorkLog(
     if (existingLogIndex > -1) {
         const existingId = logs[existingLogIndex].id;
         const targetIdToKeep = logData.targetId ?? logs[existingLogIndex].targetId;
-        savedLog = { ...logs[existingLogIndex], ...completeLogData, id: existingId, targetId: targetIdToKeep }; // Use completeLogData
+        // Ensure trainingDurationMinutes is preserved if updating an existing log
+        const trainingToKeep = logData.trainingDurationMinutes ?? logs[existingLogIndex].trainingDurationMinutes ?? 0;
+        savedLog = { ...logs[existingLogIndex], ...completeLogData, id: existingId, targetId: targetIdToKeep, trainingDurationMinutes: trainingToKeep, hoursWorked: finalHoursWorked };
         logs[existingLogIndex] = savedLog;
         console.log('[Client Action] Updated existing log found by date:', logData.date, ' ID:', existingId);
         operation = 'updated';
     } else {
-        savedLog = { ...completeLogData, id: generateLocalId() }; // Use completeLogData
+        savedLog = { ...completeLogData, id: generateLocalId(), hoursWorked: finalHoursWorked };
         logs.push(savedLog);
         console.log('[Client Action] Added new log with ID:', savedLog.id);
          operation = 'added';
@@ -337,6 +346,7 @@ export function loadSampleData(): boolean {
             id: log.id || generateLocalId(), // Ensure ID exists
             // Assign a valid target ID from the processed sample targets
             targetId: processedTargets[0]?.id || undefined, // Assign first target ID or undefined
+            trainingDurationMinutes: log.trainingDurationMinutes || 0, // Ensure training minutes are set
         }));
 
         saveToLocalStorage(WORK_LOGS_KEY, processedLogs);
@@ -388,3 +398,4 @@ export function archiveTodayLog(): DailyWorkLog | null {
         return null;
     }
 }
+

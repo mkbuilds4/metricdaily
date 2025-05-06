@@ -8,7 +8,8 @@ export interface DailyWorkLog {
   startTime: string; // Format: 'HH:mm' (24-hour)
   endTime: string; // Format: 'HH:mm' (24-hour)
   breakDurationMinutes: number; // Break time in minutes
-  hoursWorked: number; // Calculated from startTime, endTime, and breakDurationMinutes
+  trainingDurationMinutes?: number; // Optional: Training time in minutes
+  hoursWorked: number; // Calculated from startTime, endTime, break, and training
   documentsCompleted: number;
   videoSessionsCompleted: number;
   targetId?: string; // Optional: Link to the UPHTarget active when logging

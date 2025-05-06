@@ -24,19 +24,20 @@ import { Calendar } from '@/components/ui/calendar';
 import { CalendarIcon } from 'lucide-react';
 import { cn, calculateHoursWorked, formatDateISO } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
-import type { DailyWorkLog, UPHTarget } from '@/types';
-import { getActiveUPHTarget } from '@/lib/actions'; // Import function to get active target
+import type { DailyWorkLog } from '@/types';
+import { getActiveUPHTarget } from '@/lib/actions'; 
 
-// Schema now includes targetId (optional, as it's determined at save time)
+// Schema now includes targetId and trainingDurationMinutes
 const formSchema = z.object({
   date: z.date({ required_error: 'A date is required.' }),
   startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: "Invalid time format (HH:mm)" }),
   endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: "Invalid time format (HH:mm)" }),
   breakDurationMinutes: z.coerce.number().nonnegative().int().default(65),
+  trainingDurationMinutes: z.coerce.number().nonnegative().int().optional().default(0), // Optional training time
   documentsCompleted: z.coerce.number().nonnegative().int().default(0),
   videoSessionsCompleted: z.coerce.number().nonnegative().int().default(0),
   notes: z.string().optional(),
-  targetId: z.string().optional(), // Include targetId, but it's not user-input
+  targetId: z.string().optional(), 
 }).refine(data => {
     if (!isValid(data.date)) return false;
     const startDate = parse(`${format(data.date, 'yyyy-MM-dd')} ${data.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
@@ -59,11 +60,10 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
   const [isLoading, setIsLoading] = useState(false);
   const [calculatedHours, setCalculatedHours] = useState<number | null>(null);
   const [isClient, setIsClient] = useState(false);
-  const [activeTargetId, setActiveTargetId] = useState<string | undefined>(undefined); // State for active target ID
+  const [activeTargetId, setActiveTargetId] = useState<string | undefined>(undefined); 
 
   useEffect(() => {
     setIsClient(true);
-    // Fetch active target ID on mount
     if (typeof window !== 'undefined') {
         const target = getActiveUPHTarget();
         setActiveTargetId(target?.id);
@@ -75,20 +75,20 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
   const form = useForm<WorkLogFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-        date: undefined, // Initialize as undefined
+        date: undefined, 
         startTime: '14:00',
         endTime: '22:30',
         breakDurationMinutes: 65,
+        trainingDurationMinutes: 0, // Default training to 0
         documentsCompleted: 0,
         videoSessionsCompleted: 0,
         notes: '',
-        targetId: undefined, // No target ID for new log initially
+        targetId: undefined, 
     },
   });
 
-   // Update form defaults if existingLog changes or becomes available after mount
    useEffect(() => {
-    if (existingLog && isEditingToday && isClient) { // Ensure client-side
+    if (existingLog && isEditingToday && isClient) { 
         const parsedDate = parse(existingLog.date, 'yyyy-MM-dd', new Date());
         if (isValid(parsedDate)) {
             form.reset({
@@ -96,41 +96,43 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                 startTime: existingLog.startTime,
                 endTime: existingLog.endTime,
                 breakDurationMinutes: existingLog.breakDurationMinutes,
+                trainingDurationMinutes: existingLog.trainingDurationMinutes || 0,
                 documentsCompleted: existingLog.documentsCompleted,
                 videoSessionsCompleted: existingLog.videoSessionsCompleted,
                 notes: existingLog.notes ?? '',
-                targetId: existingLog.targetId, // Important: use the log's own targetId
+                targetId: existingLog.targetId, 
             });
-            const hours = calculateHoursWorked(existingLog.date, existingLog.startTime, existingLog.endTime, existingLog.breakDurationMinutes);
+            const totalNonWorkMinutes = (existingLog.breakDurationMinutes || 0) + (existingLog.trainingDurationMinutes || 0);
+            const hours = calculateHoursWorked(existingLog.date, existingLog.startTime, existingLog.endTime, totalNonWorkMinutes);
             setCalculatedHours(hours);
         }
-    } else if (!existingLog && isClient) { // Only reset if not editing and on client
+    } else if (!existingLog && isClient) { 
         resetToDefaults();
     }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [existingLog, isClient]); // Add isClient dependency
+   }, [existingLog, isClient]); 
 
 
-    // Handle client-side hydration and initial calculation
    useEffect(() => {
-        if (isClient) { // Only run on client
-            if (!form.getValues('date')) { // Set default date if not already set
+        if (isClient) { 
+            if (!form.getValues('date')) { 
                  form.setValue('date', new Date(), { shouldDirty: false, shouldValidate: false });
             }
-            // Initial calculation if values are present
             const initialValues = form.getValues();
             if (isValid(initialValues.date)) {
-                const hours = calculateHoursWorked(initialValues.date, initialValues.startTime, initialValues.endTime, initialValues.breakDurationMinutes);
+                const totalNonWorkMinutes = (initialValues.breakDurationMinutes || 0) + (initialValues.trainingDurationMinutes || 0);
+                const hours = calculateHoursWorked(initialValues.date, initialValues.startTime, initialValues.endTime, totalNonWorkMinutes);
                 setCalculatedHours(hours);
             }
         }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [isClient]); // Rerun only when isClient changes
+   }, [isClient]); 
 
 
   const watchStartTime = form.watch('startTime');
   const watchEndTime = form.watch('endTime');
   const watchBreakMinutes = form.watch('breakDurationMinutes');
+  const watchTrainingMinutes = form.watch('trainingDurationMinutes'); // Watch training minutes
   const watchDate = form.watch('date');
 
   useEffect(() => {
@@ -138,7 +140,8 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
           const formattedDate = format(watchDate, 'yyyy-MM-dd');
            const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
             if (timeRegex.test(watchStartTime) && timeRegex.test(watchEndTime) && watchBreakMinutes !== undefined && watchBreakMinutes !== null && formattedDate) {
-                const hours = calculateHoursWorked(formattedDate, watchStartTime, watchEndTime, watchBreakMinutes);
+                const totalNonWorkMinutes = (watchBreakMinutes || 0) + (watchTrainingMinutes || 0);
+                const hours = calculateHoursWorked(formattedDate, watchStartTime, watchEndTime, totalNonWorkMinutes);
                 setCalculatedHours(hours);
             } else {
                  setCalculatedHours(null);
@@ -146,7 +149,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
       } else {
           setCalculatedHours(null);
       }
-  }, [watchStartTime, watchEndTime, watchBreakMinutes, watchDate]);
+  }, [watchStartTime, watchEndTime, watchBreakMinutes, watchTrainingMinutes, watchDate]);
 
    const resetToDefaults = () => {
         const today = new Date();
@@ -155,12 +158,14 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
             startTime: '14:00',
             endTime: '22:30',
             breakDurationMinutes: 65,
+            trainingDurationMinutes: 0,
             documentsCompleted: 0,
             videoSessionsCompleted: 0,
             notes: '',
-            targetId: activeTargetId, // Reset with current active target ID
+            targetId: activeTargetId, 
         });
-        const defaultHours = calculateHoursWorked(formatDateISO(today), '14:00', '22:30', 65);
+        const defaultNonWorkMinutes = 65 + 0; // Default break + default training
+        const defaultHours = calculateHoursWorked(formatDateISO(today), '14:00', '22:30', defaultNonWorkMinutes);
         setCalculatedHours(defaultHours);
     };
 
@@ -174,19 +179,17 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
     }
 
     const formattedDate = format(values.date, 'yyyy-MM-dd');
-    const hoursWorked = calculateHoursWorked(formattedDate, values.startTime, values.endTime, values.breakDurationMinutes);
+    const totalNonWorkMinutes = (values.breakDurationMinutes || 0) + (values.trainingDurationMinutes || 0);
+    const hoursWorked = calculateHoursWorked(formattedDate, values.startTime, values.endTime, totalNonWorkMinutes);
 
      if (hoursWorked === null || isNaN(hoursWorked) || hoursWorked < 0) {
-        toast({ variant: "destructive", title: "Invalid Times", description: "Calculated hours worked is invalid. Check start/end times and break." });
+        toast({ variant: "destructive", title: "Invalid Times", description: "Calculated hours worked is invalid. Check start/end times and break/training." });
         setIsLoading(false);
         return;
     }
 
-    const isUpdatingLog = existingLog && existingLog.id === form.getValues('notes')?.split('::')[1]; // A way to track if editing
+    const isUpdatingLog = existingLog && existingLog.id === form.getValues('notes')?.split('::')[1]; 
 
-    // Determine the target ID to save:
-    // If editing, keep the original targetId unless it was somehow cleared.
-    // If adding new, use the currently active target ID fetched earlier.
     const targetIdToSave = isUpdatingLog ? (existingLog?.targetId ?? activeTargetId) : activeTargetId;
 
     if (!targetIdToSave && !isUpdatingLog) {
@@ -202,10 +205,11 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
         startTime: values.startTime,
         endTime: values.endTime,
         breakDurationMinutes: values.breakDurationMinutes,
+        trainingDurationMinutes: values.trainingDurationMinutes || 0,
         hoursWorked: hoursWorked,
         documentsCompleted: values.documentsCompleted,
         videoSessionsCompleted: values.videoSessionsCompleted,
-        targetId: targetIdToSave, // ** Store the determined target ID **
+        targetId: targetIdToSave, 
         notes: values.notes || '',
     };
 
@@ -217,19 +221,18 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
         description: `Entry for ${formattedDate} has been ${isUpdatingLog ? 'updated' : 'added/updated'}.`,
       });
 
-       // Keep form populated if editing today, otherwise reset to today's defaults
        if (savedLog.date === formatDateISO(new Date())) {
-           // Re-calculate hours after save might change data
-           const updatedHours = calculateHoursWorked(savedLog.date, savedLog.startTime, savedLog.endTime, savedLog.breakDurationMinutes);
+           const updatedNonWorkMinutes = (savedLog.breakDurationMinutes || 0) + (savedLog.trainingDurationMinutes || 0);
+           const updatedHours = calculateHoursWorked(savedLog.date, savedLog.startTime, savedLog.endTime, updatedNonWorkMinutes);
             setCalculatedHours(updatedHours);
-            // Reset form with the *saved* data to ensure sync, including targetId
             form.reset({
-                ...values, // Keep submitted values
-                targetId: savedLog.targetId, // Use the actually saved targetId
-                date: parse(savedLog.date, 'yyyy-MM-dd', new Date()), // Ensure date is Date object
+                ...values, 
+                targetId: savedLog.targetId, 
+                date: parse(savedLog.date, 'yyyy-MM-dd', new Date()), 
+                trainingDurationMinutes: savedLog.trainingDurationMinutes || 0,
             });
        } else {
-           resetToDefaults(); // Reset to today's defaults for next entry
+           resetToDefaults(); 
        }
 
     } catch (error) {
@@ -245,7 +248,6 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
   };
 
   if (!isClient) {
-     // Render placeholder or skeleton while waiting for client mount
      return (
          <Card>
              <CardHeader><CardTitle>Loading Form...</CardTitle></CardHeader>
@@ -265,8 +267,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6"> {/* Responsive gap */}
-                {/* Date Picker */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6"> 
                 <FormField
                 control={form.control}
                 name="date"
@@ -292,7 +293,7 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                         <Calendar
                             mode="single"
                             selected={field.value}
-                            onSelect={(date) => date && field.onChange(date)} // Ensure date is not null/undefined
+                            onSelect={(date) => date && field.onChange(date)} 
                             disabled={(date) => date > new Date() || date < new Date('2023-01-01')}
                             initialFocus
                         />
@@ -302,32 +303,34 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                     </FormItem>
                 )}
                 />
-                 {/* Calculated Hours Display */}
                  <div className="flex flex-col justify-end pb-1">
                     <FormLabel>Calculated Hours</FormLabel>
                     <div className="h-10 px-3 py-2 text-sm font-medium text-muted-foreground border border-input rounded-md bg-muted">
                         {(calculatedHours !== null && !isNaN(calculatedHours))
                           ? `${calculatedHours.toFixed(2)} hrs`
-                          : 'Enter times & break'}
+                          : 'Enter times & break/training'}
                     </div>
                  </div>
             </div>
 
-            {/* Time and Break Inputs */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6"> {/* Responsive gap */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 <FormField control={form.control} name="startTime" render={({ field }) => (
                     <FormItem> <FormLabel>Start Time (HH:mm)</FormLabel> <FormControl><Input type="time" {...field} /></FormControl> <FormMessage /> </FormItem>
                 )}/>
                  <FormField control={form.control} name="endTime" render={({ field }) => (
                     <FormItem> <FormLabel>End Time (HH:mm)</FormLabel> <FormControl><Input type="time" {...field} /></FormControl> <FormMessage /> </FormItem>
                 )}/>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                  <FormField control={form.control} name="breakDurationMinutes" render={({ field }) => (
                     <FormItem> <FormLabel>Break (Minutes)</FormLabel> <FormControl><Input type="number" placeholder="e.g., 65" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} min="0" step="1" /></FormControl> <FormMessage /> </FormItem>
                 )}/>
+                 <FormField control={form.control} name="trainingDurationMinutes" render={({ field }) => (
+                    <FormItem> <FormLabel>Training (Minutes)</FormLabel> <FormControl><Input type="number" placeholder="e.g., 5" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} min="0" step="1" /></FormControl> <FormMessage /> </FormItem>
+                )}/>
             </div>
 
-            {/* Work Completed Inputs */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6"> {/* Responsive gap */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6"> 
                 <FormField control={form.control} name="documentsCompleted" render={({ field }) => (
                     <FormItem> <FormLabel>Documents Completed</FormLabel> <FormControl><Input type="number" placeholder="0" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} min="0" /></FormControl> <FormMessage /> </FormItem>
                 )}/>
@@ -336,7 +339,6 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                 )}/>
             </div>
 
-            {/* Notes */}
             <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem> <FormLabel>Notes (Optional)</FormLabel> <FormControl><Textarea placeholder="Any relevant notes..." {...field} value={field.value ?? ''} /></FormControl> <FormMessage /> </FormItem>
             )}/>
@@ -345,7 +347,6 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
                 <Button type="submit" disabled={isLoading}>
                     {isLoading ? 'Saving...' : (isEditingToday ? 'Update Log' : 'Save Log')}
                 </Button>
-                {/* Reset button only shown if form date is not today, or if not editing */}
                  {(!isEditingToday || (isValid(watchDate) && formatDateISO(watchDate) !== formatDateISO(new Date())) || !isValid(watchDate) ) && (
                     <Button type="button" variant="outline" onClick={resetToDefaults} className="ml-2" disabled={isLoading}>
                         Reset to Today's Defaults
@@ -360,3 +361,4 @@ const WorkLogInputForm: React.FC<WorkLogInputFormProps> = ({ onWorkLogSaved, exi
 };
 
 export default WorkLogInputForm;
+
