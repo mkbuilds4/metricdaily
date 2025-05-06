@@ -2,13 +2,13 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { getAuditLogs } from '@/lib/actions';
+import { getAuditLogs, addAuditLog } from '@/lib/actions';
 import type { AuditLogEntry } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format, parseISO } from 'date-fns';
-import { RefreshCw, Download, Filter, X } from 'lucide-react'; // Added X icon
+import { RefreshCw, Download, Filter, X, Lock } from 'lucide-react'; // Added X icon, Lock
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +21,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation'; // Import useRouter
 
 const ITEMS_PER_PAGE = 20;
 
@@ -30,9 +31,52 @@ export default function AuditLogPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [filterTerm, setFilterTerm] = useState('');
   const { toast } = useToast();
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedPasswordHash = localStorage.getItem('auditLogPasswordHash');
+      const auditLogPassword = process.env.NEXT_PUBLIC_AUDIT_LOG_PASSWORD;
+
+      if (!auditLogPassword) {
+        console.error("Audit log password not configured.");
+        toast({
+          variant: "destructive",
+          title: "Configuration Error",
+          description: "Audit Log password is not set up.",
+        });
+        addAuditLog('SECURITY_ACCESS_DENIED', 'Security', 'Audit Log access denied: Password not configured by admin.');
+        router.push('/');
+        return;
+      }
+      
+      // Simple check for demonstration. In a real app, use a proper hashing mechanism on client and compare with a pre-hashed password.
+      // This is NOT secure for production.
+      if (storedPasswordHash === auditLogPassword) { // Directly comparing plaintext passwords for simplicity here.
+        setIsAuthenticated(true);
+      } else {
+        const enteredPassword = prompt("Please enter the password to access the Audit Log:");
+        if (enteredPassword === auditLogPassword) {
+          localStorage.setItem('auditLogPasswordHash', enteredPassword); // Again, NOT secure for production.
+          setIsAuthenticated(true);
+          addAuditLog('SECURITY_ACCESS_GRANTED', 'Security', 'Audit Log access granted.');
+        } else {
+          if (enteredPassword !== null) { // Only log if user actually entered something
+            addAuditLog('SECURITY_ACCESS_DENIED', 'Security', 'Audit Log access denied: Incorrect password entered.');
+            alert("Incorrect password. Access denied.");
+          } else {
+             addAuditLog('SECURITY_ACCESS_CANCELLED', 'Security', 'Audit Log access attempt cancelled by user.');
+          }
+          router.push('/');
+        }
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router, toast]); // Removed addAuditLog from dependency array as it causes infinite loop
 
   const loadAuditLogs = useCallback(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !isAuthenticated) return;
     setIsLoading(true);
     try {
       const logs = getAuditLogs();
@@ -47,11 +91,13 @@ export default function AuditLogPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, isAuthenticated]);
 
   useEffect(() => {
-    loadAuditLogs();
-  }, [loadAuditLogs]);
+    if (isAuthenticated) {
+      loadAuditLogs();
+    }
+  }, [loadAuditLogs, isAuthenticated]);
 
   const filteredLogs = auditLogs.filter(log => {
     const searchTerm = filterTerm.toLowerCase();
@@ -72,6 +118,7 @@ export default function AuditLogPage() {
   const totalPages = Math.ceil(filteredLogs.length / ITEMS_PER_PAGE);
 
   const handleRefresh = () => {
+    if (!isAuthenticated) return;
     setCurrentPage(1);
     setFilterTerm('');
     loadAuditLogs();
@@ -79,6 +126,7 @@ export default function AuditLogPage() {
   };
 
   const handleExport = () => {
+    if (!isAuthenticated) return;
     if (filteredLogs.length === 0) {
       toast({ title: "No Data to Export", description: "There are no logs matching the current filter." });
       return;
@@ -106,8 +154,18 @@ export default function AuditLogPage() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     toast({ title: "Export Successful", description: "Audit log exported to CSV." });
+    addAuditLog('SYSTEM_EXPORT_DATA', 'System', 'Exported audit log to CSV.');
   };
 
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4 md:p-6 lg:p-8">
+        <Lock className="h-12 w-12 text-muted-foreground mb-4" />
+        <p className="text-xl text-muted-foreground">Authenticating...</p>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -165,7 +223,7 @@ export default function AuditLogPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[180px]">Timestamp</TableHead>
-                    <TableHead className="w-[150px]">Action</TableHead>
+                    <TableHead className="w-[200px]">Action</TableHead> {/* Increased width for action */}
                     <TableHead className="w-[120px]">Entity Type</TableHead>
                     <TableHead className="w-[150px]">Entity ID</TableHead>
                     <TableHead>Details</TableHead>
@@ -177,7 +235,7 @@ export default function AuditLogPage() {
                       <TableCell className="text-xs">{format(parseISO(log.timestamp), 'MMM d, yyyy p')}</TableCell>
                       <TableCell>
                         <span className="px-2 py-1 text-xs font-medium rounded-full bg-muted text-muted-foreground whitespace-nowrap">
-                          {log.action.replace(/_/g, ' ')}
+                          {log.action.replace(/_/g, ' ').toUpperCase()}
                         </span>
                       </TableCell>
                       <TableCell>{log.entityType}</TableCell>
@@ -219,3 +277,4 @@ export default function AuditLogPage() {
     </div>
   );
 }
+

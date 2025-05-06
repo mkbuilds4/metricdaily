@@ -46,9 +46,9 @@ export function getAuditLogs(): AuditLogEntry[] {
   return logs;
 }
 
-function addAuditLog(
+export function addAuditLog( // Added export keyword
   action: AuditLogActionType,
-  entityType: 'WorkLog' | 'UPHTarget' | 'System',
+  entityType: 'WorkLog' | 'UPHTarget' | 'System' | 'Security',
   details: string,
   entityId?: string,
   previousState?: Partial<DailyWorkLog | UPHTarget> | null, 
@@ -449,3 +449,4 @@ export function duplicateUPHTarget(id: string): UPHTarget {
   );
   return newTarget;
 }
+

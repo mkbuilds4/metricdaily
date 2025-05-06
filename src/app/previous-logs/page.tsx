@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -6,7 +7,7 @@ import {
   getWorkLogs,
   getUPHTargets,
   deleteWorkLog,
-  // No target management actions needed here
+  addAuditLog, // Ensure addAuditLog is correctly imported
 } from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { formatDateISO, calculateDailyUPH, calculateDailyUnits } from '@/lib/utils';
@@ -166,6 +167,8 @@ export default function PreviousLogsPage() {
         title: "Export Successful",
         description: "Previous logs data has been exported to CSV.",
       });
+      // Add audit log for export
+      addAuditLog('SYSTEM_EXPORT_DATA', 'System', 'Exported previous work logs to CSV.');
     } catch (error) {
       console.error("Error exporting data:", error);
       toast({
@@ -173,6 +176,7 @@ export default function PreviousLogsPage() {
         title: "Export Failed",
         description: "An error occurred while preparing the data for export.",
       });
+       addAuditLog('SYSTEM_EXPORT_DATA_FAILED', 'System', `Failed to export previous work logs to CSV. Error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }, [previousLogs, uphTargets, generateCSVContent, downloadCSV, toast]);
 
@@ -210,3 +214,4 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
+

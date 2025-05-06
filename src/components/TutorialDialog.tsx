@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import {
   Dialog,
@@ -10,7 +11,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { HelpCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { HelpCircle, ChevronLeft, ChevronRight, Lock } from 'lucide-react'; // Added Lock icon
 
 const tutorialPages = [
   {
@@ -101,7 +102,7 @@ const tutorialPages = [
             <strong>Activate Target:</strong> Mark one target as &quot;active.&quot; This active target is used for the main dashboard progress indicators and as the default for new log calculations.
           </li>
           <li>
-            <strong>Edit/Delete:</strong> Modify or remove existing targets. Note: An active target cannot be deleted directly; you must activate another target first.
+            <strong>Edit/Delete/Duplicate:</strong> Modify, remove, or create a copy of existing targets. Note: An active target cannot be deleted directly; you must activate another target first.
           </li>
           <li><strong>Sort Columns:</strong> Click on column headers (like Name, Target UPH) to sort the list of targets.</li>
         </ul>
@@ -109,7 +110,7 @@ const tutorialPages = [
     )
   },
   {
-    title: "Previous Logs & UPH",
+    title: "Previous Logs & Audit",
     content: (
       <>
         <h3 className="font-semibold text-lg mb-3">3. Previous Logs Page</h3>
@@ -125,6 +126,28 @@ const tutorialPages = [
           </li>
           <li>
             <strong>Delete Logs:</strong> You can remove individual past log entries using the trash icon associated with each log summary.
+          </li>
+          <li>
+            <strong>Export Data:</strong> Use the &quot;Export All to CSV&quot; button to download all previous logs and their associated metrics.
+          </li>
+        </ul>
+
+        <h3 className="font-semibold text-lg mt-6 mb-3">4. Audit Log Page (<Lock className="inline-block h-4 w-4 align-text-bottom" /> Protected)</h3>
+        <p className="mb-2">
+          The Audit Log tracks all significant changes made within the application. This page is password-protected for administrative review.
+        </p>
+        <ul className="list-disc pl-5 space-y-1 mb-3">
+          <li>
+            <strong>Access:</strong> Requires a password (set by the application administrator). You will be prompted for this password when attempting to navigate to the Audit Log.
+          </li>
+          <li>
+            <strong>Information Logged:</strong> Includes creation, updates, and deletion of work logs and UPH targets, as well as system events like loading sample data, clearing all data, and data exports.
+          </li>
+          <li>
+            <strong>Details:</strong> Each entry shows the timestamp, action performed, entity affected, and a description of the change, including previous and new states for updates where applicable.
+          </li>
+           <li>
+            <strong>Filtering & Export:</strong> You can filter the logs by keywords and export the currently filtered view to a CSV file.
           </li>
         </ul>
 
@@ -185,6 +208,7 @@ const tutorialPages = [
           <li><strong>Adapt Your Targets:</strong> Create and adjust UPH targets as your goals or work requirements change. Having multiple targets helps you analyze performance under different conditions.</li>
            <li><strong>Theme Customization:</strong> You can change the application&apos;s theme (Light/Dark/System preference) using the toggle button located in the sidebar footer (bottom-left).</li>
            <li><strong>Access This Guide:</strong> You can always access this guide by clicking the <HelpCircle className="inline-block h-4 w-4 align-text-bottom" /> icon in the sidebar footer.</li>
+           <li><strong>Audit Log Access:</strong> The Audit Log (<Lock className="inline-block h-4 w-4 align-text-bottom" /> icon) is password-protected. Contact your administrator if you require access or forget the password.</li>
         </ul>
       </>
     )
@@ -267,3 +291,4 @@ const TutorialDialog: React.FC<TutorialDialogProps> = ({ contextualTriggerText }
 };
 
 export default TutorialDialog;
+

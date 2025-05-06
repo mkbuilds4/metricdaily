@@ -1,7 +1,6 @@
-import type {NextConfig} from 'next';
 
-const nextConfig: NextConfig = {
-  /* config options here */
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -18,6 +17,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  env: {
+    NEXT_PUBLIC_AUDIT_LOG_PASSWORD: process.env.AUDIT_LOG_PASSWORD || 'supersecretpassword', // Fallback for local dev
+  },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
+

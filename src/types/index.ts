@@ -46,7 +46,9 @@ export type AuditLogActionType =
   | 'SET_ACTIVE_UPH_TARGET'
   | 'SYSTEM_LOAD_SAMPLE_DATA' 
   | 'SYSTEM_CLEAR_ALL_DATA'   
-  | 'SYSTEM_ARCHIVE_TODAY_LOG';
+  | 'SYSTEM_ARCHIVE_TODAY_LOG'
+  | 'SYSTEM_EXPORT_DATA' // Added for CSV export success
+  | 'SYSTEM_EXPORT_DATA_FAILED'; // Added for CSV export failure
 
 
 /**
@@ -56,9 +58,10 @@ export interface AuditLogEntry {
   id: string; // Unique ID for the audit log entry
   timestamp: string; // ISO string for the time of the action
   action: AuditLogActionType; // The type of action performed
-  entityType: 'WorkLog' | 'UPHTarget' | 'System'; // The type of entity affected
+  entityType: 'WorkLog' | 'UPHTarget' | 'System' | 'Security'; // The type of entity affected, added Security
   entityId?: string; // The ID of the specific WorkLog or UPHTarget, if applicable
   details: string; // A human-readable description of the change
   previousState?: Partial<DailyWorkLog | UPHTarget>; // Optional: for updates, the state before the change
   newState?: Partial<DailyWorkLog | UPHTarget>; // Optional: for creates/updates, the state after the change
 }
+

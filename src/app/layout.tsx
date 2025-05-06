@@ -18,7 +18,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { Home, Settings, List, History, BarChart, HelpCircle, ShieldCheck } from 'lucide-react'; // Import icons, Added ShieldCheck
+import { Home, Settings, List, History, BarChart, HelpCircle, ShieldCheck, Lock } from 'lucide-react'; // Import icons, Added ShieldCheck, Lock
 import { usePathname } from 'next/navigation'; // Import usePathname
 import { cn } from "@/lib/utils"; // Import cn utility
 import { ThemeProvider } from '@/components/ThemeProvider'; // Import ThemeProvider
@@ -44,6 +44,23 @@ export default function RootLayout({
 }>) {
   const pathname = usePathname(); // Get the current path
 
+  const handleAuditLogClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (pathname === '/audit-log') {
+      e.preventDefault(); // Prevent navigation if already on the page
+      return;
+    }
+
+    const password = prompt("Please enter the password to access the Audit Log:");
+    if (password === process.env.NEXT_PUBLIC_AUDIT_LOG_PASSWORD) {
+      // Allow navigation (NextLink will handle it)
+    } else {
+      e.preventDefault(); // Prevent navigation
+      if (password !== null) { // Only show alert if user entered something (not cancelled)
+        alert("Incorrect password. Access denied.");
+      }
+    }
+  };
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -68,49 +85,46 @@ export default function RootLayout({
                     {/* Can add Logo/Title here if needed */}
                 </SidebarHeader>
                 <SidebarContent>
-                    <SidebarMenu>
-                        <SidebarMenuItem>
-                            {/* Link to dashboard (home page) */}
-                            <SidebarMenuButton href="/" isActive={pathname === '/'} tooltip="Dashboard">
-                                <Home />
-                                <span>Dashboard</span>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                            {/* Link to Log Input page */}
-                            <SidebarMenuButton href="/log-input" isActive={pathname === '/log-input'} tooltip="Log Input / Targets">
-                                <List />
-                                <span>Log / Targets</span>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                            {/* Link to Previous Logs page */}
-                            <SidebarMenuButton href="/previous-logs" isActive={pathname === '/previous-logs'} tooltip="Previous Logs">
-                                <History />
-                                <span>Previous Logs</span>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                         <SidebarMenuItem>
-                            {/* Link to Audit Log page */}
-                            <SidebarMenuButton href="/audit-log" isActive={pathname === '/audit-log'} tooltip="Audit Log">
-                                <ShieldCheck />
-                                <span>Audit Log</span>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        {/* Future: Weekly Averages link */}
-                        {/* <SidebarMenuItem>
-                            <SidebarMenuButton href="/weekly-averages" isActive={pathname === '/weekly-averages'} tooltip="Weekly Averages">
-                                <BarChart />
-                                <span>Weekly Averages</span>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem> */}
-                        {/* Future: Settings link */}
-                        {/* <SidebarMenuItem>
-                            <SidebarMenuButton href="/settings" isActive={pathname === '/settings'} tooltip="Settings">
-                                <Settings />
-                                <span>Settings</span>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem> */}
+                    <SidebarMenu className="flex flex-col justify-between flex-1"> {/* Make menu take full height */}
+                        {/* Main navigation items */}
+                        <div>
+                            <SidebarMenuItem>
+                                {/* Link to dashboard (home page) */}
+                                <SidebarMenuButton href="/" isActive={pathname === '/'} tooltip="Dashboard">
+                                    <Home />
+                                    <span>Dashboard</span>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem>
+                                {/* Link to Log Input page */}
+                                <SidebarMenuButton href="/log-input" isActive={pathname === '/log-input'} tooltip="Log Input / Targets">
+                                    <List />
+                                    <span>Log / Targets</span>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem>
+                                {/* Link to Previous Logs page */}
+                                <SidebarMenuButton href="/previous-logs" isActive={pathname === '/previous-logs'} tooltip="Previous Logs">
+                                    <History />
+                                    <span>Previous Logs</span>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                        </div>
+
+                        {/* Audit Log at the bottom of the main navigation section */}
+                        <div>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton 
+                                    href="/audit-log" 
+                                    isActive={pathname === '/audit-log'} 
+                                    tooltip="Audit Log (Protected)"
+                                    onClick={handleAuditLogClick}
+                                >
+                                    <Lock /> {/* Changed icon to Lock */}
+                                    <span>Audit Log</span>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                        </div>
                     </SidebarMenu>
                 </SidebarContent>
                 <SidebarFooter className="flex items-center justify-between p-2"> {/* Changed to justify-between */}
@@ -131,3 +145,4 @@ export default function RootLayout({
     </html>
   );
 }
+
