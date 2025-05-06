@@ -21,7 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain, Edit3 } from 'lucide-react'; // Added Edit3
+import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain, Edit3, HelpCircle } from 'lucide-react'; // Added Edit3, HelpCircle
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton'; 
 import {
@@ -35,6 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import TutorialDialog from '@/components/TutorialDialog'; // Import TutorialDialog
 
 
 export default function Home() {
@@ -406,10 +407,10 @@ export default function Home() {
       <div className="w-full max-w-3xl mx-auto space-y-8 p-4 md:p-6 lg:p-8 text-center flex flex-col items-center justify-center min-h-[calc(100vh-15rem)]">
         <BarChart className="h-16 w-16 text-muted-foreground mb-4" />
         <h1 className="text-3xl md:text-4xl font-bold mb-4">Welcome to Metric Daily!</h1>
-        <p className="text-lg text-muted-foreground mb-8">
-          It looks like you don't have any data yet. You can load sample data to explore, or set up your own tracking.
+        <p className="text-lg text-muted-foreground mb-6">
+          It looks like you don&apos;t have any data yet. You can load sample data to explore, or follow the guide to set up your own tracking.
         </p>
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row items-center gap-4">
           <Button onClick={handleLoadSampleData} size="lg">
             <Plus className="mr-2 h-5 w-5" /> Load Sample Data
           </Button>
@@ -419,8 +420,11 @@ export default function Home() {
             </Link>
           </Button>
         </div>
-         <p className="text-sm text-muted-foreground mt-8">
-            To start tracking, you'll need to define at least one UPH Target and log your first day's work on the 'Log / Targets' page.
+         <div className="mt-8">
+          <TutorialDialog />
+        </div>
+         <p className="text-sm text-muted-foreground mt-4">
+            To start tracking, you&apos;ll need to define at least one UPH Target and log your first day&apos;s work on the &apos;Log / Targets&apos; page.
         </p>
       </div>
     );
@@ -458,7 +462,7 @@ export default function Home() {
             {todayLog ? (
                 <Card className="md:col-span-2"> 
                     <CardHeader>
-                        <CardTitle>Quick Update Today's Counts</CardTitle>
+                        <CardTitle>Quick Update Today&apos;s Counts</CardTitle>
                          <CardDescription>
                             Log Date: {formatDateISO(new Date())}
                          </CardDescription>
@@ -567,12 +571,12 @@ export default function Home() {
         ) : hasInitialData && !isLoading ? ( 
             <Card>
                 <CardHeader>
-                    <CardTitle>Today's Metrics</CardTitle>
+                    <CardTitle>Today&apos;s Metrics</CardTitle>
                     <CardDescription>No work log for today yet.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col items-center justify-center h-32 text-muted-foreground">
                     <Info className="h-8 w-8 mb-2" />
-                    <p>Start a new day or add a log on the 'Log / Targets' page to see today's metrics.</p>
+                    <p>Start a new day or add a log on the &apos;Log / Targets&apos; page to see today&apos;s metrics.</p>
                 </CardContent>
             </Card>
         ) : null}
