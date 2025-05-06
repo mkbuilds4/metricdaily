@@ -34,17 +34,19 @@ export interface UPHTarget {
  */
 export type AuditLogActionType =
   | 'CREATE_WORK_LOG'
-  | 'UPDATE_WORK_LOG'
+  | 'UPDATE_WORK_LOG' // General update
+  | 'UPDATE_WORK_LOG_QUICK_COUNT' // Specific for quick count updates from dashboard
+  | 'UPDATE_WORK_LOG_BREAK' // Specific for adding break time
+  | 'UPDATE_WORK_LOG_TRAINING' // Specific for adding training time
   | 'DELETE_WORK_LOG'
   | 'CREATE_UPH_TARGET'
   | 'UPDATE_UPH_TARGET'
   | 'DELETE_UPH_TARGET'
   | 'SET_ACTIVE_UPH_TARGET'
-  | 'LOAD_SAMPLE_DATA'
-  | 'CLEAR_ALL_DATA'
-  | 'ARCHIVE_TODAY_LOG'
-  | 'ADD_BREAK_TIME'
-  | 'ADD_TRAINING_TIME';
+  | 'SYSTEM_LOAD_SAMPLE_DATA' // Changed prefix to SYSTEM_
+  | 'SYSTEM_CLEAR_ALL_DATA'   // Changed prefix to SYSTEM_
+  | 'SYSTEM_ARCHIVE_TODAY_LOG'; // Changed prefix to SYSTEM_
+
 
 /**
  * Represents an entry in the audit log.
@@ -59,3 +61,4 @@ export interface AuditLogEntry {
   previousState?: Partial<DailyWorkLog | UPHTarget>; // Optional: for updates, the state before the change
   newState?: Partial<DailyWorkLog | UPHTarget>; // Optional: for creates/updates, the state after the change
 }
+
