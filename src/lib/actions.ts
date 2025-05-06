@@ -2,13 +2,14 @@
 // src/lib/actions.ts
 // Client-side actions interacting with localStorage.
 
-import type { DailyWorkLog, UPHTarget } from '@/types';
+import type { DailyWorkLog, UPHTarget, AuditLogEntry, AuditLogActionType } from '@/types';
 import { formatDateISO, calculateHoursWorked } from '@/lib/utils'; // Import utility
 import { sampleWorkLogs, sampleUPHTargets } from './sample-data'; // Import sample data
 
 // --- Constants for localStorage keys ---
 const WORK_LOGS_KEY = 'workLogs';
 const UPH_TARGETS_KEY = 'uphTargets';
+const AUDIT_LOGS_KEY = 'auditLogs'; // New key for audit logs
 
 // --- Helper Functions ---
 
@@ -25,7 +26,7 @@ function generateLocalId(): string {
  */
 function getFromLocalStorage<T>(key: string, defaultValue: T): T {
   if (typeof window === 'undefined') {
-    console.warn(`Attempted to access localStorage key "${key}" on the server.`);
+    // console.warn(`Attempted to access localStorage key "${key}" on the server.`); // Reduced console noise
     return defaultValue;
   }
   try {
@@ -53,16 +54,55 @@ function saveToLocalStorage<T>(key: string, value: T): void {
   }
 }
 
+// --- Audit Log Actions ---
+
+/**
+ * Fetches all audit logs from localStorage, sorted by timestamp descending.
+ */
+export function getAuditLogs(): AuditLogEntry[] {
+  const logs = getFromLocalStorage<AuditLogEntry[]>(AUDIT_LOGS_KEY, []);
+  logs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  return logs;
+}
+
+/**
+ * Adds a new entry to the audit log.
+ */
+function addAuditLog(
+  action: AuditLogActionType,
+  entityType: 'WorkLog' | 'UPHTarget' | 'System',
+  details: string,
+  entityId?: string,
+  previousState?: Partial<DailyWorkLog | UPHTarget>,
+  newState?: Partial<DailyWorkLog | UPHTarget>
+): void {
+  const auditLogs = getAuditLogs();
+  const newLogEntry: AuditLogEntry = {
+    id: generateLocalId(),
+    timestamp: new Date().toISOString(),
+    action,
+    entityType,
+    entityId,
+    details,
+    previousState,
+    newState,
+  };
+  auditLogs.unshift(newLogEntry); // Add to the beginning for chronological order (newest first)
+  saveToLocalStorage(AUDIT_LOGS_KEY, auditLogs.slice(0, 500)); // Keep a reasonable limit, e.g., last 500 entries
+  console.log('[Audit Log] Added:', newLogEntry);
+}
+
+
 // === Work Log Actions (Client-Side) ===
 
 /**
  * Fetches all work logs from localStorage, sorted by date descending.
  */
 export function getWorkLogs(): DailyWorkLog[] {
-  console.log('[Client Action] getWorkLogs called');
+  // console.log('[Client Action] getWorkLogs called'); // Reduced console noise
   const logs = getFromLocalStorage<DailyWorkLog[]>(WORK_LOGS_KEY, []);
   logs.sort((a, b) => b.date.localeCompare(a.date));
-  console.log(`[Client Action] Fetched ${logs.length} work logs from localStorage.`);
+  // console.log(`[Client Action] Fetched ${logs.length} work logs from localStorage.`); // Reduced console noise
   return logs;
 }
 
@@ -73,13 +113,11 @@ export function getWorkLogs(): DailyWorkLog[] {
 export function saveWorkLog(
   logData: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { id?: string; hoursWorked?: number; trainingDurationMinutes?: number }
 ): DailyWorkLog {
-  console.log('[Client Action] saveWorkLog called with:', logData);
+  // console.log('[Client Action] saveWorkLog called with:', logData); // Reduced console noise
 
   const totalNonWorkMinutes = (logData.breakDurationMinutes || 0) + (logData.trainingDurationMinutes || 0);
 
   let finalHoursWorked: number;
-  // If hoursWorked is explicitly provided (e.g., from quick update that doesn't modify time/break/training), use it.
-  // Otherwise, recalculate.
   if (logData.hoursWorked !== undefined && logData.breakDurationMinutes === undefined && logData.trainingDurationMinutes === undefined) {
       finalHoursWorked = logData.hoursWorked;
   } else {
@@ -110,15 +148,14 @@ export function saveWorkLog(
   const logs = getWorkLogs();
   let savedLog: DailyWorkLog;
   let operation: 'added' | 'updated' = 'added';
+  let previousState: DailyWorkLog | undefined = undefined;
 
-  // Create a complete log entry with the final calculated hoursWorked and ensure trainingDurationMinutes is included
   const completeLogData: Omit<DailyWorkLog, 'id'> & { trainingDurationMinutes?: number } = {
       date: logData.date,
       startTime: logData.startTime,
       endTime: logData.endTime,
       breakDurationMinutes: logData.breakDurationMinutes || 0,
       trainingDurationMinutes: logData.trainingDurationMinutes || 0,
-      // hoursWorked is handled below
       documentsCompleted: logData.documentsCompleted,
       videoSessionsCompleted: logData.videoSessionsCompleted,
       targetId: logData.targetId,
@@ -129,12 +166,11 @@ export function saveWorkLog(
   if (logData.id) {
     const index = logs.findIndex((log) => log.id === logData.id);
     if (index > -1) {
+      previousState = { ...logs[index] };
       savedLog = { ...logs[index], ...completeLogData, hoursWorked: finalHoursWorked };
       logs[index] = savedLog;
-      console.log('[Client Action] Updated log using provided ID:', logData.id);
       operation = 'updated';
     } else {
-      console.warn('[Client Action] Log ID provided but not found, adding as new:', logData.id);
       savedLog = { ...completeLogData, id: generateLocalId(), hoursWorked: finalHoursWorked };
       logs.push(savedLog);
        operation = 'added';
@@ -143,17 +179,15 @@ export function saveWorkLog(
     const existingLogIndex = logs.findIndex(log => log.date === logData.date);
     if (existingLogIndex > -1) {
         const existingId = logs[existingLogIndex].id;
+        previousState = { ...logs[existingLogIndex] };
         const targetIdToKeep = logData.targetId ?? logs[existingLogIndex].targetId;
-        // Ensure trainingDurationMinutes is preserved if updating an existing log
         const trainingToKeep = logData.trainingDurationMinutes ?? logs[existingLogIndex].trainingDurationMinutes ?? 0;
         savedLog = { ...logs[existingLogIndex], ...completeLogData, id: existingId, targetId: targetIdToKeep, trainingDurationMinutes: trainingToKeep, hoursWorked: finalHoursWorked };
         logs[existingLogIndex] = savedLog;
-        console.log('[Client Action] Updated existing log found by date:', logData.date, ' ID:', existingId);
         operation = 'updated';
     } else {
         savedLog = { ...completeLogData, id: generateLocalId(), hoursWorked: finalHoursWorked };
         logs.push(savedLog);
-        console.log('[Client Action] Added new log with ID:', savedLog.id);
          operation = 'added';
     }
   }
@@ -161,7 +195,14 @@ export function saveWorkLog(
   logs.sort((a, b) => b.date.localeCompare(a.date));
   saveToLocalStorage(WORK_LOGS_KEY, logs);
 
-  console.log(`[Client Action] Log successfully ${operation}.`);
+  addAuditLog(
+    operation === 'added' ? 'CREATE_WORK_LOG' : 'UPDATE_WORK_LOG',
+    'WorkLog',
+    `${operation === 'added' ? 'Created' : 'Updated'} work log for ${savedLog.date}. Docs: ${savedLog.documentsCompleted}, Videos: ${savedLog.videoSessionsCompleted}.`,
+    savedLog.id,
+    previousState,
+    savedLog
+  );
   return savedLog;
 }
 
@@ -169,14 +210,20 @@ export function saveWorkLog(
  * Deletes a work log entry from localStorage by ID.
  */
 export function deleteWorkLog(id: string): void {
-    console.log('[Client Action] deleteWorkLog called for ID:', id);
     let logs = getWorkLogs();
     const initialLength = logs.length;
-    logs = logs.filter(log => log.id !== id);
+    const logToDelete = logs.find(log => log.id === id);
 
-    if (logs.length < initialLength) {
+    if (logToDelete) {
+        logs = logs.filter(log => log.id !== id);
         saveToLocalStorage(WORK_LOGS_KEY, logs);
-        console.log('[Client Action] Deleted log with ID:', id);
+        addAuditLog(
+          'DELETE_WORK_LOG',
+          'WorkLog',
+          `Deleted work log for ${logToDelete.date} (ID: ${id}).`,
+          id,
+          logToDelete
+        );
     } else {
         console.warn('[Client Action] Log ID not found for deletion:', id);
         throw new Error(`Work log with ID ${id} not found for deletion.`);
@@ -189,9 +236,7 @@ export function deleteWorkLog(id: string): void {
  * Fetches all UPH targets from localStorage.
  */
 export function getUPHTargets(): UPHTarget[] {
-  console.log('[Client Action] getUPHTargets called');
   const targets = getFromLocalStorage<UPHTarget[]>(UPH_TARGETS_KEY, []);
-  console.log(`[Client Action] Fetched ${targets.length} UPH targets from localStorage.`);
   return targets;
 }
 
@@ -199,8 +244,6 @@ export function getUPHTargets(): UPHTarget[] {
  * Adds a new UPH target to localStorage. Defaults to isActive: false.
  */
 export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): UPHTarget {
-  console.log('[Client Action] addUPHTarget called with:', targetData);
-
   if (!targetData.name || targetData.name.trim() === '') {
     throw new Error('Target name cannot be empty.');
   }
@@ -218,12 +261,19 @@ export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): UP
   const newTarget: UPHTarget = {
     ...targetData,
     id: generateLocalId(),
-    isActive: targets.length === 0, // Activate the first target added
+    isActive: targets.length === 0, 
   };
 
   targets.push(newTarget);
   saveToLocalStorage(UPH_TARGETS_KEY, targets);
-  console.log('[Client Action] Added new target with ID:', newTarget.id);
+  addAuditLog(
+    'CREATE_UPH_TARGET',
+    'UPHTarget',
+    `Created UPH target "${newTarget.name}" with UPH ${newTarget.targetUPH}.`,
+    newTarget.id,
+    undefined,
+    newTarget
+  );
   return newTarget;
 }
 
@@ -231,8 +281,6 @@ export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): UP
  * Updates an existing UPH target in localStorage.
  */
 export function updateUPHTarget(targetData: UPHTarget): UPHTarget {
-  console.log('[Client Action] updateUPHTarget called with:', targetData);
-
   if (!targetData.id) throw new Error('Target ID is required for update.');
   if (!targetData.name || targetData.name.trim() === '') throw new Error('Target name cannot be empty.');
   if (targetData.targetUPH === undefined || isNaN(targetData.targetUPH) || targetData.targetUPH <= 0) throw new Error('Target UPH must be a positive number.');
@@ -241,13 +289,21 @@ export function updateUPHTarget(targetData: UPHTarget): UPHTarget {
 
   const targets = getUPHTargets();
   const index = targets.findIndex((t) => t.id === targetData.id);
+  let previousState: UPHTarget | undefined = undefined;
 
   if (index > -1) {
+    previousState = { ...targets[index] };
     targets[index] = targetData;
     saveToLocalStorage(UPH_TARGETS_KEY, targets);
-    console.log('[Client Action] Updated target with ID:', targetData.id);
+    addAuditLog(
+      'UPDATE_UPH_TARGET',
+      'UPHTarget',
+      `Updated UPH target "${targetData.name}".`,
+      targetData.id,
+      previousState,
+      targetData
+    );
   } else {
-    console.warn('[Client Action] Target ID not found for update:', targetData.id);
     throw new Error(`Target with ID ${targetData.id} not found for update.`);
   }
   return targetData;
@@ -257,7 +313,6 @@ export function updateUPHTarget(targetData: UPHTarget): UPHTarget {
  * Deletes a UPH target from localStorage. Cannot delete the active target.
  */
 export function deleteUPHTarget(id: string): void {
-  console.log('[Client Action] deleteUPHTarget called for ID:', id);
   let targets = getUPHTargets();
   const targetToDelete = targets.find((t) => t.id === id);
 
@@ -270,16 +325,23 @@ export function deleteUPHTarget(id: string): void {
 
   targets = targets.filter((t) => t.id !== id);
   saveToLocalStorage(UPH_TARGETS_KEY, targets);
-  console.log('[Client Action] Deleted target with ID:', id);
+  addAuditLog(
+    'DELETE_UPH_TARGET',
+    'UPHTarget',
+    `Deleted UPH target "${targetToDelete.name}" (ID: ${id}).`,
+    id,
+    targetToDelete
+  );
 }
 
 /**
  * Sets a specific target as active in localStorage and deactivates all others.
  */
 export function setActiveUPHTarget(id: string): UPHTarget {
-  console.log('[Client Action] setActiveUPHTarget called for ID:', id);
   let targets = getUPHTargets();
   let activatedTarget: UPHTarget | null = null;
+  let previousActiveTarget: UPHTarget | undefined = targets.find(t => t.isActive);
+
 
   const updatedTargets = targets.map((t) => {
     const shouldBeActive = t.id === id;
@@ -296,7 +358,14 @@ export function setActiveUPHTarget(id: string): UPHTarget {
   }
 
   saveToLocalStorage(UPH_TARGETS_KEY, updatedTargets);
-  console.log('[Client Action] Set active target completed for:', id);
+  addAuditLog(
+    'SET_ACTIVE_UPH_TARGET',
+    'UPHTarget',
+    `Set UPH target "${activatedTarget.name}" as active.`,
+    activatedTarget.id,
+    previousActiveTarget, // Log the previously active target
+    activatedTarget
+  );
   return activatedTarget;
 }
 
@@ -304,18 +373,13 @@ export function setActiveUPHTarget(id: string): UPHTarget {
  * Fetches the currently active UPH target from localStorage.
  */
 export function getActiveUPHTarget(): UPHTarget | null {
-  console.log('[Client Action] getActiveUPHTarget called');
   const targets = getUPHTargets();
   const activeTarget = targets.find((t) => t.isActive);
 
   if (activeTarget) {
-    console.log('[Client Action] Found active UPH target:', activeTarget.id);
     return activeTarget;
   } else {
-    console.log('[Client Action] No active UPH target found.');
-    // Optionally, activate the first target if none is active
     if (targets.length > 0) {
-      console.log('[Client Action] Activating the first target by default.');
       return setActiveUPHTarget(targets[0].id);
     }
     return null;
@@ -329,32 +393,28 @@ export function getActiveUPHTarget(): UPHTarget | null {
  * @returns {boolean} True if sample data was loaded, false otherwise.
  */
 export function loadSampleData(): boolean {
-    console.log('[Client Action] Attempting to load sample data...');
     const currentLogs = getWorkLogs();
     const currentTargets = getUPHTargets();
 
     if (currentLogs.length === 0 && currentTargets.length === 0) {
-        // Ensure sample data has unique IDs and correct target associations
         const processedTargets = sampleUPHTargets.map((target, index) => ({
             ...target,
-            id: target.id || generateLocalId(), // Ensure ID exists
-            isActive: index === 0, // Activate the first sample target
+            id: target.id || generateLocalId(), 
+            isActive: index === 0, 
         }));
 
         const processedLogs = sampleWorkLogs.map(log => ({
             ...log,
-            id: log.id || generateLocalId(), // Ensure ID exists
-            // Assign a valid target ID from the processed sample targets
-            targetId: processedTargets[0]?.id || undefined, // Assign first target ID or undefined
-            trainingDurationMinutes: log.trainingDurationMinutes || 0, // Ensure training minutes are set
+            id: log.id || generateLocalId(), 
+            targetId: processedTargets[0]?.id || undefined, 
+            trainingDurationMinutes: log.trainingDurationMinutes || 0, 
         }));
 
         saveToLocalStorage(WORK_LOGS_KEY, processedLogs);
         saveToLocalStorage(UPH_TARGETS_KEY, processedTargets);
-        console.log('[Client Action] Sample data loaded into localStorage.');
+        addAuditLog('LOAD_SAMPLE_DATA', 'System', 'Loaded sample work logs and UPH targets.');
         return true;
     } else {
-        console.log('[Client Action] Existing data found. Sample data not loaded.');
         return false;
     }
 }
@@ -367,16 +427,15 @@ export function clearAllData(): void {
         console.error('Attempted to clear localStorage on the server.');
         return;
     }
-    console.log('[Client Action] Clearing all data from localStorage...');
-    window.localStorage.removeItem(WORK_LOGS_KEY);
-    window.localStorage.removeItem(UPH_TARGETS_KEY);
-    console.log('[Client Action] All data cleared.');
+    saveToLocalStorage(WORK_LOGS_KEY, []);
+    saveToLocalStorage(UPH_TARGETS_KEY, []);
+    // Optionally clear audit logs too, or keep them for history
+    // saveToLocalStorage(AUDIT_LOGS_KEY, []); 
+    addAuditLog('CLEAR_ALL_DATA', 'System', 'Cleared all work logs and UPH targets.');
 }
 
 /**
  * Archives today's work log by simply ensuring it's saved.
- * The main logic of distinguishing today vs previous is in page components.
- * This function ensures today's log is persisted.
  */
 export function archiveTodayLog(): DailyWorkLog | null {
     if (typeof window === 'undefined') return null;
@@ -385,17 +444,10 @@ export function archiveTodayLog(): DailyWorkLog | null {
     const todayLog = logs.find(log => log.date === todayDateStr);
 
     if (todayLog) {
-        // Today's log already exists and is saved by `saveWorkLog` calls.
-        // No specific "archival" action beyond normal saving is needed
-        // as `getWorkLogs` and `getPreviousLogs` on pages handle filtering.
-        console.log("[Client Action] archiveTodayLog: Today's log already exists and is part of workLogs.", todayLog);
-        // Optionally re-save it if there's a chance it could be modified elsewhere without saving
-        // but current flow should handle this.
-        // saveWorkLog(todayLog); // This would re-trigger calculations, might not be necessary
+        addAuditLog('ARCHIVE_TODAY_LOG', 'WorkLog', `Archived today's log for ${todayLog.date}.`, todayLog.id, todayLog, todayLog);
         return todayLog;
     } else {
-        console.log("[Client Action] archiveTodayLog: No log found for today to archive.");
+        addAuditLog('ARCHIVE_TODAY_LOG', 'System', `Attempted to archive today's log, but no log found for ${todayDateStr}.`);
         return null;
     }
 }
-

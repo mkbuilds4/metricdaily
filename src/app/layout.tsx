@@ -1,3 +1,4 @@
+
 'use client'; // Required for usePathname
 
 import type { Metadata } from 'next';
@@ -17,7 +18,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { Home, Settings, List, History, BarChart, HelpCircle } from 'lucide-react'; // Import icons
+import { Home, Settings, List, History, BarChart, HelpCircle, ShieldCheck } from 'lucide-react'; // Import icons, Added ShieldCheck
 import { usePathname } from 'next/navigation'; // Import usePathname
 import { cn } from "@/lib/utils"; // Import cn utility
 import { ThemeProvider } from '@/components/ThemeProvider'; // Import ThemeProvider
@@ -87,6 +88,13 @@ export default function RootLayout({
                             <SidebarMenuButton href="/previous-logs" isActive={pathname === '/previous-logs'} tooltip="Previous Logs">
                                 <History />
                                 <span>Previous Logs</span>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                         <SidebarMenuItem>
+                            {/* Link to Audit Log page */}
+                            <SidebarMenuButton href="/audit-log" isActive={pathname === '/audit-log'} tooltip="Audit Log">
+                                <ShieldCheck />
+                                <span>Audit Log</span>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                         {/* Future: Weekly Averages link */}
