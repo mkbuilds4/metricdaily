@@ -1,4 +1,3 @@
-
 'use client'; // Required for usePathname
 
 import type { Metadata } from 'next';
@@ -18,11 +17,12 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { Home, Settings, List, History, BarChart } from 'lucide-react'; // Import icons
+import { Home, Settings, List, History, BarChart, HelpCircle } from 'lucide-react'; // Import icons
 import { usePathname } from 'next/navigation'; // Import usePathname
 import { cn } from "@/lib/utils"; // Import cn utility
 import { ThemeProvider } from '@/components/ThemeProvider'; // Import ThemeProvider
 import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
+import TutorialDialog from '@/components/TutorialDialog'; // Import TutorialDialog
 
 const fontSans = FontSans({ // Changed variable name
   subsets: ['latin'],
@@ -105,7 +105,8 @@ export default function RootLayout({
                         </SidebarMenuItem> */}
                     </SidebarMenu>
                 </SidebarContent>
-                <SidebarFooter className="flex items-center justify-center p-2">
+                <SidebarFooter className="flex items-center justify-between p-2"> {/* Changed to justify-between */}
+                    <TutorialDialog />
                     <ThemeToggle />
                 </SidebarFooter>
             </Sidebar>
