@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -10,14 +9,16 @@ import {
   // No target management actions needed here
 } from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget } from '@/types';
-import { formatDateISO } from '@/lib/utils';
+import { formatDateISO, calculateDailyUPH, calculateDailyUnits } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
+import { Button } from '@/components/ui/button';
+import { FileSpreadsheet } from 'lucide-react';
 
 export default function PreviousLogsPage() {
   const [previousLogs, setPreviousLogs] = useState<DailyWorkLog[]>([]);
   const [uphTargets, setUphTargets] = useState<UPHTarget[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-   const { toast } = useToast();
+  const { toast } = useToast();
 
   // Load data needed for this page
   const loadData = useCallback(() => {
@@ -71,6 +72,111 @@ export default function PreviousLogsPage() {
     }
   }, [toast]); // Add toast dependency
 
+
+  const escapeCSVField = (field: any): string => {
+    if (field === null || field === undefined) {
+      return '';
+    }
+    let stringField = String(field);
+    if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n')) {
+      stringField = stringField.replace(/"/g, '""');
+      return `"${stringField}"`;
+    }
+    return stringField;
+  };
+
+  const generateCSVContent = useCallback((logs: DailyWorkLog[], targets: UPHTarget[]): string => {
+    const headers = [
+      'Date', 'Start Time', 'End Time', 'Break Duration (min)', 'Training Duration (min)', 'Net Hours Worked',
+      'Documents Completed', 'Video Sessions Completed', 'Notes',
+      'Logged Target ID', 'Logged Target Name', 'Logged Target UPH (Goal)', 'Logged Target Docs/Unit', 'Logged Target Videos/Unit'
+    ];
+
+    targets.forEach(target => {
+      headers.push(`${target.name} - Calculated Units`);
+      headers.push(`${target.name} - Calculated UPH`);
+    });
+
+    const rows = logs.map(log => {
+      const loggedTarget = targets.find(t => t.id === log.targetId);
+      const row = [
+        escapeCSVField(log.date),
+        escapeCSVField(log.startTime),
+        escapeCSVField(log.endTime),
+        escapeCSVField(log.breakDurationMinutes),
+        escapeCSVField(log.trainingDurationMinutes || 0),
+        escapeCSVField(log.hoursWorked.toFixed(2)),
+        escapeCSVField(log.documentsCompleted),
+        escapeCSVField(log.videoSessionsCompleted),
+        escapeCSVField(log.notes || ''),
+        escapeCSVField(log.targetId || 'N/A'),
+        escapeCSVField(loggedTarget?.name || 'N/A'),
+        escapeCSVField(loggedTarget?.targetUPH?.toFixed(2) || 'N/A'),
+        escapeCSVField(loggedTarget?.docsPerUnit?.toString() || 'N/A'), // Keep precision for per unit values
+        escapeCSVField(loggedTarget?.videosPerUnit?.toString() || 'N/A'),// Keep precision for per unit values
+      ];
+
+      targets.forEach(target => {
+        const units = calculateDailyUnits(log, target);
+        const uph = calculateDailyUPH(log, target);
+        row.push(escapeCSVField(units.toFixed(2)));
+        row.push(escapeCSVField(uph.toFixed(2)));
+      });
+      return row.join(',');
+    });
+
+    return [headers.join(','), ...rows].join('\n');
+  }, []);
+
+  const downloadCSV = useCallback((csvString: string, filename: string) => {
+    if (typeof window === 'undefined') return;
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) { // Feature detection
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', filename);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Download Failed",
+        description: "Your browser does not support direct CSV downloads."
+      });
+    }
+  }, [toast]);
+
+  const handleExportData = useCallback(() => {
+    if (previousLogs.length === 0) {
+      toast({
+        title: "No Data to Export",
+        description: "There are no previous logs to export.",
+      });
+      return;
+    }
+    try {
+      const csvData = generateCSVContent(previousLogs, uphTargets);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      downloadCSV(csvData, `metric_daily_previous_logs_${timestamp}.csv`);
+      toast({
+        title: "Export Successful",
+        description: "Previous logs data has been exported to CSV.",
+      });
+    } catch (error) {
+      console.error("Error exporting data:", error);
+      toast({
+        variant: "destructive",
+        title: "Export Failed",
+        description: "An error occurred while preparing the data for export.",
+      });
+    }
+  }, [previousLogs, uphTargets, generateCSVContent, downloadCSV, toast]);
+
+
   if (isLoading) {
     return (
       <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4 md:p-6 lg:p-8"> {/* Added padding */}
@@ -81,7 +187,12 @@ export default function PreviousLogsPage() {
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8"> {/* Added padding */}
-      <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Previous Work Logs</h1>
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 md:mb-8">
+        <h1 className="text-3xl md:text-4xl font-bold text-center sm:text-left">Previous Work Logs</h1>
+        <Button onClick={handleExportData} disabled={previousLogs.length === 0}>
+          <FileSpreadsheet className="mr-2 h-4 w-4" /> Export All to CSV
+        </Button>
+      </div>
 
       {/* Use TargetMetricsDisplay to show the list of previous logs */}
       {/* Pass only previous logs and ensure delete action is wired up */}
