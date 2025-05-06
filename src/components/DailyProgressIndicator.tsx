@@ -39,15 +39,15 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
     const { currentUnits, currentUPH } = calculateCurrentMetrics(todayLog, targetForCalc, currentTime);
     const targetUnitsForDuration = calculateRequiredUnitsForTarget(todayLog.hoursWorked, targetForCalc.targetUPH);
     const percentage = targetUnitsForDuration > 0 ? Math.min(100, Math.max(0, (currentUnits / targetUnitsForDuration) * 100)) : 0;
-    const timeDiff = calculateTimeAheadBehindSchedule(todayLog, targetForCalc, currentTime);
-    const projectedHitTimeFormatted = calculateProjectedGoalHitTime(todayLog, timeDiff);
+    const timeDiffSeconds = calculateTimeAheadBehindSchedule(todayLog, targetForCalc, currentTime); // Now in seconds
+    const projectedHitTimeFormatted = calculateProjectedGoalHitTime(todayLog, timeDiffSeconds); // Pass seconds
 
     return {
         currentUnits,
         targetUnits: targetUnitsForDuration,
         percentage: parseFloat(percentage.toFixed(1)),
         currentUPH,
-        timeDiff,
+        timeDiff: timeDiffSeconds, // Store as seconds
         projectedHitTimeFormatted
     };
   }, [todayLog, targetForCalc, currentTime]);
@@ -122,10 +122,10 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
              <div className="flex flex-col">
                 <span className="text-muted-foreground">Schedule</span>
                  <span className={cn(
-                    "font-medium",
+                    "font-medium tabular-nums", // Added tabular-nums
                     progressData.timeDiff !== null && progressData.timeDiff > 0 && "text-green-600 dark:text-green-500",
                     progressData.timeDiff !== null && progressData.timeDiff < 0 && "text-red-600 dark:text-red-500"
-                    )}>{formatTimeAheadBehind(progressData.timeDiff)}
+                    )}>{formatTimeAheadBehind(progressData.timeDiff)} {/* timeDiff is now in seconds */}
                  </span>
              </div>
              <div className="flex flex-col col-span-2 sm:col-span-2"> {/* Span 2 cols on small, 2 on sm */}
@@ -139,5 +139,3 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
 };
 
 export default DailyProgressIndicator;
-
-

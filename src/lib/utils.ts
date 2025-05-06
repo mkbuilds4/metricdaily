@@ -17,6 +17,7 @@ import {
     getSeconds,
     addDays,
     differenceInSeconds,
+    addSeconds, // Import addSeconds
 } from 'date-fns';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 
@@ -91,33 +92,37 @@ export function formatDurationFromHours(totalHours: number): string {
 }
 
 /**
- * Formats total minutes into a human-readable duration string (e.g., "X hrs Y mins").
+ * Formats total minutes into a human-readable duration string (e.g., "X hrs Y mins Z secs").
  * Handles potential NaN or non-finite inputs.
- * @param totalMinutes - The total minutes.
+ * @param totalSeconds - The total seconds.
  * @returns The formatted duration string, or '-' if input is invalid, zero, or negative.
  */
-export function formatDurationFromMinutes(totalMinutes: number | null | undefined): string {
-    if (totalMinutes === null || totalMinutes === undefined || !Number.isFinite(totalMinutes) || totalMinutes <= 0) {
+export function formatDurationFromMinutes(totalSeconds: number | null | undefined): string {
+    if (totalSeconds === null || totalSeconds === undefined || !Number.isFinite(totalSeconds) || totalSeconds <= 0) {
         return '-';
     }
 
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = Math.round(totalMinutes % 60); // Round remaining minutes
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = Math.round(totalSeconds % 60);
+
 
     const parts: string[] = [];
     if (hours > 0) {
         parts.push(`${hours} hr${hours !== 1 ? 's' : ''}`);
     }
-    if (minutes > 0 || hours === 0) { // Show minutes if > 0 or if hours is 0
+    if (minutes > 0) {
         parts.push(`${minutes} min${minutes !== 1 ? 's' : ''}`);
     }
-    // Handle exactly 0 case which should be covered by <=0 check, but as safeguard:
-    if (parts.length === 0 && totalMinutes === 0) {
-         return '0 mins';
+     if (seconds > 0 || (hours === 0 && minutes === 0)) { // Show seconds if > 0 or if hours and minutes are 0
+        parts.push(`${seconds} sec${seconds !== 1 ? 's' : ''}`);
     }
-    // Handle cases where totalMinutes was small but positive, resulting in 0 mins after rounding
-    if (parts.length === 0 && totalMinutes > 0) {
-        return '< 1 min';
+
+    if (parts.length === 0 && totalSeconds === 0) {
+         return '0 secs';
+    }
+    if (parts.length === 0 && totalSeconds > 0) {
+        return '< 1 sec';
     }
 
     return parts.join(' ');
@@ -125,14 +130,14 @@ export function formatDurationFromMinutes(totalMinutes: number | null | undefine
 
 
 /**
- * Calculates how far ahead or behind schedule the user is in minutes, relative to the target pace.
+ * Calculates how far ahead or behind schedule the user is in seconds, relative to the target pace.
  * Positive value means ahead (took less net time than target pace would require for completed units).
  * Negative value means behind (took more net time than target pace would require for completed units).
  *
  * @param log - Today's DailyWorkLog object.
  * @param target - The relevant UPHTarget object.
  * @param currentTime - The current Date object.
- * @returns The time difference in minutes, or null if calculation is not possible.
+ * @returns The time difference in seconds, or null if calculation is not possible.
  */
 export function calculateTimeAheadBehindSchedule(
     log: DailyWorkLog | null,
@@ -143,7 +148,6 @@ export function calculateTimeAheadBehindSchedule(
         return null;
     }
 
-    // 1. Calculate Net Work Time Elapsed So Far
     const dateStr = log.date;
     const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
     if (!timeRegex.test(log.startTime) || !timeRegex.test(log.endTime)) return null;
@@ -158,89 +162,119 @@ export function calculateTimeAheadBehindSchedule(
     if (totalGrossShiftSeconds <= 0) return null;
 
     const secondsSinceShiftStart = differenceInSeconds(currentTime, shiftStartDate);
-    if (secondsSinceShiftStart <= 0) return 0;
+    if (secondsSinceShiftStart <= 0) return 0; // No time elapsed yet
 
+
+    // If current time is past or at the shift end time
     if (currentTime >= shiftEndDate) {
         const finalNetSecondsPlanned = Math.max(0, totalGrossShiftSeconds - (log.breakDurationMinutes * 60));
         const totalUnitsCompleted = calculateDailyUnits(log, target);
-        if (target.targetUPH <= 0) return null;
+        if (target.targetUPH <= 0) return null; // Invalid target UPH
+
+        // Calculate how many net seconds *should* have been needed for the units completed
         const netSecondsNeededForUnits = (totalUnitsCompleted / target.targetUPH) * 3600;
+
+        // Difference: Actual net time spent vs. time that should have been spent
+        // Positive means ahead (actual time < needed time), negative means behind (actual time > needed time)
         const finalDifferenceSeconds = finalNetSecondsPlanned - netSecondsNeededForUnits;
-        return parseFloat((finalDifferenceSeconds / 60).toFixed(1)); // Return difference in minutes
+        return parseFloat(finalDifferenceSeconds.toFixed(1)); // Return difference in seconds
     }
 
+
+    // Current time is within the shift
     const clampedSecondsSinceStart = Math.min(secondsSinceShiftStart, totalGrossShiftSeconds);
+
     const proportionOfShiftElapsed = clampedSecondsSinceStart / totalGrossShiftSeconds;
-    const estimatedBreakSecondsTakenSoFar = Math.min((log.breakDurationMinutes * 60), (log.breakDurationMinutes * 60) * proportionOfShiftElapsed);
+
+    // Estimate break taken so far
+    const estimatedBreakSecondsTakenSoFar = Math.min(
+        (log.breakDurationMinutes * 60), // Cap at total planned break
+        (log.breakDurationMinutes * 60) * proportionOfShiftElapsed
+    );
+
+    // Calculate net work time elapsed so far
     const netWorkSecondsElapsed = Math.max(0, clampedSecondsSinceStart - estimatedBreakSecondsTakenSoFar);
 
-    const unitsCompletedSoFar = calculateDailyUnits(log, target);
-    if (unitsCompletedSoFar < 0) return null;
 
-    if (target.targetUPH <= 0) return null;
+    // Calculate units completed so far
+    const unitsCompletedSoFar = calculateDailyUnits(log, target);
+    if (unitsCompletedSoFar < 0) return null; // Should not happen
+
+    if (target.targetUPH <= 0) return null; // Avoid division by zero or invalid pace
+
+
+    // If no units completed, the time difference is simply the negative of net work time elapsed
+    // (since 0 seconds were "needed" for 0 units)
     if (unitsCompletedSoFar === 0) {
-        return parseFloat(((0 - netWorkSecondsElapsed) / 60).toFixed(1)); // Return difference in minutes
+        return parseFloat((0 - netWorkSecondsElapsed).toFixed(1)); // Time behind is the net work time spent
     }
 
+    // Calculate how much net work time *should* have been needed for the units completed so far
     const netSecondsNeededForUnitsCompleted = (unitsCompletedSoFar / target.targetUPH) * 3600;
+
+    // Calculate the difference:
+    // Positive means ahead (needed time > actual time elapsed)
+    // Negative means behind (needed time < actual time elapsed)
     const timeDifferenceSeconds = netSecondsNeededForUnitsCompleted - netWorkSecondsElapsed;
 
-    return parseFloat((timeDifferenceSeconds / 60).toFixed(1)); // Return difference in minutes
+    return parseFloat(timeDifferenceSeconds.toFixed(1)); // Return difference in seconds
 }
+
 
 /**
  * Formats the time ahead/behind schedule into a human-readable string including seconds.
- * @param timeDifferenceMinutes - The time difference in minutes (positive means ahead, negative means behind).
+ * @param timeDifferenceSeconds - The time difference in seconds (positive means ahead, negative means behind).
  * @returns A formatted string (e.g., "Ahead 15m 30s", "Behind 1h 5m 10s", "On Schedule"), or '-' if input is null.
  */
-export function formatTimeAheadBehind(timeDifferenceMinutes: number | null): string {
-    if (timeDifferenceMinutes === null || !Number.isFinite(timeDifferenceMinutes)) {
+export function formatTimeAheadBehind(timeDifferenceSeconds: number | null): string {
+    if (timeDifferenceSeconds === null || !Number.isFinite(timeDifferenceSeconds)) {
         return '-';
     }
 
-    if (Math.abs(timeDifferenceMinutes * 60) < 1) { // Check if absolute seconds < 1
+    if (Math.abs(timeDifferenceSeconds) < 1) { // If less than 1 second difference, consider on schedule
          return 'On Schedule';
     }
 
-    const timeDifferenceSeconds = timeDifferenceMinutes * 60;
     const absSeconds = Math.abs(timeDifferenceSeconds);
     const hours = Math.floor(absSeconds / 3600);
     const minutes = Math.floor((absSeconds % 3600) / 60);
-    const seconds = Math.round(absSeconds % 60);
+    const seconds = Math.round(absSeconds % 60); // Round seconds
 
     let durationString = '';
     if (hours > 0) {
         durationString += `${hours}h `;
     }
-    if (minutes > 0 || hours > 0) { // Show minutes if > 0 or if hours > 0
+    if (minutes > 0 || (hours > 0 && seconds > 0)) { // Show minutes if > 0, or if hours and seconds are shown
          durationString += `${minutes}m `;
     }
-    // Always show seconds if not perfectly on schedule
-    durationString += `${seconds}s`;
+    // Always show seconds if not perfectly on schedule, or if it's the only unit
+    if (seconds > 0 || (hours === 0 && minutes === 0)) {
+        durationString += `${seconds}s`;
+    }
 
 
-    if (timeDifferenceMinutes > 0) {
+    if (timeDifferenceSeconds > 0) {
         return `Ahead ${durationString.trim()}`;
-    } else { // timeDifferenceMinutes < 0
+    } else { // timeDifferenceSeconds < 0
         return `Behind ${durationString.trim()}`;
     }
 }
 
 /**
  * Calculates the estimated time the target goal will be hit based on current progress and time ahead/behind.
- * Adds the amount of time *behind* schedule to the scheduled end time.
- * Subtracts the amount of time *ahead* schedule from the scheduled end time.
+ * Adds the amount of time *behind* schedule (negative timeDifferenceSeconds) to the scheduled end time.
+ * Subtracts the amount of time *ahead* schedule (positive timeDifferenceSeconds) from the scheduled end time.
  * Returns '-' if the goal is already met or calculation isn't possible.
  *
  * @param log - Today's DailyWorkLog object.
- * @param timeDifferenceMinutes - The result from `calculateTimeAheadBehindSchedule`.
+ * @param timeDifferenceSeconds - The result from `calculateTimeAheadBehindSchedule` in seconds.
  * @returns Formatted time string (e.g., "10:45:30 PM") or '-' or 'Goal Met'.
  */
 export function calculateProjectedGoalHitTime(
     log: DailyWorkLog | null,
-    timeDifferenceMinutes: number | null
+    timeDifferenceSeconds: number | null // Now expects seconds
 ): string {
-    if (!log || timeDifferenceMinutes === null || !Number.isFinite(timeDifferenceMinutes)) {
+    if (!log || timeDifferenceSeconds === null || !Number.isFinite(timeDifferenceSeconds)) {
         return '-';
     }
 
@@ -254,21 +288,22 @@ export function calculateProjectedGoalHitTime(
     if (!isValid(shiftEndDate) || !isValid(shiftStartDate)) return '-';
     if (shiftEndDate < shiftStartDate) shiftEndDate = addDays(shiftEndDate, 1);
 
-    const timeDifferenceSeconds = Math.round(timeDifferenceMinutes * 60);
+    // timeDifferenceSeconds is positive if ahead, negative if behind.
+    // If ahead, we subtract this from shiftEndDate.
+    // If behind, we add the absolute value of this to shiftEndDate (subtracting a negative).
+    const projectedTime = addSeconds(shiftEndDate, -timeDifferenceSeconds);
 
-    if (timeDifferenceMinutes > 0.001) { // More than a fraction of a second ahead
-        const projectedTime = addMinutes(shiftEndDate, -timeDifferenceMinutes); // addMinutes works with fractional minutes
-        if (projectedTime <= new Date()) {
-            return 'Goal Met';
-        }
-        return format(projectedTime, 'h:mm:ss a');
-    } else {
-        const projectedTime = addMinutes(shiftEndDate, -timeDifferenceMinutes);
-        if (projectedTime <= new Date() && timeDifferenceMinutes < -0.001) { // More than a fraction of a second behind and goal met
-             return 'Goal Met';
-        }
-        return format(projectedTime, 'h:mm:ss a');
+    // Check if goal is already met based on current time and schedule status
+    // If user is ahead of schedule AND the projected hit time is in the past relative to current time,
+    // it means they've already hit the goal pace for the *entire shift*.
+    if (timeDifferenceSeconds > 0.001 && projectedTime <= new Date()) { // timeDifference is positive (ahead)
+        return 'Goal Met';
     }
+     // If user is behind, and projected time is in the past, it implies they should have already met the goal if they were on pace.
+     // However, the projection itself accounts for being behind. So this isn't quite "Goal Met" unless it's past shift end.
+     // Let's simply format the projected time. If it's in the past but shift isn't over, it means "still need to catch up".
+
+    return format(projectedTime, 'h:mm:ss a');
 }
 
 
@@ -473,34 +508,34 @@ export function calculateCurrentMetrics(
     }
 
     // 3. Calculate Planned Total Shift Duration
-    const totalGrossShiftMinutes = differenceInMinutes(shiftEndDate, shiftStartDate);
-    if (totalGrossShiftMinutes <= 0) return defaultReturn;
+    const totalGrossShiftSeconds = differenceInSeconds(shiftEndDate, shiftStartDate);
+    if (totalGrossShiftSeconds <= 0) return defaultReturn;
 
 
     // 4. Calculate Effective Work Time Elapsed *so far*
-    const minutesSinceShiftStart = differenceInMinutes(currentTime, shiftStartDate);
+    const secondsSinceShiftStart = differenceInSeconds(currentTime, shiftStartDate);
     // If current time is before shift start, no time has elapsed
-    if (minutesSinceShiftStart <= 0) {
+    if (secondsSinceShiftStart <= 0) {
         return { currentUnits: actualUnitsSoFar, currentUPH: 0 }; // Units might be pre-entered
     }
      // Clamp elapsed time to the planned shift duration if shift is over
-    const clampedMinutesSinceStart = Math.min(minutesSinceShiftStart, totalGrossShiftMinutes);
+    const clampedSecondsSinceStart = Math.min(secondsSinceShiftStart, totalGrossShiftSeconds);
 
 
     // Estimate proportion of break taken based on time elapsed
     // Use totalGrossShiftMinutes for proportion calculation
-    const proportionOfShiftElapsed = totalGrossShiftMinutes > 0 ? clampedMinutesSinceStart / totalGrossShiftMinutes : 0;
+    const proportionOfShiftElapsed = totalGrossShiftSeconds > 0 ? clampedSecondsSinceStart / totalGrossShiftSeconds : 0;
     // Calculate break taken so far, capped at the total break duration
-    const estimatedBreakTakenSoFar = Math.min(log.breakDurationMinutes, log.breakDurationMinutes * proportionOfShiftElapsed);
+    const estimatedBreakTakenSoFarSeconds = Math.min(log.breakDurationMinutes * 60, (log.breakDurationMinutes * 60) * proportionOfShiftElapsed);
 
 
     // Calculate net work minutes elapsed so far
-    const netWorkMinutesElapsed = Math.max(0, clampedMinutesSinceStart - estimatedBreakTakenSoFar);
+    const netWorkSecondsElapsed = Math.max(0, clampedSecondsSinceStart - estimatedBreakTakenSoFarSeconds);
 
     // 5. Calculate Current UPH
     let currentActualUPH = 0;
-    if (netWorkMinutesElapsed > 0) {
-        const netWorkHoursElapsed = netWorkMinutesElapsed / 60;
+    if (netWorkSecondsElapsed > 0) {
+        const netWorkHoursElapsed = netWorkSecondsElapsed / 3600;
         currentActualUPH = parseFloat((actualUnitsSoFar / netWorkHoursElapsed).toFixed(2));
     }
 
@@ -509,5 +544,3 @@ export function calculateCurrentMetrics(
         currentUPH: currentActualUPH,
     };
 }
-
-

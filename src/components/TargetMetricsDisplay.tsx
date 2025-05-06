@@ -139,14 +139,14 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
       let projectedHitTimeFormatted = '-';
       let currentMetrics = { currentUnits: 0, currentUPH: 0 };
-      let timeAheadBehindMinutes: number | null = null;
+      let timeAheadBehindSeconds: number | null = null; // Changed to seconds
 
        if (isToday && currentTime) {
            // Use the target FOR THIS CARD for real-time projections
            currentMetrics = calculateCurrentMetrics(log, target, currentTime);
            // Calculate schedule status relative to THIS card's target
-           timeAheadBehindMinutes = calculateTimeAheadBehindSchedule(log, target, currentTime);
-           projectedHitTimeFormatted = calculateProjectedGoalHitTime(log, timeAheadBehindMinutes);
+           timeAheadBehindSeconds = calculateTimeAheadBehindSchedule(log, target, currentTime); // Now in seconds
+           projectedHitTimeFormatted = calculateProjectedGoalHitTime(log, timeAheadBehindSeconds); // Pass seconds
 
            // Check if goal is already met relative to THIS card's target
            if (currentMetrics.currentUnits >= totalRequiredUnits) {
@@ -154,9 +154,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
            }
        }
 
-      const isBehindSchedule = timeAheadBehindMinutes !== null && timeAheadBehindMinutes < 0;
-      const isAheadSchedule = timeAheadBehindMinutes !== null && timeAheadBehindMinutes > 0;
-      const isOnSchedule = timeAheadBehindMinutes !== null && Math.abs(timeAheadBehindMinutes) < 0.05; // Use tolerance for float comparison
+      const isBehindSchedule = timeAheadBehindSeconds !== null && timeAheadBehindSeconds < 0;
+      const isAheadSchedule = timeAheadBehindSeconds !== null && timeAheadBehindSeconds > 0;
+      const isOnSchedule = timeAheadBehindSeconds !== null && Math.abs(timeAheadBehindSeconds) < 1; // Use tolerance for float comparison (seconds)
 
 
       return (
@@ -182,18 +182,18 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                         {/* Today: Units Now and Schedule */}
                         <div>
                             <p className="text-muted-foreground">Units Now</p>
-                            <p className="font-medium">{currentMetrics.currentUnits.toFixed(2)}</p>
+                            <p className="font-medium tabular-nums">{currentMetrics.currentUnits.toFixed(2)}</p>
                         </div>
                          <div>
                             <p className="text-muted-foreground">Schedule Status</p>
-                            <p className={cn("font-medium", isAheadSchedule && "text-green-600 dark:text-green-500", isBehindSchedule && "text-red-600 dark:text-red-500", isOnSchedule && "text-foreground")}>
-                                {formatTimeAheadBehind(timeAheadBehindMinutes)}
+                            <p className={cn("font-medium tabular-nums", isAheadSchedule && "text-green-600 dark:text-green-500", isBehindSchedule && "text-red-600 dark:text-red-500", isOnSchedule && "text-foreground")}>
+                                {formatTimeAheadBehind(timeAheadBehindSeconds)} {/* Pass seconds */}
                              </p>
                          </div>
                          {/* Est. Goal Hit Time Display */}
                          <div className="col-span-2">
                              <p className="text-muted-foreground">Est. Goal Hit Time</p>
-                             <p className="font-medium">
+                             <p className="font-medium tabular-nums">
                                 {projectedHitTimeFormatted}
                              </p>
                          </div>
@@ -203,15 +203,15 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                         {/* Previous: Show completed units and avg UPH */}
                        <div>
                            <p className="text-muted-foreground">Units Completed</p>
-                           <p className="font-medium">{totalActualUnits.toFixed(2)}</p>
+                           <p className="font-medium tabular-nums">{totalActualUnits.toFixed(2)}</p>
                        </div>
                        <div>
                             <p className="text-muted-foreground">Avg Daily UPH</p>
-                            <p className="font-medium">{dailyUPHForTarget.toFixed(2)}</p>
+                            <p className="font-medium tabular-nums">{dailyUPHForTarget.toFixed(2)}</p>
                        </div>
                        <div>
                             <p className="text-muted-foreground">Target Units</p>
-                            <p className="font-medium">{totalRequiredUnits.toFixed(2)}</p>
+                            <p className="font-medium tabular-nums">{totalRequiredUnits.toFixed(2)}</p>
                        </div>
                        <div>
                          <p className="text-muted-foreground">+/- Goal</p>
@@ -306,7 +306,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                          </div>
                      </div>
                       {/* Today Only: Current Units Now */}
-                      {isToday && currentUnitsNow !== null && (
+                      {isToday && currentUnitsNow !== null && targetForSummaryCalc && (
                            <div className="flex items-center space-x-2">
                                 <TargetIcon className="h-5 w-5 text-muted-foreground" />
                                <div>
@@ -326,7 +326,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                            </div>
                        )}
                      {/* Overall UPH (Current or Avg) */}
-                     {summaryUPH !== null && (
+                     {summaryUPH !== null && targetForSummaryCalc && (
                          <div className="flex items-center space-x-2">
                              <Clock className="h-5 w-5 text-muted-foreground" />
                              <div>
@@ -385,7 +385,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                            <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50" asChild>
                                <div className="flex items-center justify-between w-full">
                                    <PreviousLogTriggerSummary log={log} allTargets={targets} onDelete={handleDeleteLog} />
-                                   <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                                   {/* Chevron is now part of PreviousLogTriggerSummary or handled by AccordionTrigger internally depending on asChild */}
                                </div>
                            </AccordionTrigger>
                         <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-md">
