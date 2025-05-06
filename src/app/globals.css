@@ -48,11 +48,11 @@ body {
 
   .dark {
     /* Dark Theme - Adjusted for contrast with the new primary/accent */
-    --background: 240 10% 3.9%;
+    --background: 240 6% 12%; /* Dark Grey */
     --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
+    --card: 240 10% 3.9%; /* Kept card darker for contrast */
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
+    --popover: 240 10% 3.9%; /* Kept popover darker for contrast */
     --popover-foreground: 0 0% 98%;
     --primary: 207 70% 53%; /* Blue #3498db */
     --primary-foreground: 0 0% 98%; /* White */
@@ -74,7 +74,7 @@ body {
     --chart-5: 340 75% 55%;
 
     /* Sidebar variables (dark) */
-    --sidebar-background: 240 5.9% 10%;
+    --sidebar-background: 240 5.9% 10%; /* Kept sidebar dark */
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
     --sidebar-primary-foreground: 0 0% 100%;
@@ -92,7 +92,7 @@ body {
   body {
     @apply bg-background text-foreground;
     /* Use Geist Sans as the primary font */
-    font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+    font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   }
 }
 
