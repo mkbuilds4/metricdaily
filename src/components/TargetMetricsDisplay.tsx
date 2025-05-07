@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Trash2, BookOpen, Video, Clock, ChevronDown, ArrowUp, ArrowDown, Minus as MinusIcon, AlertCircle, Target as TargetIcon, Brain, CheckCircle } from 'lucide-react'; // Added CheckCircle
+import { Trash2, BookOpen, Video, Clock, ChevronDown, ArrowUp, ArrowDown, Minus as MinusIcon, AlertCircle, Target as TargetIcon, Brain, CheckCircle } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { parse, isValid, format, addMinutes, addDays } from 'date-fns'; 
 import {
@@ -55,67 +55,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 }) => {
   const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
-  // Store goal met times for today's log, per target
   const [todayGoalMetTimes, setTodayGoalMetTimes] = useState<Record<string, Date | null>>({});
-
-
-  useEffect(() => {
-     if (typeof window !== 'undefined') {
-         const now = new Date();
-         setCurrentTime(now);
-
-         // Initial check for goal met status for today's log
-         const todayDateStr = formatDateISO(now);
-         const currentTodayLog = allWorkLogs.find(log => log.date === todayDateStr);
-         if (currentTodayLog && showTodaySection) {
-            const newMetTimes: Record<string, Date | null> = {};
-            targets.forEach(target => {
-                if (!todayGoalMetTimes[target.id]) { // Only if not already met
-                    const { currentUnits } = calculateCurrentMetrics(currentTodayLog, target, now);
-                    const targetUnitsForShift = calculateRequiredUnitsForTarget(currentTodayLog.hoursWorked, target.targetUPH);
-                    if (currentUnits >= targetUnitsForShift && targetUnitsForShift > 0) {
-                        newMetTimes[target.id] = now;
-                    } else {
-                        newMetTimes[target.id] = null;
-                    }
-                } else {
-                    newMetTimes[target.id] = todayGoalMetTimes[target.id];
-                }
-            });
-            setTodayGoalMetTimes(newMetTimes);
-         }
-
-
-         const timerId = setInterval(() => {
-             const newNow = new Date();
-             setCurrentTime(newNow);
-             // Update goal met status on interval for today's log
-             const currentTodayLogForInterval = allWorkLogs.find(log => log.date === formatDateISO(newNow));
-             if (currentTodayLogForInterval && showTodaySection) {
-                const updatedMetTimes: Record<string, Date | null> = {...todayGoalMetTimes};
-                targets.forEach(target => {
-                    // Only set the met time if it hasn't been set before for this target.
-                    if (!updatedMetTimes[target.id]) { 
-                        const { currentUnits } = calculateCurrentMetrics(currentTodayLogForInterval, target, newNow);
-                        const targetUnitsForShift = calculateRequiredUnitsForTarget(currentTodayLogForInterval.hoursWorked, target.targetUPH);
-                        if (currentUnits >= targetUnitsForShift && targetUnitsForShift > 0) {
-                            updatedMetTimes[target.id] = newNow; // Lock in the time
-                        }
-                    }
-                });
-                setTodayGoalMetTimes(updatedMetTimes);
-             }
-         }, 1000); 
-         return () => clearInterval(timerId);
-     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allWorkLogs, targets, showTodaySection]); // Removed todayGoalMetTimes from deps to avoid potential loop issues, initial check handles it.
-
-
-  useEffect(() => {
-    // Reset goalMetTimes if the log or targets change, or if a new day starts
-     setTodayGoalMetTimes({});
-  }, [allWorkLogs, targets]);
 
 
   const { todayLog, previousLogsByDate } = useMemo(() => {
@@ -135,8 +75,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     if (!prevLogsMap[log.date]) {
                         prevLogsMap[log.date] = [];
                     }
-                     // Ensure only one log per date for previous logs (the most relevant one if multiple exist, though ideally there shouldn't be)
-                     if (prevLogsMap[log.date].length === 0) { // Only push if no log for this date yet
+                     if (prevLogsMap[log.date].length === 0) { 
                         prevLogsMap[log.date].push(log);
                      }
                 }
@@ -149,7 +88,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     });
 
     const prevLogsGrouped = Object.entries(prevLogsMap)
-                                .map(([date, logsForDateArray]) => ({ date, log: logsForDateArray[0] })) // logsForDateArray[0] since we only push one
+                                .map(([date, logsForDateArray]) => ({ date, log: logsForDateArray[0] })) 
                                 .sort((a, b) => b.date.localeCompare(a.date)); 
 
     return {
@@ -157,6 +96,56 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         previousLogsByDate: prevLogsGrouped
     };
   }, [allWorkLogs, showTodaySection]);
+
+
+  // Effect 1: Update currentTime every second
+  useEffect(() => {
+    if (typeof window !== 'undefined' && showTodaySection) {
+        setCurrentTime(new Date()); // Initial set
+        const timerId = setInterval(() => {
+            setCurrentTime(new Date());
+        }, 1000);
+        return () => clearInterval(timerId);
+    }
+  }, [showTodaySection]);
+
+  // Effect 2: Update goal met status when relevant data or currentTime changes
+  useEffect(() => {
+    if (typeof window === 'undefined' || !showTodaySection || !currentTime || !todayLog) {
+        // Clear met times if not applicable or no todayLog
+        if (Object.keys(todayGoalMetTimes).length > 0) {
+            setTodayGoalMetTimes({});
+        }
+        return;
+    }
+
+    const newMetTimes = { ...todayGoalMetTimes };
+    let changed = false;
+
+    targets.forEach(target => {
+        const { currentUnits } = calculateCurrentMetrics(todayLog, target, currentTime);
+        const targetUnitsForShift = calculateRequiredUnitsForTarget(todayLog.hoursWorked, target.targetUPH);
+        const isCurrentlyMet = currentUnits >= targetUnitsForShift && targetUnitsForShift > 0;
+        const wasPreviouslyMet = !!newMetTimes[target.id];
+
+        if (isCurrentlyMet && !wasPreviouslyMet) {
+            // Transition: Not Met -> Met
+            newMetTimes[target.id] = currentTime; // Record the time it was met
+            changed = true;
+        } else if (!isCurrentlyMet && wasPreviouslyMet) {
+            // Transition: Met -> Not Met (e.g., user undid work)
+            newMetTimes[target.id] = null;
+            changed = true;
+        }
+        // If isCurrentlyMet && wasPreviouslyMet, do nothing, keep original met time.
+        // If !isCurrentlyMet && !wasPreviouslyMet, do nothing.
+    });
+
+    if (changed) {
+        setTodayGoalMetTimes(newMetTimes);
+    }
+  }, [todayLog, targets, currentTime, showTodaySection, todayGoalMetTimes]);
+
 
   const activeTarget = useMemo(() => targets.find(t => t.isActive) ?? (targets.length > 0 ? targets[0] : null), [targets]);
   const sortedTargetsByUPH = useMemo(() => [...targets].sort((a, b) => a.targetUPH - b.targetUPH), [targets]);
@@ -195,7 +184,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
            currentMetrics = calculateCurrentMetrics(log, target, currentTime);
            unitsToGoal = totalRequiredUnits - currentMetrics.currentUnits;
            if (goalMetTimeForThisTarget) {
-               timeAheadBehindSeconds = 0; // Consider on schedule or met
+               timeAheadBehindSeconds = 0; 
                projectedHitTimeFormatted = `Met at ${format(goalMetTimeForThisTarget, 'h:mm:ss a')}`;
            } else {
                timeAheadBehindSeconds = calculateTimeAheadBehindSchedule(log, target, currentTime); 
@@ -257,7 +246,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 isBehindSchedule && "text-red-600 dark:text-red-500", 
                                 isOnSchedule && "text-foreground")}>
                                 {goalMetTimeForThisTarget ? <CheckCircle className="inline-block h-4 w-4 mr-1"/> :formatTimeAheadBehind(timeAheadBehindSeconds)} 
-                                {goalMetTimeForThisTarget && `at ${format(goalMetTimeForThisTarget, 'h:mm:ss a')}`}
+                                {goalMetTimeForThisTarget && `Met at ${format(goalMetTimeForThisTarget, 'h:mm:ss a')}`}
                              </p>
                          </div>
                          <div className="col-span-2">
@@ -267,7 +256,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                              </p>
                          </div>
                     </>
-                 ) : ( // Previous Logs
+                 ) : ( 
                      <>
                        <div>
                            <p className="text-muted-foreground">Units Completed</p>
@@ -282,11 +271,15 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             <p className="font-medium tabular-nums">{totalRequiredUnits.toFixed(2)}</p>
                        </div>
                        <div>
-                         <p className="text-muted-foreground">Units to Goal</p>
-                          <p className={"font-medium tabular-nums"}>
-                             {unitsToGoal > 0 ? unitsToGoal.toFixed(2) : (
+                         <p className="text-muted-foreground">Units vs Goal</p>
+                          <p className={cn(
+                            "font-medium tabular-nums",
+                            unitsToGoal > 0 && "text-red-600 dark:text-red-500",
+                            unitsToGoal <= 0 && "text-green-600 dark:text-green-500"
+                          )}>
+                             {unitsToGoal > 0 ? `-${unitsToGoal.toFixed(2)}` : (
                                 <>
-                                    <CheckCircle className="inline-block h-4 w-4 mr-1 text-green-600 dark:text-green-500"/> Met/Exceeded
+                                    <CheckCircle className="inline-block h-4 w-4 mr-1"/> {unitsToGoal === 0 ? 'Met' : `+${Math.abs(unitsToGoal).toFixed(2)}`}
                                 </>
                              )}
                           </p>

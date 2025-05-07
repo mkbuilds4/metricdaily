@@ -18,64 +18,61 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [goalMetAt, setGoalMetAt] = useState<Date | null>(null);
 
+  // Effect 1: Update currentTime every second
   useEffect(() => {
     if (typeof window !== 'undefined') {
-        const now = new Date();
-        setCurrentTime(now);
-        
-        // Initial check for goal met status
-        if (todayLog && activeTarget && !goalMetAt) { // Only check if not already met
-            const { currentUnits } = calculateCurrentMetrics(todayLog, activeTarget, now);
-            const targetUnitsForShift = calculateRequiredUnitsForTarget(todayLog.hoursWorked, activeTarget.targetUPH);
-            if (currentUnits >= targetUnitsForShift && targetUnitsForShift > 0) {
-                setGoalMetAt(now); // Lock in the time
-            }
-        }
-
+        setCurrentTime(new Date()); // Initial set
         const timerId = setInterval(() => {
-            const newNow = new Date();
-            setCurrentTime(newNow);
-            // Update goal met status on interval, only if not already met
-            if (todayLog && activeTarget && !goalMetAt) { 
-                const { currentUnits } = calculateCurrentMetrics(todayLog, activeTarget, newNow);
-                const targetUnitsForShift = calculateRequiredUnitsForTarget(todayLog.hoursWorked, activeTarget.targetUPH);
-                if (currentUnits >= targetUnitsForShift && targetUnitsForShift > 0) {
-                    setGoalMetAt(newNow); // Lock in the time
-                }
-            }
-        }, 1000); 
+            setCurrentTime(new Date());
+        }, 1000);
         return () => clearInterval(timerId);
     }
-  }, [todayLog, activeTarget, goalMetAt]); // Include goalMetAt here to stop interval updates once met
+  }, []); // Runs once on mount to start the timer
 
-
+  // Effect 2: Update goal met status based on data changes and currentTime
   useEffect(() => {
-    // Reset goalMetAt if the log or target changes, or if a new day starts
-    setGoalMetAt(null);
-  }, [todayLog, activeTarget]);
+    if (typeof window === 'undefined' || !todayLog || !activeTarget || !currentTime) {
+        // If conditions aren't met, or no data, ensure goalMetAt is null if it's not already.
+        if (goalMetAt !== null) {
+            setGoalMetAt(null);
+        }
+        return;
+    }
 
+    const { currentUnits } = calculateCurrentMetrics(todayLog, activeTarget, currentTime);
+    const targetUnitsForShift = calculateRequiredUnitsForTarget(todayLog.hoursWorked, activeTarget.targetUPH);
+    const isCurrentlyMet = currentUnits >= targetUnitsForShift && targetUnitsForShift > 0;
+    const wasPreviouslyMet = !!goalMetAt;
 
-  const targetForCalc = activeTarget;
+    if (isCurrentlyMet && !wasPreviouslyMet) {
+        setGoalMetAt(currentTime); // Record the time it was met
+    } else if (!isCurrentlyMet && wasPreviouslyMet) {
+        setGoalMetAt(null); // No longer met (e.g., data changed)
+    }
+    // If met state (isCurrentlyMet vs wasPreviouslyMet) doesn't change, do nothing to goalMetAt.
+    // This ensures goalMetAt, once set, only changes if the goal becomes unmet.
+  }, [todayLog, activeTarget, currentTime, goalMetAt]); // goalMetAt is included to react to its changes
+
 
   const progressData = useMemo(() => {
-    if (!todayLog || !targetForCalc || !currentTime) {
+    if (!todayLog || !activeTarget || !currentTime) {
       return { currentUnits: 0, targetUnits: 0, percentage: 0, currentUPH: 0, timeDiff: null, projectedHitTimeFormatted: '-', unitsToGoal: 0 };
     }
 
-    const { currentUnits, currentUPH } = calculateCurrentMetrics(todayLog, targetForCalc, currentTime);
-    const targetUnitsForDuration = calculateRequiredUnitsForTarget(todayLog.hoursWorked, targetForCalc.targetUPH);
+    const { currentUnits, currentUPH } = calculateCurrentMetrics(todayLog, activeTarget, currentTime);
+    const targetUnitsForDuration = calculateRequiredUnitsForTarget(todayLog.hoursWorked, activeTarget.targetUPH);
     const percentage = targetUnitsForDuration > 0 ? Math.min(100, Math.max(0, (currentUnits / targetUnitsForDuration) * 100)) : 0;
     
     let timeDiffSeconds: number | null = null;
     let projectedHitTimeFormatted: string = '-';
     const unitsToGoal = targetUnitsForDuration - currentUnits;
 
-    if (goalMetAt) {
+    if (goalMetAt) { // If goal is already met and timestamp is locked
         timeDiffSeconds = 0; // Consider on schedule or met
         projectedHitTimeFormatted = `Met at ${format(goalMetAt, 'h:mm:ss a')}`;
-    } else {
-        timeDiffSeconds = calculateTimeAheadBehindSchedule(todayLog, targetForCalc, currentTime); 
-        projectedHitTimeFormatted = calculateProjectedGoalHitTime(todayLog, targetForCalc, timeDiffSeconds, currentTime); 
+    } else { // If goal is not yet met
+        timeDiffSeconds = calculateTimeAheadBehindSchedule(todayLog, activeTarget, currentTime); 
+        projectedHitTimeFormatted = calculateProjectedGoalHitTime(todayLog, activeTarget, timeDiffSeconds, currentTime); 
     }
 
 
@@ -88,7 +85,7 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
         projectedHitTimeFormatted,
         unitsToGoal: parseFloat(unitsToGoal.toFixed(2)),
     };
-  }, [todayLog, targetForCalc, currentTime, goalMetAt]);
+  }, [todayLog, activeTarget, currentTime, goalMetAt]);
 
   if (!todayLog || !currentTime) {
     return (
@@ -104,7 +101,7 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
     );
   }
 
-  if (!targetForCalc) {
+  if (!activeTarget) {
      return (
       <Card>
         <CardHeader>
@@ -133,8 +130,8 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
         <CardTitle>Today's Target Progress</CardTitle>
         <CardDescription>
           Tracking progress towards{' '}
-          <span className="font-medium">{targetForCalc.name}</span> target (Goal UPH:{' '}
-          {targetForCalc.targetUPH.toFixed(1)}) for {formattedLogDate}.
+          <span className="font-medium">{activeTarget.name}</span> target (Goal UPH:{' '}
+          {activeTarget.targetUPH.toFixed(1)}) for {formattedLogDate}.
           {trainingTimeFormatted && (
             <span className="block text-xs text-muted-foreground">
               <Brain className="inline-block h-3 w-3 mr-1" /> Includes {trainingTimeFormatted} of training.
@@ -179,7 +176,7 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
                     !goalMetAt && progressData.timeDiff !== null && progressData.timeDiff < 0 && "text-red-600 dark:text-red-500"
                     )}>
                       {goalMetAt ? <CheckCircle className="inline-block h-4 w-4 mr-1"/> : formatTimeAheadBehind(progressData.timeDiff)} 
-                      {goalMetAt && `at ${format(goalMetAt, 'h:mm:ss a')}`}
+                      {goalMetAt && `Met at ${format(goalMetAt, 'h:mm:ss a')}`}
                  </span>
              </div>
              <div className="flex flex-col col-span-2 sm:col-span-2"> 
