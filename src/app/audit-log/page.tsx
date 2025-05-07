@@ -6,15 +6,16 @@ import type { AuditLogEntry, AuditLogActionType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Input } from '@/components/ui/input'; // Import Input
-import { Combobox, ComboboxOption } from '@/components/ui/combobox'; // Import Combobox
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'; // Import Popover
-import { Calendar } from '@/components/ui/calendar'; // Import Calendar
-import { format, parseISO, startOfDay, endOfDay, isValid } from 'date-fns';
+import { Input } from '@/components/ui/input';
+import { Combobox, ComboboxOption } from '@/components/ui/combobox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { format, parseISO, startOfDay, endOfDay, isValid, subDays, startOfWeek, endOfWeek } from 'date-fns';
 import { RefreshCw, Download, Filter, X, Calendar as CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { DateRange } from 'react-day-picker'; // Import DateRange type
-import { cn } from '@/lib/utils'; // Import cn
+import { DateRange } from 'react-day-picker';
+import { cn } from '@/lib/utils';
+import { Separator } from '@/components/ui/separator'; // Import Separator
 
 const ITEMS_PER_PAGE = 20;
 
@@ -50,6 +51,7 @@ export default function AuditLogPage() {
   const [filterActionType, setFilterActionType] = useState<AuditLogActionType | 'all'>('all');
   const [filterEntityType, setFilterEntityType] = useState<AuditLogEntry['entityType'] | 'all'>('all');
   const [filterDateRange, setFilterDateRange] = useState<DateRange | undefined>(undefined);
+  const [datePickerOpen, setDatePickerOpen] = useState(false); // State to control popover
   const { toast } = useToast();
 
   const loadAuditLogs = useCallback(() => {
@@ -181,6 +183,21 @@ export default function AuditLogPage() {
 
   const hasActiveFilters = filterTerm || filterActionType !== 'all' || filterEntityType !== 'all' || filterDateRange;
 
+  // Preset Date Range Handlers
+  const setPresetDateRange = (range: DateRange | undefined) => {
+      setFilterDateRange(range);
+      setCurrentPage(1);
+      setDatePickerOpen(false); // Close popover after selection
+  };
+
+  const today = new Date();
+  const presetRanges = [
+    { label: "Today", range: { from: startOfDay(today), to: endOfDay(today) } },
+    { label: "Yesterday", range: { from: startOfDay(subDays(today, 1)), to: endOfDay(subDays(today, 1)) } },
+    { label: "This Week", range: { from: startOfWeek(today, { weekStartsOn: 1 }), to: endOfWeek(today, { weekStartsOn: 1 }) } },
+    { label: "Last 7 Days", range: { from: startOfDay(subDays(today, 6)), to: endOfDay(today) } },
+  ];
+
 
   if (isLoading) {
     return (
@@ -247,7 +264,7 @@ export default function AuditLogPage() {
                     disabled={isLoading}
                 />
 
-                <Popover>
+                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
                    <PopoverTrigger asChild>
                      <Button
                        id="date"
@@ -273,17 +290,40 @@ export default function AuditLogPage() {
                        )}
                      </Button>
                    </PopoverTrigger>
-                   <PopoverContent className="w-auto p-0" align="start">
-                     <Calendar
-                       initialFocus
-                       mode="range"
-                       defaultMonth={filterDateRange?.from}
-                       selected={filterDateRange}
-                       onSelect={(range) => { setFilterDateRange(range); setCurrentPage(1); }}
-                       numberOfMonths={2}
-                       disabled={(date) => date > new Date() || date < new Date("2023-01-01")}
-                     />
-                   </PopoverContent>
+                    <PopoverContent className="w-auto p-0 flex flex-col sm:flex-row" align="start">
+                        <div className="flex flex-col p-2 border-b sm:border-r sm:border-b-0">
+                           <p className="text-xs font-semibold text-muted-foreground px-2 py-1">Presets</p>
+                           {presetRanges.map((preset) => (
+                            <Button
+                                key={preset.label}
+                                variant="ghost"
+                                size="sm"
+                                className="justify-start text-sm font-normal h-8"
+                                onClick={() => setPresetDateRange(preset.range)}
+                            >
+                                {preset.label}
+                            </Button>
+                            ))}
+                           <Separator className="my-1" />
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="justify-start text-sm font-normal h-8 text-muted-foreground"
+                                onClick={() => setPresetDateRange(undefined)}
+                            >
+                                Clear
+                            </Button>
+                        </div>
+                        <Calendar
+                           initialFocus
+                           mode="range"
+                           defaultMonth={filterDateRange?.from}
+                           selected={filterDateRange}
+                           onSelect={(range) => { setFilterDateRange(range); setCurrentPage(1); }}
+                           numberOfMonths={1} // Show one month for smaller popover
+                           disabled={(date) => date > new Date() || date < new Date("2023-01-01")}
+                         />
+                    </PopoverContent>
                  </Popover>
 
              </div>
