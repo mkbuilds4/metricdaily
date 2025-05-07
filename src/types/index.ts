@@ -42,13 +42,17 @@ export type AuditLogActionType =
   | 'CREATE_UPH_TARGET'
   | 'UPDATE_UPH_TARGET'
   | 'DELETE_UPH_TARGET'
-  | 'DUPLICATE_UPH_TARGET' // Added for duplicating targets
+  | 'DUPLICATE_UPH_TARGET'
   | 'SET_ACTIVE_UPH_TARGET'
   | 'SYSTEM_LOAD_SAMPLE_DATA' 
   | 'SYSTEM_CLEAR_ALL_DATA'   
   | 'SYSTEM_ARCHIVE_TODAY_LOG'
-  | 'SYSTEM_EXPORT_DATA' // Added for CSV export success
-  | 'SYSTEM_EXPORT_DATA_FAILED'; // Added for CSV export failure
+  | 'SYSTEM_EXPORT_DATA'
+  | 'SYSTEM_EXPORT_DATA_FAILED'
+  | 'SECURITY_ACCESS_GRANTED'   // User successfully authenticated for audit log
+  | 'SECURITY_ACCESS_DENIED'    // User failed authentication for audit log
+  | 'SECURITY_ACCESS_CANCELLED' // User cancelled the password prompt
+  | 'SECURITY_CONFIGURATION_ERROR'; // Audit log password not set by admin
 
 
 /**

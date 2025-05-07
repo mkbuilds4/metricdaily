@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format, parseISO } from 'date-fns';
-import { RefreshCw, Download, Filter, X, Lock } from 'lucide-react'; // Added X icon, Lock
+import { RefreshCw, Download, Filter, X, Lock } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,13 +21,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useRouter } from 'next/navigation';
 
 const ITEMS_PER_PAGE = 20;
 
 export default function AuditLogPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // Start with loading true
   const [currentPage, setCurrentPage] = useState(1);
   const [filterTerm, setFilterTerm] = useState('');
   const { toast } = useToast();
@@ -36,46 +36,41 @@ export default function AuditLogPage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const storedPasswordHash = localStorage.getItem('auditLogPasswordHash');
-      const auditLogPassword = process.env.NEXT_PUBLIC_AUDIT_LOG_PASSWORD;
+      const isAuthed = localStorage.getItem('auditLogAuthenticated');
+      localStorage.removeItem('auditLogAuthenticated'); // Clear flag after checking
 
-      if (!auditLogPassword) {
-        console.error("Audit log password not configured.");
+      const auditLogPasswordConfigured = !!process.env.NEXT_PUBLIC_AUDIT_LOG_PASSWORD;
+
+      if (!auditLogPasswordConfigured) {
+          console.error("Audit log password not configured.");
+          toast({
+            variant: "destructive",
+            title: "Configuration Error",
+            description: "Audit Log password is not set up. Access denied.",
+          });
+          router.push('/');
+          setIsLoading(false); // Stop loading if redirecting
+          return;
+      }
+
+      if (isAuthed === 'true') {
+        setIsAuthenticated(true);
+        // Audit log for access granted is handled in layout.tsx
+      } else {
+        addAuditLog('SECURITY_ACCESS_DENIED', 'Security', 'Direct access to Audit Log page denied or session expired.');
         toast({
           variant: "destructive",
-          title: "Configuration Error",
-          description: "Audit Log password is not set up.",
+          title: "Access Denied",
+          description: "Please access the Audit Log via the sidebar link and enter the password.",
         });
-        // No direct addAuditLog here to prevent loops if it's not initialized yet
-        // Consider logging this failure if authentication is attempted.
         router.push('/');
-        return;
-      }
-      
-      if (storedPasswordHash === auditLogPassword) { 
-        setIsAuthenticated(true);
-      } else {
-        const enteredPassword = prompt("Please enter the password to access the Audit Log:");
-        if (enteredPassword === auditLogPassword) {
-          localStorage.setItem('auditLogPasswordHash', enteredPassword); 
-          setIsAuthenticated(true);
-          addAuditLog('SECURITY_ACCESS_GRANTED', 'Security', 'Audit Log access granted.');
-        } else {
-          if (enteredPassword !== null) { 
-            addAuditLog('SECURITY_ACCESS_DENIED', 'Security', 'Audit Log access denied: Incorrect password entered.');
-            alert("Incorrect password. Access denied.");
-          } else {
-             addAuditLog('SECURITY_ACCESS_CANCELLED', 'Security', 'Audit Log access attempt cancelled by user.');
-          }
-          router.push('/');
-        }
+        setIsLoading(false); // Stop loading if redirecting
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, toast]); 
+  }, [router, toast]); // Dependencies for initial auth check
 
   const loadAuditLogs = useCallback(() => {
-    if (typeof window === 'undefined' || !isAuthenticated) return;
     setIsLoading(true);
     try {
       const logs = getAuditLogs();
@@ -90,13 +85,13 @@ export default function AuditLogPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast, isAuthenticated]);
+  }, [toast]);
 
   useEffect(() => {
     if (isAuthenticated) {
       loadAuditLogs();
     }
-  }, [loadAuditLogs, isAuthenticated]);
+  }, [isAuthenticated, loadAuditLogs]);
 
   const filteredLogs = auditLogs.filter(log => {
     const searchTerm = filterTerm.toLowerCase();
@@ -156,23 +151,27 @@ export default function AuditLogPage() {
     addAuditLog('SYSTEM_EXPORT_DATA', 'System', 'Exported audit log to CSV.');
   };
 
-
-  if (!isAuthenticated) {
+  // This handles initial state or when auth fails and is about to redirect.
+  if (!isAuthenticated && !isLoading) {
     return (
       <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4 md:p-6 lg:p-8">
         <Lock className="h-12 w-12 text-muted-foreground mb-4" />
-        <p className="text-xl text-muted-foreground">Authenticating...</p>
+        <p className="text-xl text-muted-foreground">Verifying access...</p>
       </div>
     );
   }
 
-  if (isLoading) {
+  // This handles loading logs *after* authentication is successful.
+  if (isLoading && isAuthenticated) {
     return (
       <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4 md:p-6 lg:p-8">
         <p className="text-xl text-muted-foreground">Loading Audit Log...</p>
       </div>
     );
   }
+  
+  // If !isAuthenticated and isLoading, useEffect is still running.
+  // If we reach here, isAuthenticated must be true and isLoading is false.
 
   return (
     <div className="w-full max-w-6xl mx-auto space-y-6 p-4 md:p-6 lg:p-8">
@@ -184,10 +183,10 @@ export default function AuditLogPage() {
               <CardDescription>History of changes made within the application.</CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={handleRefresh} size="sm">
+              <Button variant="outline" onClick={handleRefresh} size="sm" disabled={isLoading}>
                 <RefreshCw className="mr-2 h-4 w-4" /> Refresh
               </Button>
-              <Button variant="outline" onClick={handleExport} size="sm" disabled={filteredLogs.length === 0}>
+              <Button variant="outline" onClick={handleExport} size="sm" disabled={isLoading || filteredLogs.length === 0}>
                 <Download className="mr-2 h-4 w-4" /> Export CSV
               </Button>
             </div>
@@ -200,12 +199,13 @@ export default function AuditLogPage() {
               value={filterTerm}
               onChange={(e) => {
                 setFilterTerm(e.target.value);
-                setCurrentPage(1); // Reset to first page on filter change
+                setCurrentPage(1); 
               }}
               className="flex-grow p-2 border border-input rounded-md text-sm focus:ring-ring focus:outline-none focus:ring-2"
+              disabled={isLoading}
             />
             {filterTerm && (
-                 <Button variant="ghost" size="icon" onClick={() => { setFilterTerm(''); setCurrentPage(1); }} className="h-8 w-8">
+                 <Button variant="ghost" size="icon" onClick={() => { setFilterTerm(''); setCurrentPage(1); }} className="h-8 w-8" disabled={isLoading}>
                     <X className="h-4 w-4 text-muted-foreground"/>
                  </Button>
             )}
@@ -222,7 +222,7 @@ export default function AuditLogPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[180px]">Timestamp</TableHead>
-                    <TableHead className="w-[200px]">Action</TableHead> {/* Increased width for action */}
+                    <TableHead className="w-[200px]">Action</TableHead>
                     <TableHead className="w-[120px]">Entity Type</TableHead>
                     <TableHead className="w-[150px]">Entity ID</TableHead>
                     <TableHead>Details</TableHead>
@@ -254,7 +254,7 @@ export default function AuditLogPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
+                disabled={currentPage === 1 || isLoading}
               >
                 Previous
               </Button>
@@ -265,7 +265,7 @@ export default function AuditLogPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
+                disabled={currentPage === totalPages || isLoading}
               >
                 Next
               </Button>
@@ -276,4 +276,3 @@ export default function AuditLogPage() {
     </div>
   );
 }
-

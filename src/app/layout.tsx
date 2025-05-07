@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils"; // Import cn utility
 import { ThemeProvider } from '@/components/ThemeProvider'; // Import ThemeProvider
 import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
 import TutorialDialog from '@/components/TutorialDialog'; // Import TutorialDialog
+import { addAuditLog } from '@/lib/actions'; // Import addAuditLog
 
 const fontSans = FontSans({ // Changed variable name
   subsets: ['latin'],
@@ -53,17 +54,26 @@ export default function RootLayout({
     const auditLogPassword = process.env.NEXT_PUBLIC_AUDIT_LOG_PASSWORD;
     if (!auditLogPassword) {
         e.preventDefault();
+        addAuditLog('SECURITY_CONFIGURATION_ERROR', 'Security', 'Audit Log access denied: Password not configured by admin.');
         alert("Audit Log password not configured by admin. Access denied.");
         return;
     }
 
     const enteredPassword = prompt("Please enter the password to access the Audit Log:");
     if (enteredPassword === auditLogPassword) {
+      // Password is correct
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('auditLogAuthenticated', 'true'); // Set flag for page to check
+      }
+      addAuditLog('SECURITY_ACCESS_GRANTED', 'Security', 'Audit Log access granted via sidebar prompt.');
       // Allow navigation (NextLink will handle it)
     } else {
       e.preventDefault(); // Prevent navigation
-      if (enteredPassword !== null) { // Only show alert if user entered something (not cancelled)
+      if (enteredPassword !== null) { // User entered something
+        addAuditLog('SECURITY_ACCESS_DENIED', 'Security', 'Audit Log access denied: Incorrect password entered via sidebar prompt.');
         alert("Incorrect password. Access denied.");
+      } else { // User cancelled the prompt
+        addAuditLog('SECURITY_ACCESS_CANCELLED', 'Security', 'Audit Log access attempt cancelled by user via sidebar prompt.');
       }
     }
   };
@@ -121,9 +131,9 @@ export default function RootLayout({
                         {/* Audit Log at the bottom of the main navigation section */}
                         <div>
                             <SidebarMenuItem>
-                                <SidebarMenuButton 
-                                    href="/audit-log" 
-                                    isActive={pathname === '/audit-log'} 
+                                <SidebarMenuButton
+                                    href="/audit-log"
+                                    isActive={pathname === '/audit-log'}
                                     tooltip="Audit Log (Protected)"
                                     onClick={handleAuditLogClick}
                                 >
@@ -152,4 +162,3 @@ export default function RootLayout({
     </html>
   );
 }
-
