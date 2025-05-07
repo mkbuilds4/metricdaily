@@ -51,8 +51,8 @@ export default function RootLayout({
       return;
     }
 
-    const auditLogPassword = process.env.NEXT_PUBLIC_AUDIT_LOG_PASSWORD;
-    if (!auditLogPassword) {
+    const auditLogPasswordFromEnv = process.env.NEXT_PUBLIC_AUDIT_LOG_PASSWORD;
+    if (!auditLogPasswordFromEnv) {
         e.preventDefault();
         addAuditLog('SECURITY_CONFIGURATION_ERROR', 'Security', 'Audit Log access denied: Password not configured by admin.');
         alert("Audit Log password not configured by admin. Access denied.");
@@ -60,19 +60,25 @@ export default function RootLayout({
     }
 
     const enteredPassword = prompt("Please enter the password to access the Audit Log:");
-    if (enteredPassword === auditLogPassword) {
+
+    // Trim both entered password and environment variable password for comparison
+    const trimmedEnteredPassword = enteredPassword ? enteredPassword.trim() : null;
+    const trimmedAuditLogPassword = auditLogPasswordFromEnv ? auditLogPasswordFromEnv.trim() : '';
+
+
+    if (trimmedEnteredPassword && trimmedEnteredPassword === trimmedAuditLogPassword) {
       // Password is correct
       if (typeof window !== 'undefined') {
         localStorage.setItem('auditLogAuthenticated', 'true'); // Set flag for page to check
       }
       addAuditLog('SECURITY_ACCESS_GRANTED', 'Security', 'Audit Log access granted via sidebar prompt.');
-      // Allow navigation (NextLink will handle it)
+      // Allow navigation (NextLink will handle it by not calling e.preventDefault())
     } else {
       e.preventDefault(); // Prevent navigation
-      if (enteredPassword !== null) { // User entered something
+      if (enteredPassword !== null) { // User entered something (even if it's wrong after trimming or empty string)
         addAuditLog('SECURITY_ACCESS_DENIED', 'Security', 'Audit Log access denied: Incorrect password entered via sidebar prompt.');
         alert("Incorrect password. Access denied.");
-      } else { // User cancelled the prompt
+      } else { // User cancelled the prompt (enteredPassword will be null)
         addAuditLog('SECURITY_ACCESS_CANCELLED', 'Security', 'Audit Log access attempt cancelled by user via sidebar prompt.');
       }
     }
