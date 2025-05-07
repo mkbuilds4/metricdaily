@@ -1,14 +1,18 @@
 
+
 // src/lib/actions.ts
 // Client-side actions interacting with localStorage.
 
-import type { DailyWorkLog, UPHTarget, AuditLogEntry, AuditLogActionType } from '@/types';
-import { formatDateISO, calculateHoursWorked } from '@/lib/utils'; 
-import { sampleWorkLogs, sampleUPHTargets } from './sample-data'; 
+import type { DailyWorkLog, UPHTarget, AuditLogEntry, AuditLogActionType, UserSettings } from '@/types';
+import { formatDateISO, calculateHoursWorked } from '@/lib/utils';
+import { sampleWorkLogs, sampleUPHTargets } from './sample-data';
 
 const WORK_LOGS_KEY = 'workLogs';
 const UPH_TARGETS_KEY = 'uphTargets';
-const AUDIT_LOGS_KEY = 'auditLogs'; 
+const AUDIT_LOGS_KEY = 'auditLogs';
+const SETTINGS_KEY = 'userSettings'; // Key for storing user settings
+
+// --- Local Storage Helpers ---
 
 function generateLocalId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}`;
@@ -40,19 +44,21 @@ function saveToLocalStorage<T>(key: string, value: T): void {
   }
 }
 
+// --- Audit Log Actions ---
+
 export function getAuditLogs(): AuditLogEntry[] {
   const logs = getFromLocalStorage<AuditLogEntry[]>(AUDIT_LOGS_KEY, []);
   logs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   return logs;
 }
 
-export function addAuditLog( // Added export keyword
+export function addAuditLog(
   action: AuditLogActionType,
-  entityType: 'WorkLog' | 'UPHTarget' | 'System' | 'Security',
+  entityType: 'WorkLog' | 'UPHTarget' | 'System' | 'Security' | 'Settings',
   details: string,
   entityId?: string,
-  previousState?: Partial<DailyWorkLog | UPHTarget> | null, 
-  newState?: Partial<DailyWorkLog | UPHTarget> | null 
+  previousState?: Partial<DailyWorkLog | UPHTarget | UserSettings> | null,
+  newState?: Partial<DailyWorkLog | UPHTarget | UserSettings> | null
 ): void {
   const auditLogs = getAuditLogs();
   const newLogEntry: AuditLogEntry = {
@@ -62,13 +68,15 @@ export function addAuditLog( // Added export keyword
     entityType,
     entityId,
     details,
-    previousState: previousState ?? undefined, 
-    newState: newState ?? undefined, 
+    previousState: previousState ?? undefined,
+    newState: newState ?? undefined,
   };
-  auditLogs.unshift(newLogEntry); 
-  saveToLocalStorage(AUDIT_LOGS_KEY, auditLogs.slice(0, 500)); 
+  auditLogs.unshift(newLogEntry);
+  saveToLocalStorage(AUDIT_LOGS_KEY, auditLogs.slice(0, 500));
   console.log('[Audit Log] Added:', newLogEntry);
 }
+
+// --- Work Log Actions ---
 
 export function getWorkLogs(): DailyWorkLog[] {
   const logs = getFromLocalStorage<DailyWorkLog[]>(WORK_LOGS_KEY, []);
@@ -96,6 +104,8 @@ export function saveWorkLog(
        const targets = getUPHTargets();
        if (!targets.some(t => t.id === logData.targetId)) {
            console.warn(`[Client Action] Target ID "${logData.targetId}" provided for log does not exist. Saving log without association.`);
+           // Keep the invalid targetId for now, maybe it will be created later? Or clear it:
+           // logData.targetId = undefined;
        }
   }
 
@@ -110,7 +120,7 @@ export function saveWorkLog(
       endTime: logData.endTime,
       breakDurationMinutes: logData.breakDurationMinutes || 0,
       trainingDurationMinutes: logData.trainingDurationMinutes || 0,
-      hoursWorked: finalHoursWorked, 
+      hoursWorked: finalHoursWorked,
       documentsCompleted: logData.documentsCompleted,
       videoSessionsCompleted: logData.videoSessionsCompleted,
       targetId: logData.targetId,
@@ -132,11 +142,28 @@ export function saveWorkLog(
     const existingLogIndex = logs.findIndex(log => log.date === logData.date);
     if (existingLogIndex > -1) {
         previousState = { ...logs[existingLogIndex] };
+        // Keep existing targetId if none provided in new data, otherwise use new data's targetId
         const targetIdToKeep = logData.targetId ?? logs[existingLogIndex].targetId;
-        const trainingToKeep = logData.trainingDurationMinutes ?? logs[existingLogIndex].trainingDurationMinutes ?? 0;
-        savedLog = { ...logs[existingLogIndex], ...completeLogData, targetId: targetIdToKeep, trainingDurationMinutes: trainingToKeep };
+        // Keep existing training if none provided, otherwise use new data's training
+        const trainingToKeep = logData.trainingDurationMinutes !== undefined ? logData.trainingDurationMinutes : (logs[existingLogIndex].trainingDurationMinutes || 0);
+        // Keep existing break if none provided, otherwise use new data's break
+        const breakToKeep = logData.breakDurationMinutes !== undefined ? logData.breakDurationMinutes : (logs[existingLogIndex].breakDurationMinutes || 0);
+
+        // Re-calculate hours based on potentially updated times/durations
+        const updatedNonWorkMinutes = breakToKeep + trainingToKeep;
+        const updatedHoursWorked = calculateHoursWorked(logData.date, logData.startTime, logData.endTime, updatedNonWorkMinutes);
+
+        savedLog = {
+            ...logs[existingLogIndex], // Start with existing log
+            ...completeLogData,         // Apply base new data (date, times, counts, notes)
+            targetId: targetIdToKeep,
+            breakDurationMinutes: breakToKeep,
+            trainingDurationMinutes: trainingToKeep,
+            hoursWorked: updatedHoursWorked // Use newly calculated hours
+        };
+
         logs[existingLogIndex] = savedLog;
-        operation = 'UPDATE_WORK_LOG'; 
+        operation = 'UPDATE_WORK_LOG';
     } else {
         savedLog = { ...completeLogData, id: generateLocalId() };
         logs.push(savedLog);
@@ -187,6 +214,8 @@ export function deleteWorkLog(id: string): void {
     }
 }
 
+// --- UPH Target Actions ---
+
 export function getUPHTargets(): UPHTarget[] {
   const targets = getFromLocalStorage<UPHTarget[]>(UPH_TARGETS_KEY, []);
   return targets;
@@ -202,7 +231,7 @@ export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): UP
   const newTarget: UPHTarget = {
     ...targetData,
     id: generateLocalId(),
-    isActive: targets.length === 0, 
+    isActive: targets.length === 0,
   };
 
   targets.push(newTarget);
@@ -284,10 +313,10 @@ export function setActiveUPHTarget(id: string): UPHTarget {
     if (shouldBeActive) {
       activatedTarget = { ...t, isActive: true };
       return activatedTarget;
-    } else if (t.isActive) { 
+    } else if (t.isActive) {
       return { ...t, isActive: false };
     }
-    return t; 
+    return t;
   });
 
   if (!activatedTarget) throw new Error(`Target with ID ${id} not found.`);
@@ -311,60 +340,47 @@ export function getActiveUPHTarget(): UPHTarget | null {
   if (activeTarget) {
     return activeTarget;
   } else if (targets.length > 0) {
-    return setActiveUPHTarget(targets[0].id);
+    console.log("[Action] No active target found, activating the first one.");
+    // Don't automatically activate here, let the UI prompt the user or use a default
+    // return setActiveUPHTarget(targets[0].id);
+     return targets[0]; // Return the first one as a fallback display, but don't modify state
   }
   return null;
 }
 
-export function loadSampleData(): boolean {
-    const currentLogs = getWorkLogs();
-    const currentTargets = getUPHTargets();
+/**
+ * Duplicates an existing UPH target in localStorage.
+ * The new target will have "- Copy" appended to its name and will be inactive.
+ */
+export function duplicateUPHTarget(id: string): UPHTarget {
+  const targets = getUPHTargets();
+  const originalTarget = targets.find(t => t.id === id);
 
-    if (currentLogs.length === 0 && currentTargets.length === 0) {
-        const processedTargets = sampleUPHTargets.map((target, index) => ({
-            ...target,
-            id: target.id || generateLocalId(),
-            isActive: index === 0,
-        }));
+  if (!originalTarget) {
+    throw new Error(`Target with ID ${id} not found for duplication.`);
+  }
 
-        const processedLogs = sampleWorkLogs.map(log => ({
-            ...log,
-            id: log.id || generateLocalId(),
-            targetId: processedTargets[0]?.id || undefined,
-            trainingDurationMinutes: log.trainingDurationMinutes || 0,
-        }));
+  const newTarget: UPHTarget = {
+    ...originalTarget,
+    id: generateLocalId(),
+    name: `${originalTarget.name} - Copy`,
+    isActive: false, // Duplicated targets are inactive by default
+  };
 
-        saveToLocalStorage(WORK_LOGS_KEY, processedLogs);
-        saveToLocalStorage(UPH_TARGETS_KEY, processedTargets);
-        addAuditLog('SYSTEM_LOAD_SAMPLE_DATA', 'System', 'Loaded sample work logs and UPH targets.');
-        return true;
-    }
-    return false;
+  targets.push(newTarget);
+  saveToLocalStorage(UPH_TARGETS_KEY, targets);
+  addAuditLog(
+    'DUPLICATE_UPH_TARGET', // Changed action type
+    'UPHTarget',
+    `Duplicated UPH target "${originalTarget.name}" to "${newTarget.name}".`,
+    newTarget.id,
+    originalTarget, // Log original as previous state for context
+    newTarget
+  );
+  return newTarget;
 }
 
-export function clearAllData(): void {
-    if (typeof window === 'undefined') {
-        console.error('Attempted to clear localStorage on the server.');
-        return;
-    }
-    saveToLocalStorage(WORK_LOGS_KEY, []);
-    saveToLocalStorage(UPH_TARGETS_KEY, []);
-    addAuditLog('SYSTEM_CLEAR_ALL_DATA', 'System', 'Cleared all work logs and UPH targets.');
-}
-
-export function archiveTodayLog(): DailyWorkLog | null {
-    if (typeof window === 'undefined') return null;
-    const todayDateStr = formatDateISO(new Date());
-    const logs = getWorkLogs();
-    const todayLog = logs.find(log => log.date === todayDateStr);
-
-    if (todayLog) {
-        addAuditLog('SYSTEM_ARCHIVE_TODAY_LOG', 'WorkLog', `Today's log for ${todayLog.date} archived (day ended).`, todayLog.id, todayLog, todayLog);
-        return todayLog;
-    }
-    addAuditLog('SYSTEM_ARCHIVE_TODAY_LOG', 'System', `Attempted to archive today's log, but no log found for ${todayDateStr}.`);
-    return null;
-}
+// --- Time Adjustment Actions ---
 
 export function addBreakTimeToLog(logId: string, breakMinutes: number): DailyWorkLog {
   const logs = getWorkLogs();
@@ -418,35 +434,109 @@ export function addTrainingTimeToLog(logId: string, trainingMinutes: number): Da
   return updatedLog;
 }
 
-/**
- * Duplicates an existing UPH target in localStorage.
- * The new target will have "- Copy" appended to its name and will be inactive.
- */
-export function duplicateUPHTarget(id: string): UPHTarget {
-  const targets = getUPHTargets();
-  const originalTarget = targets.find(t => t.id === id);
+// --- System Data Actions ---
 
-  if (!originalTarget) {
-    throw new Error(`Target with ID ${id} not found for duplication.`);
-  }
+export function loadSampleData(): boolean {
+    const currentLogs = getWorkLogs();
+    const currentTargets = getUPHTargets();
 
-  const newTarget: UPHTarget = {
-    ...originalTarget,
-    id: generateLocalId(),
-    name: `${originalTarget.name} - Copy`,
-    isActive: false, // Duplicated targets are inactive by default
-  };
+    if (currentLogs.length === 0 && currentTargets.length === 0) {
+        // Make sure sample targets are set up correctly
+        const processedTargets = sampleUPHTargets.map((target, index) => ({
+            ...target,
+            id: target.id || generateLocalId(),
+            isActive: index === 0, // Activate the first one
+        }));
 
-  targets.push(newTarget);
-  saveToLocalStorage(UPH_TARGETS_KEY, targets);
-  addAuditLog(
-    'CREATE_UPH_TARGET', // Logged as create because it's a new entity
-    'UPHTarget',
-    `Duplicated UPH target "${originalTarget.name}" to "${newTarget.name}".`,
-    newTarget.id,
-    null, // No previous state for a new entity
-    newTarget
-  );
-  return newTarget;
+        // Make sure sample logs reference a valid target ID and have training set
+        const processedLogs = sampleWorkLogs.map(log => ({
+            ...log,
+            id: log.id || generateLocalId(),
+            targetId: processedTargets[0]?.id || undefined, // Use the first sample target's ID
+            breakDurationMinutes: log.breakDurationMinutes ?? 0, // Default break if missing
+            trainingDurationMinutes: log.trainingDurationMinutes ?? 0, // Default training if missing
+        }));
+
+        saveToLocalStorage(WORK_LOGS_KEY, processedLogs);
+        saveToLocalStorage(UPH_TARGETS_KEY, processedTargets);
+        // Save default settings if none exist when loading sample data
+        if (!getDefaultSettings()) {
+          saveDefaultSettings({
+            defaultStartTime: '14:00',
+            defaultEndTime: '22:30',
+            defaultBreakMinutes: 0, // Start with 0 break
+            defaultTrainingMinutes: 0, // Start with 0 training
+          });
+          addAuditLog('UPDATE_SETTINGS', 'Settings', 'Saved initial default settings during sample data load.');
+        }
+
+        addAuditLog('SYSTEM_LOAD_SAMPLE_DATA', 'System', 'Loaded sample work logs and UPH targets.');
+        return true;
+    }
+    return false;
 }
 
+export function clearAllData(): void {
+    if (typeof window === 'undefined') {
+        console.error('Attempted to clear localStorage on the server.');
+        return;
+    }
+    saveToLocalStorage(WORK_LOGS_KEY, []);
+    saveToLocalStorage(UPH_TARGETS_KEY, []);
+    saveToLocalStorage(SETTINGS_KEY, {}); // Clear settings as well
+    // Keep audit logs for now, could add an option to clear them too
+    // saveToLocalStorage(AUDIT_LOGS_KEY, []);
+    addAuditLog('SYSTEM_CLEAR_ALL_DATA', 'System', 'Cleared all work logs, UPH targets, and settings.');
+}
+
+export function archiveTodayLog(): DailyWorkLog | null {
+    if (typeof window === 'undefined') return null;
+    const todayDateStr = formatDateISO(new Date());
+    const logs = getWorkLogs();
+    const todayLog = logs.find(log => log.date === todayDateStr);
+
+    if (todayLog) {
+        // No actual data change, just logging the event conceptually
+        addAuditLog('SYSTEM_ARCHIVE_TODAY_LOG', 'WorkLog', `Today's log for ${todayLog.date} finalized (End Day clicked).`, todayLog.id, todayLog, todayLog);
+        return todayLog; // Return the log that was "archived"
+    }
+    addAuditLog('SYSTEM_ARCHIVE_TODAY_LOG', 'System', `Attempted to finalize today's log, but no log found for ${todayDateStr}.`);
+    return null;
+}
+
+// --- User Settings Actions ---
+
+/**
+ * Gets the user's default settings from local storage.
+ * Returns default values if no settings are saved.
+ */
+export function getDefaultSettings(): UserSettings {
+  const defaultSettings: UserSettings = {
+    defaultStartTime: '14:00',
+    defaultEndTime: '22:30',
+    defaultBreakMinutes: 0, // Default break to 0
+    defaultTrainingMinutes: 0, // Default training to 0
+  };
+  return getFromLocalStorage<UserSettings>(SETTINGS_KEY, defaultSettings);
+}
+
+/**
+ * Saves the user's default settings to local storage.
+ */
+export function saveDefaultSettings(settings: UserSettings): UserSettings {
+  if (typeof window === 'undefined') {
+    console.error('Attempted to save settings on the server.');
+    return settings; // Return input on server
+  }
+  const previousSettings = getDefaultSettings();
+  saveToLocalStorage(SETTINGS_KEY, settings);
+  addAuditLog(
+    'UPDATE_SETTINGS',
+    'Settings',
+    `Updated default settings. Start: ${settings.defaultStartTime}, End: ${settings.defaultEndTime}, Break: ${settings.defaultBreakMinutes}m, Training: ${settings.defaultTrainingMinutes}m.`,
+    undefined,
+    previousSettings,
+    settings
+  );
+  return settings;
+}

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -15,9 +16,10 @@ import {
   getUPHTargets,
   loadSampleData,
   clearAllData,
-  addBreakTimeToLog, // Import new action
-  addTrainingTimeToLog, // Import new action
-  archiveTodayLog, // Import archiveTodayLog
+  addBreakTimeToLog,
+  addTrainingTimeToLog,
+  archiveTodayLog,
+  getDefaultSettings, // Import function to get default settings
 } from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
@@ -25,7 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain, Edit3, HelpCircle, Archive } from 'lucide-react'; // Added Archive
+import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain, Edit3, HelpCircle, Archive } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -39,7 +41,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import TutorialDialog from '@/components/TutorialDialog'; // Import TutorialDialog
+import TutorialDialog from '@/components/TutorialDialog';
 
 
 export default function Home() {
@@ -247,6 +249,7 @@ export default function Home() {
     }
   };
 
+  // --- Start/End Day Handlers ---
   const handleStartNewDay = useCallback(() => {
     if (typeof window === 'undefined') return;
     if (!activeTarget) {
@@ -259,11 +262,16 @@ export default function Home() {
     }
 
     const todayDateStr = formatDateISO(new Date());
-    const defaultStartTime = '14:00';
-    const defaultEndTime = '22:30';
-    const defaultBreakMinutes = 65;
+    // Get user-defined defaults or fallback defaults
+    const userSettings = getDefaultSettings();
+    const defaultStartTime = userSettings.defaultStartTime || '14:00';
+    const defaultEndTime = userSettings.defaultEndTime || '22:30';
+    // Start with 0 break/training minutes for a new day
+    const defaultBreakMinutes = 0;
     const defaultTrainingMinutes = 0;
     const totalNonWorkMinutes = defaultBreakMinutes + defaultTrainingMinutes;
+
+    // Calculate hours based on fetched or fallback defaults
     const defaultHoursWorked = calculateHoursWorked(todayDateStr, defaultStartTime, defaultEndTime, totalNonWorkMinutes);
 
     const newLog: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { hoursWorked: number } = {
@@ -283,7 +291,7 @@ export default function Home() {
       handleSaveWorkLog(newLog); // saveWorkLog will log as CREATE_WORK_LOG
       toast({
         title: "New Day Started",
-        description: `Work log for ${todayDateStr} created with default times.`,
+        description: `Work log for ${todayDateStr} created with default times. Break/Training starts at 0.`,
       });
     } catch (error) {
       // Error handling is within handleSaveWorkLog
@@ -301,7 +309,7 @@ export default function Home() {
       });
       return;
     }
-    
+
     const archivedLog = archiveTodayLog(); // This function is in actions.ts
     if (archivedLog) {
         toast({
@@ -319,6 +327,7 @@ export default function Home() {
   }, [workLogs, loadData, toast]);
 
 
+  // --- Input Handlers ---
   const handleDocInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     if (val === '' || /^\d+$/.test(val)) setDocInputValue(val);
@@ -362,6 +371,7 @@ export default function Home() {
        }
   };
 
+  // --- Break/Training Handlers ---
   const handleAddBreak = useCallback((breakMinutes: number) => {
     if (typeof window === 'undefined') return;
     const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
@@ -563,7 +573,8 @@ export default function Home() {
                         {todayLog && (
                              <p className="text-xs text-muted-foreground mt-1">
                                 Current Break: {formatDurationFromMinutes(todayLog.breakDurationMinutes * 60)}
-                                {todayLog.breakDurationMinutes === 5 && " (Grace Period)"}
+                                {/* Optional: Show grace period info if needed */}
+                                {/* {todayLog.breakDurationMinutes === 5 && " (Grace Period)"} */}
                                 {todayLog.trainingDurationMinutes && todayLog.trainingDurationMinutes > 0 &&
                                     ` | Training: ${formatDurationFromMinutes(todayLog.trainingDurationMinutes * 60)}`
                                 }
@@ -605,10 +616,10 @@ export default function Home() {
 
         {/* Pass only today's log to ProductivityDashboard */}
         <ProductivityDashboard
-            initialWorkLogs={todayLog ? [todayLog] : []} 
+            initialWorkLogs={todayLog ? [todayLog] : []}
             initialUphTargets={uphTargets}
             initialActiveTarget={activeTarget}
-            deleteWorkLogAction={handleDeleteWorkLog} 
+            deleteWorkLogAction={handleDeleteWorkLog}
         />
 
          {/* Message if no log for today but data exists */}
@@ -616,7 +627,7 @@ export default function Home() {
             <Card>
                 <CardHeader>
                     <CardTitle>Today&apos;s Metrics</CardTitle>
-                    <CardDescription>No work log for today yet.</CardDescription>
+                    <CardDescription>No work log recorded for today yet.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col items-center justify-center h-32 text-muted-foreground">
                     <Info className="h-8 w-8 mb-2" />
@@ -627,4 +638,3 @@ export default function Home() {
     </div>
   );
 }
-

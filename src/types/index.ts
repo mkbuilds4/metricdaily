@@ -1,4 +1,5 @@
 
+
 /**
  * Represents a single day's work log entry.
  */
@@ -34,22 +35,23 @@ export interface UPHTarget {
  */
 export type AuditLogActionType =
   | 'CREATE_WORK_LOG'
-  | 'UPDATE_WORK_LOG' 
-  | 'UPDATE_WORK_LOG_QUICK_COUNT' 
-  | 'UPDATE_WORK_LOG_BREAK' 
-  | 'UPDATE_WORK_LOG_TRAINING' 
+  | 'UPDATE_WORK_LOG'
+  | 'UPDATE_WORK_LOG_QUICK_COUNT'
+  | 'UPDATE_WORK_LOG_BREAK'
+  | 'UPDATE_WORK_LOG_TRAINING'
   | 'DELETE_WORK_LOG'
   | 'CREATE_UPH_TARGET'
   | 'UPDATE_UPH_TARGET'
   | 'DELETE_UPH_TARGET'
   | 'DUPLICATE_UPH_TARGET'
   | 'SET_ACTIVE_UPH_TARGET'
-  | 'SYSTEM_LOAD_SAMPLE_DATA' 
-  | 'SYSTEM_CLEAR_ALL_DATA'   
+  | 'SYSTEM_LOAD_SAMPLE_DATA'
+  | 'SYSTEM_CLEAR_ALL_DATA'
   | 'SYSTEM_ARCHIVE_TODAY_LOG'
   | 'SYSTEM_EXPORT_DATA'
   | 'SYSTEM_EXPORT_DATA_FAILED'
-  | 'SYSTEM_VIEW_AUDIT_LOG'; // Generic action for viewing the log if needed
+  | 'SYSTEM_VIEW_AUDIT_LOG'
+  | 'UPDATE_SETTINGS'; // Added action type for updating settings
 
 
 /**
@@ -59,10 +61,19 @@ export interface AuditLogEntry {
   id: string; // Unique ID for the audit log entry
   timestamp: string; // ISO string for the time of the action
   action: AuditLogActionType; // The type of action performed
-  entityType: 'WorkLog' | 'UPHTarget' | 'System' | 'Security'; // The type of entity affected
+  entityType: 'WorkLog' | 'UPHTarget' | 'System' | 'Security' | 'Settings'; // Added 'Settings' type
   entityId?: string; // The ID of the specific WorkLog or UPHTarget, if applicable
   details: string; // A human-readable description of the change
-  previousState?: Partial<DailyWorkLog | UPHTarget>; // Optional: for updates, the state before the change
-  newState?: Partial<DailyWorkLog | UPHTarget>; // Optional: for creates/updates, the state after the change
+  previousState?: Partial<DailyWorkLog | UPHTarget | UserSettings>; // Allow UserSettings
+  newState?: Partial<DailyWorkLog | UPHTarget | UserSettings>; // Allow UserSettings
 }
 
+/**
+ * Represents user-configurable default settings.
+ */
+export interface UserSettings {
+  defaultStartTime: string; // Format: 'HH:mm'
+  defaultEndTime: string; // Format: 'HH:mm'
+  defaultBreakMinutes: number; // Default break time in minutes
+  defaultTrainingMinutes: number; // Default training time in minutes
+}

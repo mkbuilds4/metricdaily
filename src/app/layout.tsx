@@ -1,4 +1,5 @@
 
+
 'use client'; // Required for usePathname
 
 import type { Metadata } from 'next';
@@ -18,17 +19,16 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { Home, Settings, List, History, BarChart, HelpCircle } from 'lucide-react'; // Removed Lock, ShieldCheck
+import { Home, Settings, List, History, BarChart, HelpCircle } from 'lucide-react';
 import { usePathname } from 'next/navigation'; // Import usePathname
 import { cn } from "@/lib/utils"; // Import cn utility
 import { ThemeProvider } from '@/components/ThemeProvider'; // Import ThemeProvider
 import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
 import TutorialDialog from '@/components/TutorialDialog'; // Import TutorialDialog
-// Removed addAuditLog import as it's no longer used here for password checks
 
-const fontSans = FontSans({ // Changed variable name
+const fontSans = FontSans({
   subsets: ['latin'],
-  variable: '--font-sans', // Changed CSS variable name
+  variable: '--font-sans',
 });
 
 // Metadata can still be defined in layout for static parts
@@ -44,8 +44,6 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const pathname = usePathname(); // Get the current path
-
-  // Removed handleAuditLogClick function as password protection is removed
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -95,6 +93,13 @@ export default function RootLayout({
                                     <span>Previous Logs</span>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
+                            {/* Add Settings Link */}
+                            <SidebarMenuItem>
+                                <SidebarMenuButton href="/settings" isActive={pathname === '/settings'} tooltip="Settings">
+                                    <Settings />
+                                    <span>Settings</span>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
                         </div>
 
                         {/* Audit Log at the bottom of the main navigation section */}
@@ -103,8 +108,7 @@ export default function RootLayout({
                                 <SidebarMenuButton
                                     href="/audit-log"
                                     isActive={pathname === '/audit-log'}
-                                    tooltip="Audit Log" // Removed (Protected)
-                                    // onClick removed
+                                    tooltip="Audit Log"
                                 >
                                     <History /> {/* Changed icon to History for general log access */}
                                     <span>Audit Log</span>
@@ -131,4 +135,3 @@ export default function RootLayout({
     </html>
   );
 }
-
