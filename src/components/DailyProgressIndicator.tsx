@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
@@ -65,7 +64,7 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
 
     if (goalMetAt) { 
         timeDiffSeconds = 0; 
-        projectedHitTimeFormatted = `Met at ${format(goalMetAt, 'h:mm:ss a')}`;
+        projectedHitTimeFormatted = '-'; // Show '-' when goal is met
     } else { 
         timeDiffSeconds = calculateTimeAheadBehindSchedule(todayLog, activeTarget, currentTime); 
         projectedHitTimeFormatted = calculateProjectedGoalHitTime(todayLog, activeTarget, timeDiffSeconds, currentTime); 

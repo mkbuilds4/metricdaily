@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -157,8 +156,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
 
   const handleDeleteLog = (log: DailyWorkLog) => {
-     const logDate = parse(log.date, 'yyyy-MM-dd', new Date());
-     const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date;
+     const logDateObj = parse(log.date, 'yyyy-MM-dd', new Date());
+     const formattedLogDate = isValid(logDateObj) ? formatFriendlyDate(logDateObj) : log.date;
 
     if (!confirm(`Are you sure you want to delete the log for ${formattedLogDate}?`)) {
       return;
@@ -202,7 +201,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
            unitsToGoal = totalRequiredUnits - currentMetrics.currentUnits;
            if (goalMetTimeForThisTarget) {
                timeAheadBehindSeconds = 0; 
-               projectedHitTimeFormatted = `Met at ${format(goalMetTimeForThisTarget, 'h:mm:ss a')}`;
+               projectedHitTimeFormatted = '-'; // Show '-' when goal is met
            } else {
                timeAheadBehindSeconds = calculateTimeAheadBehindSchedule(log, target, currentTime); 
                projectedHitTimeFormatted = calculateProjectedGoalHitTime(log, target, timeAheadBehindSeconds, currentTime);
