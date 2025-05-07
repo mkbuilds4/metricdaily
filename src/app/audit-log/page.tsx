@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input'; // Import Input
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Import Select
+import { Combobox, ComboboxOption } from '@/components/ui/combobox'; // Import Combobox
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'; // Import Popover
 import { Calendar } from '@/components/ui/calendar'; // Import Calendar
 import { format, parseISO, startOfDay, endOfDay, isValid } from 'date-fns';
@@ -84,7 +84,7 @@ export default function AuditLogPage() {
         log.entityType.toLowerCase().includes(searchTerm) ||
         (log.entityId && log.entityId.toLowerCase().includes(searchTerm)) ||
         log.details.toLowerCase().includes(searchTerm) ||
-        format(logTimestamp, 'PPP p').toLowerCase().includes(searchTerm)
+        (isValid(logTimestamp) ? format(logTimestamp, 'PPP p').toLowerCase().includes(searchTerm) : false)
       );
 
       const matchesActionType = filterActionType === 'all' || log.action === filterActionType;
@@ -138,7 +138,7 @@ export default function AuditLogPage() {
     }
     const headers = ['Timestamp', 'Action', 'Entity Type', 'Entity ID', 'Details', 'Previous State', 'New State'];
     const rows = filteredLogs.map(log => [
-      format(parseISO(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
+      isValid(parseISO(log.timestamp)) ? format(parseISO(log.timestamp), 'yyyy-MM-dd HH:mm:ss') : log.timestamp,
       log.action,
       log.entityType,
       log.entityId || '',
@@ -165,6 +165,20 @@ export default function AuditLogPage() {
   const formatActionTypeDisplay = (action: AuditLogActionType | string) => {
      return action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
+
+  // Prepare options for Combobox components
+  const actionTypeOptions: ComboboxOption[] = useMemo(() => ([
+    { value: 'all', label: 'All Action Types' },
+    ...ALL_ACTION_TYPES.map(type => ({
+      value: type,
+      label: formatActionTypeDisplay(type),
+    })),
+  ]), []); // Empty dependency array, runs once
+
+  const entityTypeOptions: ComboboxOption[] = useMemo(() => ([
+    { value: 'all', label: 'All Entity Types' },
+    ...ALL_ENTITY_TYPES.map(type => ({ value: type, label: type })),
+  ]), []); // Empty dependency array, runs once
 
   const hasActiveFilters = filterTerm || filterActionType !== 'all' || filterEntityType !== 'all' || filterDateRange;
 
@@ -214,39 +228,25 @@ export default function AuditLogPage() {
               )}
             </div>
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-               <Select
-                 value={filterActionType}
-                 onValueChange={(value) => { setFilterActionType(value as AuditLogActionType | 'all'); setCurrentPage(1); }}
-                 disabled={isLoading}
-               >
-                 <SelectTrigger className="text-sm h-9">
-                   <SelectValue placeholder="Filter by Action Type" />
-                 </SelectTrigger>
-                 <SelectContent>
-                   <SelectItem value="all">All Action Types</SelectItem>
-                   {ALL_ACTION_TYPES.map(type => (
-                     <SelectItem key={type} value={type}>
-                       {formatActionTypeDisplay(type)}
-                     </SelectItem>
-                   ))}
-                 </SelectContent>
-               </Select>
+                <Combobox
+                    options={actionTypeOptions}
+                    value={filterActionType}
+                    onSelect={(value) => { setFilterActionType(value as AuditLogActionType | 'all'); setCurrentPage(1); }}
+                    placeholder="Filter by Action Type"
+                    searchPlaceholder="Search actions..."
+                    notFoundText="No actions found."
+                    disabled={isLoading}
+                />
 
-               <Select
-                 value={filterEntityType}
-                 onValueChange={(value) => { setFilterEntityType(value as AuditLogEntry['entityType'] | 'all'); setCurrentPage(1); }}
-                 disabled={isLoading}
-               >
-                 <SelectTrigger className="text-sm h-9">
-                   <SelectValue placeholder="Filter by Entity Type" />
-                 </SelectTrigger>
-                 <SelectContent>
-                   <SelectItem value="all">All Entity Types</SelectItem>
-                   {ALL_ENTITY_TYPES.map(type => (
-                     <SelectItem key={type} value={type}>{type}</SelectItem>
-                   ))}
-                 </SelectContent>
-               </Select>
+               <Combobox
+                    options={entityTypeOptions}
+                    value={filterEntityType}
+                    onSelect={(value) => { setFilterEntityType(value as AuditLogEntry['entityType'] | 'all'); setCurrentPage(1); }}
+                    placeholder="Filter by Entity Type"
+                    searchPlaceholder="Search entities..."
+                    notFoundText="No entities found."
+                    disabled={isLoading}
+                />
 
                 <Popover>
                    <PopoverTrigger asChild>
@@ -317,7 +317,7 @@ export default function AuditLogPage() {
                 <TableBody>
                   {paginatedLogs.map((log) => (
                     <TableRow key={log.id}>
-                      <TableCell className="text-xs whitespace-nowrap">{format(parseISO(log.timestamp), 'MMM d, yyyy p')}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">{isValid(parseISO(log.timestamp)) ? format(parseISO(log.timestamp), 'MMM d, yyyy p') : log.timestamp}</TableCell>
                       <TableCell>
                         <span className="px-2 py-1 text-xs font-medium rounded-full bg-muted text-muted-foreground whitespace-nowrap">
                           {formatActionTypeDisplay(log.action)}
