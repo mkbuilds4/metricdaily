@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -11,11 +12,12 @@ import { Combobox, ComboboxOption } from '@/components/ui/combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { format, parseISO, startOfDay, endOfDay, isValid, subDays, startOfWeek, endOfWeek } from 'date-fns';
-import { RefreshCw, Download, Filter, X, Calendar as CalendarIcon } from 'lucide-react';
+import { RefreshCw, Download, Filter, X, Calendar as CalendarIcon, Activity, Database, Settings as SettingsIcon, System, Shield } from 'lucide-react'; // Added more icons
 import { useToast } from '@/hooks/use-toast';
 import { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
-import { Separator } from '@/components/ui/separator'; // Import Separator
+import { Separator } from '@/components/ui/separator';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'; // Import Recharts components
 
 const ITEMS_PER_PAGE = 20;
 
@@ -42,6 +44,15 @@ const ALL_ACTION_TYPES = [
 ] as const; // Use const assertion
 
 const ALL_ENTITY_TYPES: AuditLogEntry['entityType'][] = ['WorkLog', 'UPHTarget', 'System', 'Security', 'Settings'];
+
+// Define colors for chart segments (adjust as needed)
+const CHART_COLORS = [
+    'hsl(var(--chart-1))',
+    'hsl(var(--chart-2))',
+    'hsl(var(--chart-3))',
+    'hsl(var(--chart-4))',
+    'hsl(var(--chart-5))',
+];
 
 export default function AuditLogPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
@@ -181,6 +192,60 @@ export default function AuditLogPage() {
     ...ALL_ENTITY_TYPES.map(type => ({ value: type, label: type })),
   ]), []); // Empty dependency array, runs once
 
+  // --- Analytics Data Calculation ---
+  const analyticsData = useMemo(() => {
+    const totalLogs = auditLogs.length;
+    const entityCounts: Record<AuditLogEntry['entityType'], number> = {
+      WorkLog: 0,
+      UPHTarget: 0,
+      System: 0,
+      Security: 0,
+      Settings: 0,
+    };
+    const actionCounts: Record<AuditLogActionType, number> = ALL_ACTION_TYPES.reduce((acc, type) => {
+        acc[type] = 0;
+        return acc;
+    }, {} as Record<AuditLogActionType, number>);
+
+    auditLogs.forEach(log => {
+      if (entityCounts[log.entityType] !== undefined) {
+        entityCounts[log.entityType]++;
+      }
+      if (actionCounts[log.action] !== undefined) {
+        actionCounts[log.action]++;
+      }
+    });
+
+    // Data for entity type chart
+    const entityChartData = Object.entries(entityCounts)
+        .map(([name, value], index) => ({
+            name,
+            value,
+            fill: CHART_COLORS[index % CHART_COLORS.length], // Assign colors
+        }))
+        .filter(item => item.value > 0) // Only show entities with counts > 0
+        .sort((a, b) => b.value - a.value); // Sort descending by count
+
+    // Data for top actions chart (e.g., top 5)
+    const actionChartData = Object.entries(actionCounts)
+        .map(([name, value], index) => ({
+            name: formatActionTypeDisplay(name),
+            value,
+            fill: CHART_COLORS[index % CHART_COLORS.length],
+        }))
+        .filter(item => item.value > 0)
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5); // Limit to top 5 for readability
+
+    return {
+      totalLogs,
+      entityCounts,
+      actionCounts,
+      entityChartData,
+      actionChartData,
+    };
+  }, [auditLogs]);
+
   const hasActiveFilters = filterTerm || filterActionType !== 'all' || filterEntityType !== 'all' || filterDateRange;
 
   // Preset Date Range Handlers
@@ -209,12 +274,70 @@ export default function AuditLogPage() {
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6 p-4 md:p-6 lg:p-8">
+      {/* Analytics Section */}
+        <Card className="shadow-sm">
+            <CardHeader>
+                <CardTitle className="text-xl font-semibold flex items-center gap-2">
+                    <Activity className="h-5 w-5" /> Audit Log Analytics
+                </CardTitle>
+                <CardDescription>
+                    Overview of logged activities. Total Logs: {analyticsData.totalLogs}
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-0">
+                {/* Entity Type Counts */}
+                <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-muted-foreground">Entries by Entity Type</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                        {Object.entries(analyticsData.entityCounts).map(([entity, count]) => (
+                            count > 0 && ( // Only show if count > 0
+                                <div key={entity} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                                    <span className="font-medium flex items-center gap-1.5">
+                                        {entity === 'WorkLog' && <Database className="h-4 w-4 text-blue-500" />}
+                                        {entity === 'UPHTarget' && <Activity className="h-4 w-4 text-green-500" />}
+                                        {entity === 'System' && <System className="h-4 w-4 text-purple-500" />}
+                                        {entity === 'Security' && <Shield className="h-4 w-4 text-red-500" />}
+                                        {entity === 'Settings' && <SettingsIcon className="h-4 w-4 text-orange-500" />}
+                                        {entity}
+                                    </span>
+                                    <span className="font-semibold text-foreground">{count}</span>
+                                </div>
+                            )
+                        ))}
+                    </div>
+                </div>
+                 {/* Top Actions Chart */}
+                <div className="space-y-2">
+                     <h4 className="text-sm font-medium text-muted-foreground">Top 5 Actions</h4>
+                     {analyticsData.actionChartData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={150}>
+                            <BarChart data={analyticsData.actionChartData} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                <XAxis type="number" hide />
+                                <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10 }} tickLine={false} axisLine={false}/>
+                                <Tooltip
+                                    cursor={{ fill: 'hsl(var(--muted))' }}
+                                    contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
+                                    labelStyle={{ color: 'hsl(var(--foreground))', fontSize: '12px' }}
+                                    itemStyle={{ fontSize: '12px' }}
+                                />
+                                <Bar dataKey="value" name="Count" radius={[0, 4, 4, 0]} barSize={12} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                     ) : (
+                         <p className="text-sm text-muted-foreground text-center py-10">No actions logged yet.</p>
+                     )}
+                </div>
+            </CardContent>
+        </Card>
+
+
       <Card className="shadow-lg">
         <CardHeader className="border-b">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle className="text-2xl font-bold">Application Audit Log</CardTitle>
-              <CardDescription>History of changes made within the application.</CardDescription>
+              <CardDescription>History of changes made within the application. ({filteredLogs.length} entries shown)</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={handleRefresh} size="sm" disabled={isLoading}>
