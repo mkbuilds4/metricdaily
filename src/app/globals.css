@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -65,7 +66,8 @@ body {
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
     --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%; /* Input background in dark mode */
+    /* --foreground is already defined for dark mode, input text should use it */
     --ring: 207 70% 53%; /* Blue for focus rings */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
