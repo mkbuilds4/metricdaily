@@ -59,7 +59,7 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
 
   const progressData = useMemo(() => {
     if (!todayLog || !targetForCalc || !currentTime) {
-      return { currentUnits: 0, targetUnits: 0, percentage: 0, currentUPH: 0, timeDiff: null, projectedHitTimeFormatted: '-' };
+      return { currentUnits: 0, targetUnits: 0, percentage: 0, currentUPH: 0, timeDiff: null, projectedHitTimeFormatted: '-', unitsToGoal: 0 };
     }
 
     const { currentUnits, currentUPH } = calculateCurrentMetrics(todayLog, targetForCalc, currentTime);
@@ -68,6 +68,7 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
     
     let timeDiffSeconds: number | null = null;
     let projectedHitTimeFormatted: string = '-';
+    const unitsToGoal = targetUnitsForDuration - currentUnits;
 
     if (goalMetAt) {
         timeDiffSeconds = 0; // Consider on schedule or met
@@ -84,7 +85,8 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
         percentage: parseFloat(percentage.toFixed(1)),
         currentUPH,
         timeDiff: timeDiffSeconds, 
-        projectedHitTimeFormatted
+        projectedHitTimeFormatted,
+        unitsToGoal: parseFloat(unitsToGoal.toFixed(2)),
     };
   }, [todayLog, targetForCalc, currentTime, goalMetAt]);
 
@@ -159,6 +161,16 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
                  <span className="font-medium tabular-nums">{progressData.currentUPH.toFixed(2)}</span>
              </div>
              <div className="flex flex-col">
+                <span className="text-muted-foreground">Units to Goal</span>
+                 <span className="font-medium tabular-nums">
+                    {progressData.unitsToGoal > 0 ? progressData.unitsToGoal.toFixed(2) : (
+                        <>
+                            <CheckCircle className="inline-block h-4 w-4 mr-1 text-green-600 dark:text-green-500"/> Met
+                        </>
+                    )}
+                 </span>
+             </div>
+             <div className="flex flex-col sm:col-span-2">
                 <span className="text-muted-foreground">Schedule</span>
                  <span className={cn(
                     "font-medium tabular-nums", 

@@ -182,17 +182,18 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   const renderTargetMetricCard = (log: DailyWorkLog, target: UPHTarget, isToday: boolean) => {
       const totalActualUnits = calculateDailyUnits(log, target);
       const totalRequiredUnits = calculateRequiredUnitsForTarget(log.hoursWorked, target.targetUPH);
-      const totalDifferenceUnits = totalActualUnits - totalRequiredUnits;
       const dailyUPHForTarget = calculateDailyUPH(log, target);
 
       let projectedHitTimeFormatted = '-';
       let currentMetrics = { currentUnits: 0, currentUPH: 0 };
       let timeAheadBehindSeconds: number | null = null; 
       const goalMetTimeForThisTarget = isToday && todayGoalMetTimes[target.id] ? todayGoalMetTimes[target.id] : null;
+      let unitsToGoal = 0;
 
 
        if (isToday && currentTime) {
            currentMetrics = calculateCurrentMetrics(log, target, currentTime);
+           unitsToGoal = totalRequiredUnits - currentMetrics.currentUnits;
            if (goalMetTimeForThisTarget) {
                timeAheadBehindSeconds = 0; // Consider on schedule or met
                projectedHitTimeFormatted = `Met at ${format(goalMetTimeForThisTarget, 'h:mm:ss a')}`;
@@ -200,7 +201,11 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                timeAheadBehindSeconds = calculateTimeAheadBehindSchedule(log, target, currentTime); 
                projectedHitTimeFormatted = calculateProjectedGoalHitTime(log, target, timeAheadBehindSeconds, currentTime);
            }
+       } else if (!isToday) {
+           unitsToGoal = totalRequiredUnits - totalActualUnits;
        }
+       unitsToGoal = parseFloat(unitsToGoal.toFixed(2));
+
 
       const isBehindSchedule = !goalMetTimeForThisTarget && timeAheadBehindSeconds !== null && timeAheadBehindSeconds < 0;
       const isAheadSchedule = !goalMetTimeForThisTarget && timeAheadBehindSeconds !== null && timeAheadBehindSeconds > 0;
@@ -215,9 +220,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                      {!isToday && (
                          <span className={cn(
                             "text-base font-medium",
-                             totalDifferenceUnits < 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'
+                             (totalActualUnits - totalRequiredUnits) < 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'
                             )}>
-                            {(totalDifferenceUnits >= 0 ? '+' : '') + totalDifferenceUnits.toFixed(2)} Units
+                            {((totalActualUnits - totalRequiredUnits) >= 0 ? '+' : '') + (totalActualUnits - totalRequiredUnits).toFixed(2)} Units
                          </span>
                      )}
                  </div>
@@ -229,6 +234,20 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                         <div>
                             <p className="text-muted-foreground">Units Now</p>
                             <p className="font-medium tabular-nums">{currentMetrics.currentUnits.toFixed(2)}</p>
+                        </div>
+                        <div>
+                            <p className="text-muted-foreground">Units to Goal</p>
+                            <p className="font-medium tabular-nums">
+                                {unitsToGoal > 0 ? unitsToGoal.toFixed(2) : (
+                                    <>
+                                        <CheckCircle className="inline-block h-4 w-4 mr-1 text-green-600 dark:text-green-500"/> Met
+                                    </>
+                                )}
+                            </p>
+                        </div>
+                        <div>
+                            <p className="text-muted-foreground">Current UPH</p>
+                            <p className="font-medium tabular-nums">{currentMetrics.currentUPH.toFixed(2)}</p>
                         </div>
                          <div>
                             <p className="text-muted-foreground">Schedule Status</p>
@@ -248,7 +267,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                              </p>
                          </div>
                     </>
-                 ) : (
+                 ) : ( // Previous Logs
                      <>
                        <div>
                            <p className="text-muted-foreground">Units Completed</p>
@@ -263,12 +282,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                             <p className="font-medium tabular-nums">{totalRequiredUnits.toFixed(2)}</p>
                        </div>
                        <div>
-                         <p className="text-muted-foreground">+/- Goal</p>
-                          <p className={cn(
-                            "font-medium",
-                             totalDifferenceUnits < 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'
-                          )}>
-                             {(totalDifferenceUnits >= 0 ? '+' : '') + totalDifferenceUnits.toFixed(2)}
+                         <p className="text-muted-foreground">Units to Goal</p>
+                          <p className={"font-medium tabular-nums"}>
+                             {unitsToGoal > 0 ? unitsToGoal.toFixed(2) : (
+                                <>
+                                    <CheckCircle className="inline-block h-4 w-4 mr-1 text-green-600 dark:text-green-500"/> Met/Exceeded
+                                </>
+                             )}
                           </p>
                       </div>
                      </>
