@@ -1,10 +1,9 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Trash2, BookOpen, Video, Clock, ChevronDown, ArrowUp, ArrowDown, Minus as MinusIcon, AlertCircle, Target as TargetIcon, Brain } from 'lucide-react'; // Added Brain
+import { Trash2, BookOpen, Video, Clock, ChevronDown, ArrowUp, ArrowDown, Minus as MinusIcon, AlertCircle, Target as TargetIcon, Brain, CheckCircle } from 'lucide-react'; // Added CheckCircle
 import { useToast } from "@/hooks/use-toast";
 import { parse, isValid, format, addMinutes, addDays } from 'date-fns'; 
 import {
@@ -56,14 +55,67 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 }) => {
   const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  // Store goal met times for today's log, per target
+  const [todayGoalMetTimes, setTodayGoalMetTimes] = useState<Record<string, Date | null>>({});
+
 
   useEffect(() => {
      if (typeof window !== 'undefined') {
-         setCurrentTime(new Date());
-         const timerId = setInterval(() => setCurrentTime(new Date()), 1000); 
+         const now = new Date();
+         setCurrentTime(now);
+
+         // Initial check for goal met status for today's log
+         const todayDateStr = formatDateISO(now);
+         const currentTodayLog = allWorkLogs.find(log => log.date === todayDateStr);
+         if (currentTodayLog && showTodaySection) {
+            const newMetTimes: Record<string, Date | null> = {};
+            targets.forEach(target => {
+                if (!todayGoalMetTimes[target.id]) { // Only if not already met
+                    const { currentUnits } = calculateCurrentMetrics(currentTodayLog, target, now);
+                    const targetUnitsForShift = calculateRequiredUnitsForTarget(currentTodayLog.hoursWorked, target.targetUPH);
+                    if (currentUnits >= targetUnitsForShift && targetUnitsForShift > 0) {
+                        newMetTimes[target.id] = now;
+                    } else {
+                        newMetTimes[target.id] = null;
+                    }
+                } else {
+                    newMetTimes[target.id] = todayGoalMetTimes[target.id];
+                }
+            });
+            setTodayGoalMetTimes(newMetTimes);
+         }
+
+
+         const timerId = setInterval(() => {
+             const newNow = new Date();
+             setCurrentTime(newNow);
+             // Update goal met status on interval for today's log
+             const currentTodayLogForInterval = allWorkLogs.find(log => log.date === formatDateISO(newNow));
+             if (currentTodayLogForInterval && showTodaySection) {
+                const updatedMetTimes: Record<string, Date | null> = {...todayGoalMetTimes};
+                targets.forEach(target => {
+                    if (!updatedMetTimes[target.id]) { // Only if not already met
+                        const { currentUnits } = calculateCurrentMetrics(currentTodayLogForInterval, target, newNow);
+                        const targetUnitsForShift = calculateRequiredUnitsForTarget(currentTodayLogForInterval.hoursWorked, target.targetUPH);
+                        if (currentUnits >= targetUnitsForShift && targetUnitsForShift > 0) {
+                            updatedMetTimes[target.id] = newNow;
+                        }
+                    }
+                });
+                setTodayGoalMetTimes(updatedMetTimes);
+             }
+         }, 1000); 
          return () => clearInterval(timerId);
      }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allWorkLogs, targets, showTodaySection]); // Removed todayGoalMetTimes from deps to avoid loop
+
+
+  useEffect(() => {
+    // Reset goalMetTimes if the log or targets change, or if a new day starts
+     setTodayGoalMetTimes({});
+  }, [allWorkLogs, targets]);
+
 
   const { todayLog, previousLogsByDate } = useMemo(() => {
     const todayDateStr = formatDateISO(new Date());
@@ -82,7 +134,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     if (!prevLogsMap[log.date]) {
                         prevLogsMap[log.date] = [];
                     }
-                     if (prevLogsMap[log.date].length === 0) {
+                     // Ensure only one log per date for previous logs (the most relevant one if multiple exist, though ideally there shouldn't be)
+                     if (prevLogsMap[log.date].length === 0) { // Only push if no log for this date yet
                         prevLogsMap[log.date].push(log);
                      }
                 }
@@ -95,7 +148,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     });
 
     const prevLogsGrouped = Object.entries(prevLogsMap)
-                                .map(([date, logsForDate]) => ({ date, log: logsForDate[0] })) 
+                                .map(([date, logsForDateArray]) => ({ date, log: logsForDateArray[0] })) // logsForDateArray[0] since we only push one
                                 .sort((a, b) => b.date.localeCompare(a.date)); 
 
     return {
@@ -117,8 +170,10 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     }
     try {
       deleteWorkLogAction(log.id);
+      toast({ title: "Log Deleted", description: `Work log for ${formattedLogDate} has been deleted.`});
     } catch (error) {
       console.error("Failed to delete work log:", error);
+      toast({ variant: "destructive", title: "Deletion Failed", description: "Could not delete the work log." });
     }
   };
 
@@ -132,20 +187,23 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       let projectedHitTimeFormatted = '-';
       let currentMetrics = { currentUnits: 0, currentUPH: 0 };
       let timeAheadBehindSeconds: number | null = null; 
+      const goalMetTimeForThisTarget = isToday && todayGoalMetTimes[target.id] ? todayGoalMetTimes[target.id] : null;
+
 
        if (isToday && currentTime) {
            currentMetrics = calculateCurrentMetrics(log, target, currentTime);
-           timeAheadBehindSeconds = calculateTimeAheadBehindSchedule(log, target, currentTime); 
-           projectedHitTimeFormatted = calculateProjectedGoalHitTime(log, timeAheadBehindSeconds); 
-
-           if (currentMetrics.currentUnits >= totalRequiredUnits) {
-               projectedHitTimeFormatted = 'Goal Met';
+           if (goalMetTimeForThisTarget) {
+               timeAheadBehindSeconds = 0; // Consider on schedule or met
+               projectedHitTimeFormatted = `Met at ${format(goalMetTimeForThisTarget, 'h:mm:ss a')}`;
+           } else {
+               timeAheadBehindSeconds = calculateTimeAheadBehindSchedule(log, target, currentTime); 
+               projectedHitTimeFormatted = calculateProjectedGoalHitTime(log, target, timeAheadBehindSeconds, currentTime);
            }
        }
 
-      const isBehindSchedule = timeAheadBehindSeconds !== null && timeAheadBehindSeconds < 0;
-      const isAheadSchedule = timeAheadBehindSeconds !== null && timeAheadBehindSeconds > 0;
-      const isOnSchedule = timeAheadBehindSeconds !== null && Math.abs(timeAheadBehindSeconds) < 1; 
+      const isBehindSchedule = !goalMetTimeForThisTarget && timeAheadBehindSeconds !== null && timeAheadBehindSeconds < 0;
+      const isAheadSchedule = !goalMetTimeForThisTarget && timeAheadBehindSeconds !== null && timeAheadBehindSeconds > 0;
+      const isOnSchedule = !goalMetTimeForThisTarget && timeAheadBehindSeconds !== null && Math.abs(timeAheadBehindSeconds) < 1; 
 
 
       return (
@@ -173,8 +231,12 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                         </div>
                          <div>
                             <p className="text-muted-foreground">Schedule Status</p>
-                            <p className={cn("font-medium tabular-nums", isAheadSchedule && "text-green-600 dark:text-green-500", isBehindSchedule && "text-red-600 dark:text-red-500", isOnSchedule && "text-foreground")}>
-                                {formatTimeAheadBehind(timeAheadBehindSeconds)} 
+                            <p className={cn("font-medium tabular-nums", 
+                                goalMetTimeForThisTarget && "text-green-600 dark:text-green-500",
+                                isAheadSchedule && "text-green-600 dark:text-green-500", 
+                                isBehindSchedule && "text-red-600 dark:text-red-500", 
+                                isOnSchedule && "text-foreground")}>
+                                {goalMetTimeForThisTarget ? <CheckCircle className="inline-block h-4 w-4 mr-1"/> :formatTimeAheadBehind(timeAheadBehindSeconds)} 
                              </p>
                          </div>
                          <div className="col-span-2">
@@ -354,10 +416,11 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     const targetForCalc = logTarget ?? activeTarget; 
 
                     return (
-                    <AccordionItem value={date} key={date} className="border-none bg-muted/20 rounded-md overflow-hidden">
+                    <AccordionItem value={date} key={date} className="border-none bg-card rounded-md overflow-hidden shadow-sm">
                            <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group hover:no-underline focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-muted/50" asChild>
                                <div className="flex items-center justify-between w-full">
-                                   <PreviousLogTriggerSummary log={log} allTargets={targets} onDelete={handleDeleteLog} />
+                                   <PreviousLogTriggerSummary log={log} allTargets={targets} onDelete={() => handleDeleteLog(log)} />
+                                   <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
                                </div>
                            </AccordionTrigger>
                         <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-md">
@@ -397,4 +460,3 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
-

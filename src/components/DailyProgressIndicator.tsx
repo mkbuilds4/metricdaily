@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
@@ -7,7 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { calculateCurrentMetrics, calculateRequiredUnitsForTarget, formatTimeAheadBehind, calculateTimeAheadBehindSchedule, formatFriendlyDate, formatDurationFromMinutes, calculateProjectedGoalHitTime } from '@/lib/utils';
 import { format, parse, isValid } from 'date-fns';
-import { AlertCircle, Brain } from 'lucide-react'; 
+import { AlertCircle, Brain, CheckCircle } from 'lucide-react'; 
 import { cn } from '@/lib/utils'; 
 
 interface DailyProgressIndicatorProps {
@@ -17,14 +16,42 @@ interface DailyProgressIndicatorProps {
 
 const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLog, activeTarget }) => {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const [goalMetAt, setGoalMetAt] = useState<Date | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-        setCurrentTime(new Date());
-        const timerId = setInterval(() => setCurrentTime(new Date()), 1000); 
+        const now = new Date();
+        setCurrentTime(now);
+        
+        if (todayLog && activeTarget && !goalMetAt) {
+            const { currentUnits } = calculateCurrentMetrics(todayLog, activeTarget, now);
+            const targetUnitsForShift = calculateRequiredUnitsForTarget(todayLog.hoursWorked, activeTarget.targetUPH);
+            if (currentUnits >= targetUnitsForShift && targetUnitsForShift > 0) {
+                setGoalMetAt(now);
+            }
+        }
+
+        const timerId = setInterval(() => {
+            const newNow = new Date();
+            setCurrentTime(newNow);
+            if (todayLog && activeTarget && !goalMetAt) {
+                const { currentUnits } = calculateCurrentMetrics(todayLog, activeTarget, newNow);
+                const targetUnitsForShift = calculateRequiredUnitsForTarget(todayLog.hoursWorked, activeTarget.targetUPH);
+                if (currentUnits >= targetUnitsForShift && targetUnitsForShift > 0) {
+                    setGoalMetAt(newNow);
+                }
+            }
+        }, 1000); 
         return () => clearInterval(timerId);
     }
-  }, []);
+  }, [todayLog, activeTarget, goalMetAt]);
+
+
+  useEffect(() => {
+    // Reset goalMetAt if the log or target changes, or if a new day starts
+    setGoalMetAt(null);
+  }, [todayLog, activeTarget]);
+
 
   const targetForCalc = activeTarget;
 
@@ -36,8 +63,18 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
     const { currentUnits, currentUPH } = calculateCurrentMetrics(todayLog, targetForCalc, currentTime);
     const targetUnitsForDuration = calculateRequiredUnitsForTarget(todayLog.hoursWorked, targetForCalc.targetUPH);
     const percentage = targetUnitsForDuration > 0 ? Math.min(100, Math.max(0, (currentUnits / targetUnitsForDuration) * 100)) : 0;
-    const timeDiffSeconds = calculateTimeAheadBehindSchedule(todayLog, targetForCalc, currentTime); 
-    const projectedHitTimeFormatted = calculateProjectedGoalHitTime(todayLog, timeDiffSeconds); 
+    
+    let timeDiffSeconds: number | null = null;
+    let projectedHitTimeFormatted: string = '-';
+
+    if (goalMetAt) {
+        timeDiffSeconds = 0; // Consider on schedule or met
+        projectedHitTimeFormatted = `Met at ${format(goalMetAt, 'h:mm:ss a')}`;
+    } else {
+        timeDiffSeconds = calculateTimeAheadBehindSchedule(todayLog, targetForCalc, currentTime); 
+        projectedHitTimeFormatted = calculateProjectedGoalHitTime(todayLog, targetForCalc, timeDiffSeconds, currentTime); 
+    }
+
 
     return {
         currentUnits,
@@ -47,7 +84,7 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
         timeDiff: timeDiffSeconds, 
         projectedHitTimeFormatted
     };
-  }, [todayLog, targetForCalc, currentTime]);
+  }, [todayLog, targetForCalc, currentTime, goalMetAt]);
 
   if (!todayLog || !currentTime) {
     return (
@@ -123,9 +160,11 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
                 <span className="text-muted-foreground">Schedule</span>
                  <span className={cn(
                     "font-medium tabular-nums", 
-                    progressData.timeDiff !== null && progressData.timeDiff > 0 && "text-green-600 dark:text-green-500",
-                    progressData.timeDiff !== null && progressData.timeDiff < 0 && "text-red-600 dark:text-red-500"
-                    )}>{formatTimeAheadBehind(progressData.timeDiff)} 
+                    goalMetAt && "text-green-600 dark:text-green-500",
+                    !goalMetAt && progressData.timeDiff !== null && progressData.timeDiff > 0 && "text-green-600 dark:text-green-500",
+                    !goalMetAt && progressData.timeDiff !== null && progressData.timeDiff < 0 && "text-red-600 dark:text-red-500"
+                    )}>
+                      {goalMetAt ? <CheckCircle className="inline-block h-4 w-4 mr-1"/> : formatTimeAheadBehind(progressData.timeDiff)} 
                  </span>
              </div>
              <div className="flex flex-col col-span-2 sm:col-span-2"> 
@@ -139,4 +178,3 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
 };
 
 export default DailyProgressIndicator;
-
