@@ -163,8 +163,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
 
   const handleDeleteLog = (log: DailyWorkLog) => {
-     const logDateObj = parse(log.date, 'yyyy-MM-dd', new Date());
-     const formattedLogDate = isValid(logDateObj) ? formatFriendlyDate(logDateObj) : log.date;
+     const logDate = parse(log.date, 'yyyy-MM-dd', new Date());
+     const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date;
 
     if (!confirm(`Are you sure you want to delete the log for ${formattedLogDate}?`)) {
       return;
@@ -297,7 +297,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
         const summaryTargetName = targetForSummaryCalc ? targetForSummaryCalc.name : 'N/A';
         const logDate = parse(log.date, 'yyyy-MM-dd', new Date());
-        const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDateObj) : log.date;
+        const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date;
         const totalUnits = targetForSummaryCalc ? calculateDailyUnits(log, targetForSummaryCalc) : 0;
         const breakTimeFormatted = formatDurationFromMinutes(log.breakDurationMinutes * 60);
         const trainingTimeFormatted = log.trainingDurationMinutes && log.trainingDurationMinutes > 0 ? formatDurationFromMinutes(log.trainingDurationMinutes * 60) : null;
@@ -432,7 +432,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                      <AlertCircle className="h-4 w-4" />
                                      Target (ID: {log.targetId || 'None'}) associated with this log was not found. Metrics below use {targetForCalc === activeTarget ? `active target (${activeTarget?.name || 'None'})` : 'first available target'} as fallback.
                                  </div>
-                             )}
+                              )}
                               {!logTarget && !targetForCalc && targets.length > 0 && ( 
                                 <div className="mb-4 flex items-center gap-2 text-sm text-destructive px-2 py-1 bg-destructive/10 rounded-md">
                                      <AlertCircle className="h-4 w-4" />
