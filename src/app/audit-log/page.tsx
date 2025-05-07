@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -138,7 +137,7 @@ export default function AuditLogPage() {
     }
     const headers = ['Timestamp', 'Action', 'Entity Type', 'Entity ID', 'Details', 'Previous State', 'New State'];
     const rows = filteredLogs.map(log => [
-      isValid(parseISO(log.timestamp)) ? format(parseISO(log.timestamp), 'yyyy-MM-dd HH:mm:ss') : log.timestamp,
+      isValid(parseISO(log.timestamp)) ? format(parseISO(log.timestamp), 'yyyy-MM-dd HH:mm:ss') : log.timestamp, // Already includes seconds
       log.action,
       log.entityType,
       log.entityId || '',
@@ -317,7 +316,10 @@ export default function AuditLogPage() {
                 <TableBody>
                   {paginatedLogs.map((log) => (
                     <TableRow key={log.id}>
-                      <TableCell className="text-xs whitespace-nowrap">{isValid(parseISO(log.timestamp)) ? format(parseISO(log.timestamp), 'MMM d, yyyy p') : log.timestamp}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">
+                        {/* Updated format to include seconds: 'MMM d, yyyy h:mm:ss a' */}
+                        {isValid(parseISO(log.timestamp)) ? format(parseISO(log.timestamp), 'MMM d, yyyy h:mm:ss a') : log.timestamp}
+                      </TableCell>
                       <TableCell>
                         <span className="px-2 py-1 text-xs font-medium rounded-full bg-muted text-muted-foreground whitespace-nowrap">
                           {formatActionTypeDisplay(log.action)}
