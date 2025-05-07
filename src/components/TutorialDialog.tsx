@@ -11,7 +11,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { HelpCircle, ChevronLeft, ChevronRight, Lock } from 'lucide-react'; // Added Lock icon
+import { HelpCircle, ChevronLeft, ChevronRight, History } from 'lucide-react'; // Changed Lock to History
 
 const tutorialPages = [
   {
@@ -48,7 +48,7 @@ const tutorialPages = [
             </ul>
           </li>
           <li>
-            <strong>Today&apos;s Metrics:</strong> A summary of your performance against all defined UPH targets for the current day, offering a comprehensive view of your productivity.
+            <strong>Today's Metrics:</strong> A summary of your performance against all defined UPH targets for the current day, offering a comprehensive view of your productivity.
           </li>
         </ul>
         <h4 className="font-medium text-md mt-4 mb-1">Data Management:</h4>
@@ -132,13 +132,13 @@ const tutorialPages = [
           </li>
         </ul>
 
-        <h3 className="font-semibold text-lg mt-6 mb-3">4. Audit Log Page (<Lock className="inline-block h-4 w-4 align-text-bottom" /> Protected)</h3>
+        <h3 className="font-semibold text-lg mt-6 mb-3">4. Audit Log Page (<History className="inline-block h-4 w-4 align-text-bottom" />)</h3> {/* Removed Protected, changed icon */}
         <p className="mb-2">
-          The Audit Log tracks all significant changes made within the application. This page is password-protected for administrative review.
+          The Audit Log tracks all significant changes made within the application.
         </p>
         <ul className="list-disc pl-5 space-y-1 mb-3">
           <li>
-            <strong>Access:</strong> Requires a password (set by the application administrator). You will be prompted for this password when attempting to navigate to the Audit Log.
+            <strong>Access:</strong> Directly accessible from the sidebar.
           </li>
           <li>
             <strong>Information Logged:</strong> Includes creation, updates, and deletion of work logs and UPH targets, as well as system events like loading sample data, clearing all data, and data exports.
@@ -208,7 +208,7 @@ const tutorialPages = [
           <li><strong>Adapt Your Targets:</strong> Create and adjust UPH targets as your goals or work requirements change. Having multiple targets helps you analyze performance under different conditions.</li>
            <li><strong>Theme Customization:</strong> You can change the application&apos;s theme (Light/Dark/System preference) using the toggle button located in the sidebar footer (bottom-left).</li>
            <li><strong>Access This Guide:</strong> You can always access this guide by clicking the <HelpCircle className="inline-block h-4 w-4 align-text-bottom" /> icon in the sidebar footer.</li>
-           <li><strong>Audit Log Access:</strong> The Audit Log (<Lock className="inline-block h-4 w-4 align-text-bottom" /> icon) is password-protected. Contact your administrator if you require access or forget the password.</li>
+           <li><strong>Audit Log Access:</strong> The Audit Log (<History className="inline-block h-4 w-4 align-text-bottom" /> icon) is accessible from the sidebar.</li>
         </ul>
       </>
     )

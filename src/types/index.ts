@@ -49,10 +49,7 @@ export type AuditLogActionType =
   | 'SYSTEM_ARCHIVE_TODAY_LOG'
   | 'SYSTEM_EXPORT_DATA'
   | 'SYSTEM_EXPORT_DATA_FAILED'
-  | 'SECURITY_ACCESS_GRANTED'   // User successfully authenticated for audit log
-  | 'SECURITY_ACCESS_DENIED'    // User failed authentication for audit log
-  | 'SECURITY_ACCESS_CANCELLED' // User cancelled the password prompt
-  | 'SECURITY_CONFIGURATION_ERROR'; // Audit log password not set by admin
+  | 'SYSTEM_VIEW_AUDIT_LOG'; // Generic action for viewing the log if needed
 
 
 /**
@@ -62,7 +59,7 @@ export interface AuditLogEntry {
   id: string; // Unique ID for the audit log entry
   timestamp: string; // ISO string for the time of the action
   action: AuditLogActionType; // The type of action performed
-  entityType: 'WorkLog' | 'UPHTarget' | 'System' | 'Security'; // The type of entity affected, added Security
+  entityType: 'WorkLog' | 'UPHTarget' | 'System' | 'Security'; // The type of entity affected
   entityId?: string; // The ID of the specific WorkLog or UPHTarget, if applicable
   details: string; // A human-readable description of the change
   previousState?: Partial<DailyWorkLog | UPHTarget>; // Optional: for updates, the state before the change

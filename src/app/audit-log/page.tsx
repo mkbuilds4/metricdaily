@@ -8,20 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format, parseISO } from 'date-fns';
-import { RefreshCw, Download, Filter, X, Lock } from 'lucide-react';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { RefreshCw, Download, Filter, X } from 'lucide-react'; // Removed Lock icon
 import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
+// Removed useRouter as it's no longer needed for redirects based on auth
 
 const ITEMS_PER_PAGE = 20;
 
@@ -31,50 +20,14 @@ export default function AuditLogPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [filterTerm, setFilterTerm] = useState('');
   const { toast } = useToast();
-  const router = useRouter();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const isAuthed = localStorage.getItem('auditLogAuthenticated');
-      localStorage.removeItem('auditLogAuthenticated'); // Clear flag after checking
-
-      const auditLogPasswordConfigured = !!process.env.NEXT_PUBLIC_AUDIT_LOG_PASSWORD;
-
-      if (!auditLogPasswordConfigured) {
-          console.error("Audit log password not configured.");
-          toast({
-            variant: "destructive",
-            title: "Configuration Error",
-            description: "Audit Log password is not set up. Access denied.",
-          });
-          router.push('/');
-          setIsLoading(false); // Stop loading if redirecting
-          return;
-      }
-
-      if (isAuthed === 'true') {
-        setIsAuthenticated(true);
-        // Audit log for access granted is handled in layout.tsx
-      } else {
-        addAuditLog('SECURITY_ACCESS_DENIED', 'Security', 'Direct access to Audit Log page denied or session expired.');
-        toast({
-          variant: "destructive",
-          title: "Access Denied",
-          description: "Please access the Audit Log via the sidebar link and enter the password.",
-        });
-        router.push('/');
-        setIsLoading(false); // Stop loading if redirecting
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, toast]); // Dependencies for initial auth check
 
   const loadAuditLogs = useCallback(() => {
     setIsLoading(true);
     try {
       const logs = getAuditLogs();
       setAuditLogs(logs);
+      // Log successful loading of audit logs
+      // addAuditLog('SYSTEM_VIEW_AUDIT_LOG', 'System', 'Accessed the Audit Log page.'); // Optional: log page access
     } catch (error) {
       console.error('Error loading audit logs:', error);
       toast({
@@ -88,10 +41,9 @@ export default function AuditLogPage() {
   }, [toast]);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadAuditLogs();
-    }
-  }, [isAuthenticated, loadAuditLogs]);
+    // Directly load logs since authentication is removed
+    loadAuditLogs();
+  }, [loadAuditLogs]);
 
   const filteredLogs = auditLogs.filter(log => {
     const searchTerm = filterTerm.toLowerCase();
@@ -112,7 +64,6 @@ export default function AuditLogPage() {
   const totalPages = Math.ceil(filteredLogs.length / ITEMS_PER_PAGE);
 
   const handleRefresh = () => {
-    if (!isAuthenticated) return;
     setCurrentPage(1);
     setFilterTerm('');
     loadAuditLogs();
@@ -120,7 +71,6 @@ export default function AuditLogPage() {
   };
 
   const handleExport = () => {
-    if (!isAuthenticated) return;
     if (filteredLogs.length === 0) {
       toast({ title: "No Data to Export", description: "There are no logs matching the current filter." });
       return;
@@ -151,18 +101,8 @@ export default function AuditLogPage() {
     addAuditLog('SYSTEM_EXPORT_DATA', 'System', 'Exported audit log to CSV.');
   };
 
-  // This handles initial state or when auth fails and is about to redirect.
-  if (!isAuthenticated && !isLoading) {
-    return (
-      <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4 md:p-6 lg:p-8">
-        <Lock className="h-12 w-12 text-muted-foreground mb-4" />
-        <p className="text-xl text-muted-foreground">Verifying access...</p>
-      </div>
-    );
-  }
-
-  // This handles loading logs *after* authentication is successful.
-  if (isLoading && isAuthenticated) {
+  // This handles loading logs.
+  if (isLoading) {
     return (
       <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center p-4 md:p-6 lg:p-8">
         <p className="text-xl text-muted-foreground">Loading Audit Log...</p>
@@ -170,9 +110,6 @@ export default function AuditLogPage() {
     );
   }
   
-  // If !isAuthenticated and isLoading, useEffect is still running.
-  // If we reach here, isAuthenticated must be true and isLoading is false.
-
   return (
     <div className="w-full max-w-6xl mx-auto space-y-6 p-4 md:p-6 lg:p-8">
       <Card className="shadow-lg">
@@ -276,3 +213,4 @@ export default function AuditLogPage() {
     </div>
   );
 }
+

@@ -17,9 +17,7 @@ const nextConfig = {
       },
     ],
   },
-  env: {
-    NEXT_PUBLIC_AUDIT_LOG_PASSWORD: process.env.NEXT_PUBLIC_AUDIT_LOG_PASSWORD || 'Metrics@24', // Fallback for local dev
-  },
+  // env block removed as NEXT_PUBLIC_AUDIT_LOG_PASSWORD is no longer needed
 };
 
 module.exports = nextConfig;
