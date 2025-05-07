@@ -11,7 +11,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { HelpCircle, ChevronLeft, ChevronRight, History } from 'lucide-react'; // Changed Lock to History
+import { HelpCircle, ChevronLeft, ChevronRight, History, Settings } from 'lucide-react'; // Added Settings icon
 
 const tutorialPages = [
   {
@@ -43,8 +43,8 @@ const tutorialPages = [
             <ul className="list-disc pl-5 space-y-0.5 mt-2">
               <li>Current units completed versus the target units required for the day so far.</li>
               <li>Your current UPH against the goal UPH of your active target.</li>
-              <li><strong>Schedule Status:</strong> Indicates if you are ahead or behind schedule to meet your goal by your shift&apos;s end, and by how much time.</li>
-              <li><strong>Estimated Goal Hit Time:</strong> Predicts when you might achieve your daily UPH goal based on your current pace and scheduled end time.</li>
+              <li><strong>Schedule Status:</strong> Indicates if you are ahead or behind schedule to meet your goal by your shift&apos;s end, and by how much time. Shows "Met at [Time]" once the goal is achieved for the day.</li>
+              <li><strong>Estimated Goal Hit Time:</strong> Predicts when you might achieve your daily UPH goal based on your current pace and scheduled end time. Displays '-' once the goal is met.</li>
             </ul>
           </li>
           <li>
@@ -55,6 +55,9 @@ const tutorialPages = [
          <ul className="list-disc pl-5 space-y-1">
            <li>
             <strong>Clear All Data:</strong> A button to reset all application data, including logs and targets. Use this with caution as it&apos;s irreversible.
+          </li>
+           <li>
+            <strong>End Today's Log:</strong> Finalizes the log for the current day, making it appear under 'Previous Logs'. This is useful at the end of your workday.
           </li>
         </ul>
       </>
@@ -76,12 +79,12 @@ const tutorialPages = [
         <ul className="list-disc pl-5 space-y-1 mb-3">
           <li>Date selection for the log entry.</li>
           <li>Start Time and End Time of your shift (in HH:mm format).</li>
-          <li>Break Duration and optional Training Duration (both in minutes).</li>
+          <li>Break Duration and optional Training Duration (both in minutes). Defaults can be set on the Settings page.</li>
           <li>Number of Documents Completed and Video Sessions Completed.</li>
           <li>An optional field for any Notes relevant to the day.</li>
         </ul>
         <p className="mb-2">
-          The form automatically calculates your <strong>Net Work Hours</strong> based on the shift times and any non-work durations entered. When a log is saved, it&apos;s automatically associated with your currently active UPH target.
+          The form automatically calculates your <strong>Net Work Hours</strong> based on the shift times and any non-work durations entered. When a log is saved, it&apos;s automatically associated with your currently active UPH target. Use the "Reset to Today's Defaults" button to quickly populate the form with today's date and your saved default times/durations.
         </p>
 
         <h4 className="font-medium text-md mt-4 mb-2">UPH Target Manager:</h4>
@@ -96,7 +99,7 @@ const tutorialPages = [
             <strong>Set Target UPH:</strong> Specify the goal Units Per Hour for this target.
           </li>
           <li>
-            <strong>Define Units:</strong> Crucially, set how many <strong>Documents per Unit</strong> and <strong>Video Sessions per Unit</strong> are required to constitute ONE unit for this specific target. This allows for flexible unit definitions (e.g., 5.25 docs = 1 unit).
+            <strong>Define Units:</strong> Crucially, set how many <strong>Documents per Unit</strong> and <strong>Video Sessions per Unit</strong> are required to constitute ONE unit for this specific target. This allows for flexible unit definitions (e.g., 5.25 docs = 1 unit, allowing for decimal precision).
           </li>
           <li>
             <strong>Activate Target:</strong> Mark one target as &quot;active.&quot; This active target is used for the main dashboard progress indicators and as the default for new log calculations.
@@ -110,7 +113,7 @@ const tutorialPages = [
     )
   },
   {
-    title: "Previous Logs & Audit",
+    title: "Previous Logs & Settings", // Updated Title
     content: (
       <>
         <h3 className="font-semibold text-lg mb-3">3. Previous Logs Page</h3>
@@ -119,10 +122,10 @@ const tutorialPages = [
         </p>
         <ul className="list-disc pl-5 space-y-2 mb-4">
           <li>
-            <strong>Log Summary:</strong> Each past day&apos;s log is displayed in a collapsible summary. Click on an entry to expand it and view detailed metrics.
+            <strong>Log Summary:</strong> Each past day&apos;s log is displayed in a collapsible summary showing the date, hours worked, target context, and key counts/average UPH. Click on an entry to expand it and view detailed metrics.
           </li>
           <li>
-            <strong>Detailed Metrics:</strong> When a log entry is expanded, you&apos;ll see a comprehensive breakdown of your performance against all your defined UPH targets for that specific day. This includes units completed, average UPH achieved, and the difference from each target&apos;s goal.
+            <strong>Detailed Metrics:</strong> When a log entry is expanded, you&apos;ll see a comprehensive breakdown of your performance against all your defined UPH targets for that specific day. This includes units completed vs. goal, and the average UPH achieved.
           </li>
           <li>
             <strong>Delete Logs:</strong> You can remove individual past log entries using the trash icon associated with each log summary.
@@ -132,24 +135,22 @@ const tutorialPages = [
           </li>
         </ul>
 
-        <h3 className="font-semibold text-lg mt-6 mb-3">4. Audit Log Page (<History className="inline-block h-4 w-4 align-text-bottom" />)</h3> {/* Removed Protected, changed icon */}
+        <h3 className="font-semibold text-lg mt-6 mb-3">4. Settings Page (<Settings className="inline-block h-4 w-4 align-text-bottom" />)</h3> {/* Added Settings section */}
         <p className="mb-2">
-          The Audit Log tracks all significant changes made within the application.
+            Configure default settings for the application to streamline your workflow.
         </p>
         <ul className="list-disc pl-5 space-y-1 mb-3">
           <li>
-            <strong>Access:</strong> Directly accessible from the sidebar.
+            <strong>Default Log Times:</strong> Set your typical shift Start Time and End Time.
           </li>
           <li>
-            <strong>Information Logged:</strong> Includes creation, updates, and deletion of work logs and UPH targets, as well as system events like loading sample data, clearing all data, and data exports.
+            <strong>Default Durations:</strong> Set the default Break and Training durations (in minutes) that will be pre-filled when starting a new day or resetting the log input form. Set these to 0 if you prefer to log them manually each day.
           </li>
           <li>
-            <strong>Details:</strong> Each entry shows the timestamp, action performed, entity affected, and a description of the change, including previous and new states for updates where applicable.
-          </li>
-           <li>
-            <strong>Filtering & Export:</strong> You can filter the logs by keywords and export the currently filtered view to a CSV file.
+            <strong>Usage:</strong> These defaults are used when you click "Start New Day" on the dashboard or "Reset to Today's Defaults" on the Log Input page.
           </li>
         </ul>
+
 
         <h3 className="font-semibold text-lg mt-6 mb-3">Understanding Units and UPH</h3>
         <p className="mb-2">
@@ -176,11 +177,31 @@ const tutorialPages = [
       </>
     )
   },
-  {
-    title: "Getting Started & Tips",
+    {
+    title: "Audit Log & Getting Started", // Combined Audit and Getting Started
     content: (
       <>
-        <h3 className="font-semibold text-lg mb-3">Getting Started (No Data)</h3>
+         <h3 className="font-semibold text-lg mt-6 mb-3">5. Audit Log Page (<History className="inline-block h-4 w-4 align-text-bottom" />)</h3> {/* Moved Audit Log Here */}
+        <p className="mb-2">
+          The Audit Log tracks all significant changes made within the application.
+        </p>
+        <ul className="list-disc pl-5 space-y-1 mb-3">
+          <li>
+            <strong>Access:</strong> Directly accessible from the sidebar.
+          </li>
+          <li>
+            <strong>Information Logged:</strong> Includes creation, updates, and deletion of work logs and UPH targets, changes to settings, as well as system events like loading sample data, clearing all data, and data exports.
+          </li>
+          <li>
+            <strong>Details:</strong> Each entry shows the timestamp, action performed, entity affected, and a description of the change, including previous and new states for updates where applicable.
+          </li>
+           <li>
+            <strong>Filtering & Export:</strong> You can filter the logs by keywords and export the currently filtered view to a CSV file.
+          </li>
+        </ul>
+
+
+        <h3 className="font-semibold text-lg mt-6 mb-3">Getting Started (No Data)</h3>
         <p className="mb-3">
           If you&apos;re launching the app for the first time and see a welcome screen with no data, you have a couple of options:
         </p>
@@ -193,9 +214,10 @@ const tutorialPages = [
             <strong className="block mb-1">Set Up & Start Tracking Manually:</strong>
             <p className="mb-1">If you prefer to start with your own data:</p>
             <ul className="list-disc pl-5 space-y-1">
+              <li>Navigate to the &quot;Settings&quot; page (<Settings className="inline-block h-3.5 w-3.5 align-text-bottom" /> icon) using the sidebar to set your default shift times and typical break/training durations.</li>
               <li>Navigate to the &quot;Log / Targets&quot; page using the sidebar.</li>
               <li>In the &quot;UPH Target Manager&quot; section, click &quot;Add New Target.&quot; Define your first target: give it a name (e.g., &quot;Standard Day&quot;), set your desired target UPH, and specify how many documents and video sessions make up one unit for this particular target. The first target you add will automatically become active.</li>
-              <li>Once you have an active target, you can either fill out the &quot;Work Log Input Form&quot; on the same page for today (or a past day) and click &quot;Save Log,&quot; or go back to the Dashboard and click the &quot;Start New Day&quot; button to quickly create a log for today with default shift times.</li>
+              <li>Once you have an active target, you can either fill out the &quot;Work Log Input Form&quot; on the same page for today (or a past day) and click &quot;Save Log,&quot; or go back to the Dashboard and click the &quot;Start New Day&quot; button to quickly create a log for today with your configured default times.</li>
             </ul>
           </li>
         </ol>
@@ -204,7 +226,8 @@ const tutorialPages = [
         <ul className="list-disc pl-5 space-y-2">
           <li><strong>Consistency is Key:</strong> Keep your logs updated daily for the most accurate tracking, insights, and progress visualization.</li>
           <li><strong>Use Quick Updates:</strong> For rapid entry of today&apos;s document and video counts, use the &quot;Quick Update&quot; feature on the dashboard.</li>
-          <li><strong>Log Non-Work Time:</strong> Remember to accurately log your breaks and any training time. This ensures your net work hours and UPH calculations are correct.</li>
+          <li><strong>Log Non-Work Time:</strong> Remember to accurately log your breaks and any training time using the buttons on the dashboard or the main log form. This ensures your net work hours and UPH calculations are correct.</li>
+          <li><strong>Configure Defaults:</strong> Visit the Settings page (<Settings className="inline-block h-3.5 w-3.5 align-text-bottom" />) to set your usual start/end times and default break/training minutes. This makes starting a new day faster.</li>
           <li><strong>Adapt Your Targets:</strong> Create and adjust UPH targets as your goals or work requirements change. Having multiple targets helps you analyze performance under different conditions.</li>
            <li><strong>Theme Customization:</strong> You can change the application&apos;s theme (Light/Dark/System preference) using the toggle button located in the sidebar footer (bottom-left).</li>
            <li><strong>Access This Guide:</strong> You can always access this guide by clicking the <HelpCircle className="inline-block h-4 w-4 align-text-bottom" /> icon in the sidebar footer.</li>
@@ -291,4 +314,3 @@ const TutorialDialog: React.FC<TutorialDialogProps> = ({ contextualTriggerText }
 };
 
 export default TutorialDialog;
-
