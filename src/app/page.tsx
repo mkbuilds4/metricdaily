@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link'; // Import Link
+import { usePathname } from 'next/navigation'; // Import usePathname
 import ProductivityDashboard from '@/components/DashboardDisplay';
 import WeeklyAverages from '@/components/WeeklyAverages';
 import DailyProgressIndicator from '@/components/DailyProgressIndicator';
@@ -16,6 +17,7 @@ import {
   clearAllData,
   addBreakTimeToLog, // Import new action
   addTrainingTimeToLog, // Import new action
+  archiveTodayLog, // Import archiveTodayLog
 } from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
@@ -23,7 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain, Edit3, HelpCircle } from 'lucide-react'; // Added Edit3, HelpCircle
+import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain, Edit3, HelpCircle, Archive } from 'lucide-react'; // Added Archive
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -49,6 +51,7 @@ export default function Home() {
   const [videoInputValue, setVideoInputValue] = useState<string>('');
   const [hasInitialData, setHasInitialData] = useState(false);
   const { toast } = useToast();
+  const pathname = usePathname(); // Get current pathname
 
   const loadData = useCallback((showLoadingIndicator = true) => {
     if (typeof window === 'undefined') return;
@@ -56,6 +59,7 @@ export default function Home() {
     if (showLoadingIndicator) {
       setIsLoading(true);
     }
+    console.log('[Home Page] loadData triggered.');
     try {
       const loadedLogs = getWorkLogs();
       const loadedTargets = getUPHTargets();
@@ -69,6 +73,7 @@ export default function Home() {
       const today = loadedLogs.find(log => log.date === formatDateISO(new Date()));
       setDocInputValue(today?.documentsCompleted?.toString() ?? '');
       setVideoInputValue(today?.videoSessionsCompleted?.toString() ?? '');
+      console.log('[Home Page] Data loaded. Active target:', loadedActiveTarget?.name);
 
     } catch (error) {
       console.error('[Home] Error loading data:', error);
@@ -83,14 +88,15 @@ export default function Home() {
         setIsLoading(false);
       }
     }
-  }, [toast]);
+  }, [toast]); // toast is stable, loadData will be stable unless toast changes instance
 
   useEffect(() => {
      if (typeof window !== 'undefined') {
+        console.log('[Home Page] useEffect triggered due to path change or mount. Current path:', pathname);
         loadData();
      }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Add pathname to dependencies to reload data when navigating to this page
+  }, [loadData, pathname]);
 
    useEffect(() => {
     const today = workLogs.find(log => log.date === formatDateISO(new Date()));
@@ -104,7 +110,7 @@ export default function Home() {
     try {
       // The saveWorkLog itself will now handle detailed audit logging
       const savedLog = saveWorkLog(logData);
-      loadData(false);
+      loadData(false); // Reload data without showing main loading indicator
       setHasInitialData(true);
       return savedLog;
     } catch (error) {
@@ -146,7 +152,7 @@ export default function Home() {
           toast({
               variant: "destructive",
               title: "Quick Update Failed",
-              description: "No work log found for today. Add one on the 'Log / Targets' page.",
+              description: "No work log found for today. Add one on the 'Log / Targets' page or click 'Start New Day'.",
           });
           return;
       }
@@ -284,6 +290,34 @@ export default function Home() {
     }
   }, [activeTarget, handleSaveWorkLog, toast]);
 
+  const handleEndDay = useCallback(() => {
+     if (typeof window === 'undefined') return;
+    const todayLogToEnd = workLogs.find(log => log.date === formatDateISO(new Date()));
+    if (!todayLogToEnd) {
+      toast({
+        variant: "destructive",
+        title: "No Log to End",
+        description: "No work log found for today to mark as ended.",
+      });
+      return;
+    }
+    
+    const archivedLog = archiveTodayLog(); // This function is in actions.ts
+    if (archivedLog) {
+        toast({
+            title: "Day Ended",
+            description: `Log for ${archivedLog.date} has been finalized. You can view it in 'Previous Logs'.`,
+        });
+        loadData(false); // Reload data to reflect the change
+    } else {
+         toast({
+            variant: "destructive",
+            title: "End Day Failed",
+            description: "Could not finalize today's log. It might have already been processed or an error occurred.",
+         });
+    }
+  }, [workLogs, loadData, toast]);
+
 
   const handleDocInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -301,11 +335,13 @@ export default function Home() {
        if (todayLog && inputValStr !== currentValStr) {
             handleQuickUpdate('documentsCompleted', inputValStr);
        } else if (!todayLog && docInputValue.trim() !== '') {
-            setDocInputValue('');
-       } else if (inputValStr === '0' && docInputValue.trim() !== '0') {
+            setDocInputValue(''); // Clear if no log and input had value
+       } else if (inputValStr === '0' && docInputValue.trim() !== '0' && docInputValue.trim() !== '') { // If user types 0 explicitly
             setDocInputValue('0');
-       } else if (inputValStr === '' && todayLog) {
+       } else if (inputValStr === '' && todayLog) { // If user clears input but there's a log
            setDocInputValue(currentValStr);
+       } else if (inputValStr === '' && !todayLog) { // If user clears input and no log
+           setDocInputValue('');
        }
    };
   const handleVideoInputBlur = () => {
@@ -317,10 +353,12 @@ export default function Home() {
             handleQuickUpdate('videoSessionsCompleted', inputValStr);
        } else if (!todayLog && videoInputValue.trim() !== '') {
             setVideoInputValue('');
-       } else if (inputValStr === '0' && videoInputValue.trim() !== '0') {
+       } else if (inputValStr === '0' && videoInputValue.trim() !== '0' && videoInputValue.trim() !== '') {
            setVideoInputValue('0');
        } else if (inputValStr === '' && todayLog) {
             setVideoInputValue(currentValStr);
+       } else if (inputValStr === '' && !todayLog) {
+            setVideoInputValue('');
        }
   };
 
@@ -431,28 +469,35 @@ export default function Home() {
     <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 md:mb-8">
             <h1 className="text-3xl md:text-4xl font-bold text-center sm:text-left">Daily Dashboard</h1>
-            <AlertDialog>
-                <AlertDialogTrigger asChild>
-                    <Button variant="destructive" size="sm">
-                        <Trash2 className="mr-2 h-4 w-4" /> Clear All My Data
+            <div className="flex items-center gap-2">
+                {todayLog && (
+                    <Button onClick={handleEndDay} variant="outline" size="sm" disabled={isLoading}>
+                        <Archive className="mr-2 h-4 w-4" /> End Today&apos;s Log
                     </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete all your
-                            saved work logs and UPH targets from local storage.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleClearAllData} className="bg-destructive hover:bg-destructive/90">
-                            Yes, delete everything
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                )}
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm">
+                            <Trash2 className="mr-2 h-4 w-4" /> Clear All My Data
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete all your
+                                saved work logs and UPH targets from local storage.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleClearAllData} className="bg-destructive hover:bg-destructive/90">
+                                Yes, delete everything
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -558,14 +603,16 @@ export default function Home() {
              />
          )}
 
-        {todayLog ? (
-            <ProductivityDashboard
-                initialWorkLogs={[todayLog]}
-                initialUphTargets={uphTargets}
-                initialActiveTarget={activeTarget}
-                deleteWorkLogAction={handleDeleteWorkLog} // This will be used by the component
-            />
-        ) : hasInitialData && !isLoading ? (
+        {/* Pass only today's log to ProductivityDashboard */}
+        <ProductivityDashboard
+            initialWorkLogs={todayLog ? [todayLog] : []} 
+            initialUphTargets={uphTargets}
+            initialActiveTarget={activeTarget}
+            deleteWorkLogAction={handleDeleteWorkLog} 
+        />
+
+         {/* Message if no log for today but data exists */}
+         {!todayLog && hasInitialData && !isLoading && (
             <Card>
                 <CardHeader>
                     <CardTitle>Today&apos;s Metrics</CardTitle>
@@ -576,7 +623,8 @@ export default function Home() {
                     <p>Start a new day or add a log on the &apos;Log / Targets&apos; page to see today&apos;s metrics.</p>
                 </CardContent>
             </Card>
-        ) : null}
+        )}
     </div>
   );
 }
+
