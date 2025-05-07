@@ -94,11 +94,12 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
              if (currentTodayLogForInterval && showTodaySection) {
                 const updatedMetTimes: Record<string, Date | null> = {...todayGoalMetTimes};
                 targets.forEach(target => {
-                    if (!updatedMetTimes[target.id]) { // Only if not already met
+                    // Only set the met time if it hasn't been set before for this target.
+                    if (!updatedMetTimes[target.id]) { 
                         const { currentUnits } = calculateCurrentMetrics(currentTodayLogForInterval, target, newNow);
                         const targetUnitsForShift = calculateRequiredUnitsForTarget(currentTodayLogForInterval.hoursWorked, target.targetUPH);
                         if (currentUnits >= targetUnitsForShift && targetUnitsForShift > 0) {
-                            updatedMetTimes[target.id] = newNow;
+                            updatedMetTimes[target.id] = newNow; // Lock in the time
                         }
                     }
                 });
@@ -108,7 +109,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
          return () => clearInterval(timerId);
      }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allWorkLogs, targets, showTodaySection]); // Removed todayGoalMetTimes from deps to avoid loop
+  }, [allWorkLogs, targets, showTodaySection]); // Removed todayGoalMetTimes from deps to avoid potential loop issues, initial check handles it.
 
 
   useEffect(() => {
@@ -237,6 +238,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 isBehindSchedule && "text-red-600 dark:text-red-500", 
                                 isOnSchedule && "text-foreground")}>
                                 {goalMetTimeForThisTarget ? <CheckCircle className="inline-block h-4 w-4 mr-1"/> :formatTimeAheadBehind(timeAheadBehindSeconds)} 
+                                {goalMetTimeForThisTarget && `at ${format(goalMetTimeForThisTarget, 'h:mm:ss a')}`}
                              </p>
                          </div>
                          <div className="col-span-2">
@@ -295,7 +297,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
         const summaryTargetName = targetForSummaryCalc ? targetForSummaryCalc.name : 'N/A';
         const logDate = parse(log.date, 'yyyy-MM-dd', new Date());
-        const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date;
+        const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDateObj) : log.date;
         const totalUnits = targetForSummaryCalc ? calculateDailyUnits(log, targetForSummaryCalc) : 0;
         const breakTimeFormatted = formatDurationFromMinutes(log.breakDurationMinutes * 60);
         const trainingTimeFormatted = log.trainingDurationMinutes && log.trainingDurationMinutes > 0 ? formatDurationFromMinutes(log.trainingDurationMinutes * 60) : null;

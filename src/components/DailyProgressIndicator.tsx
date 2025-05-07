@@ -23,28 +23,30 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
         const now = new Date();
         setCurrentTime(now);
         
-        if (todayLog && activeTarget && !goalMetAt) {
+        // Initial check for goal met status
+        if (todayLog && activeTarget && !goalMetAt) { // Only check if not already met
             const { currentUnits } = calculateCurrentMetrics(todayLog, activeTarget, now);
             const targetUnitsForShift = calculateRequiredUnitsForTarget(todayLog.hoursWorked, activeTarget.targetUPH);
             if (currentUnits >= targetUnitsForShift && targetUnitsForShift > 0) {
-                setGoalMetAt(now);
+                setGoalMetAt(now); // Lock in the time
             }
         }
 
         const timerId = setInterval(() => {
             const newNow = new Date();
             setCurrentTime(newNow);
-            if (todayLog && activeTarget && !goalMetAt) {
+            // Update goal met status on interval, only if not already met
+            if (todayLog && activeTarget && !goalMetAt) { 
                 const { currentUnits } = calculateCurrentMetrics(todayLog, activeTarget, newNow);
                 const targetUnitsForShift = calculateRequiredUnitsForTarget(todayLog.hoursWorked, activeTarget.targetUPH);
                 if (currentUnits >= targetUnitsForShift && targetUnitsForShift > 0) {
-                    setGoalMetAt(newNow);
+                    setGoalMetAt(newNow); // Lock in the time
                 }
             }
         }, 1000); 
         return () => clearInterval(timerId);
     }
-  }, [todayLog, activeTarget, goalMetAt]);
+  }, [todayLog, activeTarget, goalMetAt]); // Include goalMetAt here to stop interval updates once met
 
 
   useEffect(() => {
@@ -165,6 +167,7 @@ const DailyProgressIndicator: React.FC<DailyProgressIndicatorProps> = ({ todayLo
                     !goalMetAt && progressData.timeDiff !== null && progressData.timeDiff < 0 && "text-red-600 dark:text-red-500"
                     )}>
                       {goalMetAt ? <CheckCircle className="inline-block h-4 w-4 mr-1"/> : formatTimeAheadBehind(progressData.timeDiff)} 
+                      {goalMetAt && `at ${format(goalMetAt, 'h:mm:ss a')}`}
                  </span>
              </div>
              <div className="flex flex-col col-span-2 sm:col-span-2"> 
