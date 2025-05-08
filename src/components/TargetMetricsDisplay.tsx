@@ -1,8 +1,7 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { DailyWorkLog, UPHTarget, AuditLogActionType } from '@/types';
+import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Trash2, BookOpen, Video, Clock, AlertCircle, Target as TargetIcon, CheckCircle } from 'lucide-react'; // Import icons
 import { useToast } from "@/hooks/use-toast";
@@ -45,7 +44,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import PreviousLogTriggerSummary from './PreviousLogTriggerSummary'; // Import the component for previous log triggers
 import { cn } from '@/lib/utils';
-import { saveWorkLog } from '@/lib/actions'; // Import saveWorkLog to persist goalMetTimes
+// Removed saveWorkLog import as it's now handled by the parent
 
 // Define sortable columns type locally if needed or import from page
 type SortableColumn = keyof Pick<DailyWorkLog, 'date' | 'hoursWorked' | 'documentsCompleted' | 'videoSessionsCompleted'> | 'avgUPH';
@@ -55,6 +54,7 @@ interface TargetMetricsDisplayProps {
   allWorkLogs: DailyWorkLog[]; // Receives filtered and sorted logs from parent
   targets: UPHTarget[];
   deleteWorkLogAction: (id: string) => void;
+  onGoalMet: (targetId: string, metAt: Date) => void; // New callback prop
   showTodaySection?: boolean;
 }
 
@@ -63,11 +63,11 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   allWorkLogs = [], // Receives pre-filtered and pre-sorted logs
   targets = [],
   deleteWorkLogAction,
+  onGoalMet, // Use the new prop
   showTodaySection = true,
 }) => {
   const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
-  // Removed todayGoalMetTimes state, will rely on persisted data in todayLog
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -119,15 +119,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         }
     }, [showTodaySection, isClient]);
 
-  // Effect to check for goal met and persist timestamp
+  // Effect to check for goal met and notify parent
   useEffect(() => {
-    if (!showTodaySection || !currentTime || !todayLog || !isClient) {
+    if (!showTodaySection || !currentTime || !todayLog || !isClient || !onGoalMet) {
         return;
     }
 
-    let goalMetTimesChanged = false;
     const currentGoalMetTimes = todayLog.goalMetTimes || {};
-    const newGoalMetTimes = { ...currentGoalMetTimes };
 
     targets.forEach(target => {
         // Check if goal is met based on current metrics
@@ -135,41 +133,20 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         const targetUnitsForShift = calculateRequiredUnitsForTarget(todayLog.hoursWorked, target.targetUPH);
         const isCurrentlyMet = currentUnits >= targetUnitsForShift && targetUnitsForShift > 0;
 
-        // Check if a met time is already recorded for this target
-        const isAlreadyRecorded = !!newGoalMetTimes[target.id];
+        // Check if a met time is already recorded IN THE CURRENT STATE for this target
+        const isAlreadyRecorded = !!currentGoalMetTimes[target.id];
 
         if (isCurrentlyMet && !isAlreadyRecorded) {
-            // Goal is met now, and wasn't recorded before
-            newGoalMetTimes[target.id] = currentTime.toISOString(); // Record the ISO string timestamp
-            goalMetTimesChanged = true;
-            console.log(`Goal met for target ${target.name} at ${newGoalMetTimes[target.id]}`);
+            // Goal is met now, and wasn't recorded before in the current state
+            // Notify the parent component to handle saving
+            console.log(`Goal met detected for ${target.name}, notifying parent.`);
+            onGoalMet(target.id, currentTime);
+            // Parent component will handle saving and updating the todayLog prop
         }
     });
 
-    // If any new goal met times were recorded, save the updated log
-    if (goalMetTimesChanged) {
-         console.log("Saving updated goalMetTimes:", newGoalMetTimes);
-        try {
-            // Use saveWorkLog to update the log in localStorage
-            saveWorkLog({
-                ...todayLog, // Spread existing log data
-                goalMetTimes: newGoalMetTimes, // Provide the updated times
-                // Ensure other required fields are present, even if not changed by this effect
-                breakDurationMinutes: todayLog.breakDurationMinutes ?? 0,
-                trainingDurationMinutes: todayLog.trainingDurationMinutes ?? 0,
-                documentsCompleted: todayLog.documentsCompleted,
-                videoSessionsCompleted: todayLog.videoSessionsCompleted,
-                // Let saveWorkLog recalculate hoursWorked if needed based on times/durations
-                hoursWorked: undefined // Signal to recalculate or use existing if times didn't change
-            });
-            // Note: Audit log is now handled within saveWorkLog for UPDATE_WORK_LOG_GOAL_MET
-             toast({ title: "Goal Met!", description: `Target goal met time(s) recorded.` });
-        } catch (error) {
-             console.error("Failed to save goal met times:", error);
-              toast({ variant: "destructive", title: "Save Error", description: "Could not record goal met time." });
-        }
-    }
-  }, [todayLog, targets, currentTime, showTodaySection, isClient, toast]); // Added toast
+  // Ensure dependencies are correct. Depends on todayLog (and its goalMetTimes), targets, currentTime, etc.
+  }, [todayLog, targets, currentTime, showTodaySection, isClient, onGoalMet, toast]);
 
 
   const activeTarget = useMemo(() => targets.find(t => t.isActive) ?? (targets.length > 0 ? targets[0] : null), [targets]);
@@ -177,16 +154,14 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
 
   const handleDeleteLog = (logId: string, logDateStr: string) => {
-    const formattedLogDate = formatFriendlyDate(parse(logDateStr, 'yyyy-MM-dd', new Date()));
-
-    // Confirm deletion (optional, but good practice)
-    if (!confirm(`Are you sure you want to delete the log for ${formattedLogDate}?`)) {
+    // Confirm deletion using window.confirm for simplicity
+    if (typeof window !== 'undefined' && !window.confirm(`Are you sure you want to delete the log for ${formatFriendlyDate(parse(logDateStr, 'yyyy-MM-dd', new Date()))}?`)) {
       return;
     }
 
     try {
       deleteWorkLogAction(logId);
-      toast({ title: "Log Deleted", description: `Work log for ${formattedLogDate} has been deleted.`});
+      toast({ title: "Log Deleted", description: `Work log for ${formatFriendlyDate(parse(logDateStr, 'yyyy-MM-dd', new Date()))} has been deleted.`});
       // Parent component (PreviousLogsPage or Home) should handle reloading data.
     } catch (error) {
       console.error("Failed to delete work log:", error);
@@ -208,8 +183,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         // Check persisted goal met time first
         const goalMetTimeISO = log.goalMetTimes?.[target.id];
         const goalMetTime = goalMetTimeISO ? parse(goalMetTimeISO, "yyyy-MM-dd'T'HH:mm:ss.SSSxxx", new Date()) : null;
+        const isGoalMet = goalMetTime && isValid(goalMetTime); // Check if valid date
 
-        if (goalMetTime && isValid(goalMetTime)) {
+        if (isGoalMet) {
             // Goal is permanently met according to saved data
             timeAheadBehindSeconds = 0; // Effectively on schedule or ahead
             projectedHitTimeFormatted = '-'; // No projection needed
@@ -231,13 +207,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
          unitsToGoal = parseFloat(unitsToGoal.toFixed(2));
 
 
-        const scheduleStatusText = goalMetTime && isValid(goalMetTime) ? (
-            <> <CheckCircle className="inline-block h-4 w-4 mr-1"/> Met at {format(goalMetTime, 'h:mm:ss a')} </>
+        const scheduleStatusText = isGoalMet ? (
+            <> <CheckCircle className="inline-block h-4 w-4 mr-1"/> Met </>
         ) : (
             formatTimeAheadBehind(timeAheadBehindSeconds) // Includes seconds
         );
 
-        const scheduleStatusColor = goalMetTime && isValid(goalMetTime) ? "text-green-600 dark:text-green-500" :
+        const scheduleStatusColor = isGoalMet ? "text-green-600 dark:text-green-500" :
                                      (timeAheadBehindSeconds !== null && timeAheadBehindSeconds >= 0 ? "text-green-600 dark:text-green-500" : // >= 0 for on schedule or ahead
                                      (timeAheadBehindSeconds !== null && timeAheadBehindSeconds < 0 ? "text-red-600 dark:text-red-500" : ""));
 
@@ -250,9 +226,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                          {/* Display Units to Goal */}
                          <span className={cn(
                             "text-base font-medium",
-                            goalMetTime && isValid(goalMetTime) ? 'text-green-600 dark:text-green-500' : (unitsToGoal <= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500')
+                            isGoalMet ? 'text-green-600 dark:text-green-500' : (unitsToGoal <= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500')
                         )}>
-                           {goalMetTime && isValid(goalMetTime) ? (
+                           {isGoalMet ? (
                                 <> <CheckCircle className="inline-block h-4 w-4 mr-1"/> Met </>
                            ) : (
                                unitsToGoal > 0 ? `-${unitsToGoal.toFixed(2)}` : `+${Math.abs(unitsToGoal).toFixed(2)}`
@@ -271,7 +247,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                              <div>
                                 <p className="text-muted-foreground">Units to Goal</p>
                                 <p className="font-medium tabular-nums">
-                                     {goalMetTime && isValid(goalMetTime) ? (
+                                     {isGoalMet ? (
                                          <> <CheckCircle className="inline-block h-4 w-4 mr-1 text-green-600 dark:text-green-500"/> Met </>
                                      ) : (
                                          unitsToGoal > 0 ? unitsToGoal.toFixed(2) : '0.00'
@@ -286,13 +262,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 <p className="text-muted-foreground">Schedule Status</p>
                                 <p className={cn("font-medium tabular-nums", scheduleStatusColor)}>
                                     {scheduleStatusText}
+                                    {isGoalMet && ` at ${format(goalMetTime!, 'h:mm:ss a')}`}
                                 </p>
                             </div>
                             <div className="col-span-2">
                                 <p className="text-muted-foreground">Est. Goal Hit Time</p>
                                 <p className="font-medium tabular-nums">
-                                    {/* Show '-' if goal is met based on saved time */}
-                                    {(goalMetTime && isValid(goalMetTime)) ? '-' : projectedHitTimeFormatted}
+                                    {isGoalMet ? '-' : projectedHitTimeFormatted}
                                 </p>
                             </div>
                         </>
@@ -310,6 +286,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 <p className="text-muted-foreground">Schedule Result</p>
                                 <p className={cn("font-medium tabular-nums", scheduleStatusColor)}>
                                     {scheduleStatusText}
+                                     {isGoalMet && ` at ${format(goalMetTime!, 'h:mm:ss a')}`}
                                 </p>
                             </div>
                             {/* Can add Target Units for previous logs if desired */}
@@ -388,7 +365,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                              <p className="text-lg font-semibold">{log.videoSessionsCompleted}</p>
                          </div>
                      </div>
-                      {/* Display Units Completed for previous logs OR Units Now for today */}
+                       {/* Display Units Completed for previous logs OR Units Now for today */}
                        {targetForSummaryCalc && (
                            <div className="flex items-center space-x-2" title={`Units ${isToday ? 'Now' : 'Completed'} (Based on ${summaryTargetName})`}>
                                <TargetIcon className="h-5 w-5 text-muted-foreground" />
