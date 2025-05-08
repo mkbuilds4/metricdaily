@@ -318,8 +318,13 @@ export default function AuditLogPage() {
                                 <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10 }} tickLine={false} axisLine={false}/>
                                 <Tooltip
                                     cursor={{ fill: 'hsl(var(--muted))' }}
-                                    contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
-                                    labelStyle={{ color: 'hsl(var(--foreground))', fontSize: '12px' }}
+                                    contentStyle={{
+                                        backgroundColor: 'hsl(var(--background))',
+                                        border: '1px solid hsl(var(--border))',
+                                        borderRadius: 'var(--radius)',
+                                        color: 'hsl(var(--foreground))' // Ensure text color uses foreground
+                                    }}
+                                    labelStyle={{ color: 'hsl(var(--foreground))', fontSize: '12px' }} // Ensure label uses foreground
                                     itemStyle={{ fontSize: '12px' }}
                                 />
                                 <Bar dataKey="value" name="Count" radius={[0, 4, 4, 0]} barSize={12}>
