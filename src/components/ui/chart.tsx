@@ -263,6 +263,8 @@ const ChartTooltipContent = React.forwardRef<
 ChartTooltipContent.displayName = "ChartTooltip"
 
 const ChartLegend = RechartsPrimitive.Legend
+// Add Label export from recharts
+const Label = RechartsPrimitive.Label
 
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
@@ -368,4 +370,5 @@ export {
   ChartLegend,
   ChartLegendContent,
   ChartStyle,
+  Label, // Export Label
 }

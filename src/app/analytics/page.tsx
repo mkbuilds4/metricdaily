@@ -6,7 +6,7 @@ import { getWorkLogs, getUPHTargets, getActiveUPHTarget, getAuditLogs } from '@/
 import type { DailyWorkLog, UPHTarget, AuditLogEntry } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LabelList } from 'recharts'; // Added LabelList
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LabelList, ReferenceLine } from 'recharts'; // Added ReferenceLine
 import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, getHours, isSameDay, parse, setHours, setMinutes, setSeconds, isAfter, addDays, addHours } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
@@ -21,14 +21,12 @@ const CHART_COLORS = {
   documents: 'hsl(var(--chart-1))',
   videos: 'hsl(var(--chart-2))',
   uph: 'hsl(var(--chart-3))',
-  targetUPH: 'hsl(var(--chart-4))', // Keep for config consistency, but won't be used in UPH chart
+  targetUPHLine: 'hsl(var(--destructive))', // Color for the target UPH line
   hoursWorked: 'hsl(var(--chart-5))', // Added color for hours worked
   // Colors for the hourly chart - using documents/videos colors again
   hourlyDocuments: 'hsl(var(--chart-1))',
   hourlyVideos: 'hsl(var(--chart-2))',
 };
-
-// Removed DEFAULT_DAYS_TO_SHOW constant
 
 export default function AnalyticsPage() {
   const [workLogs, setWorkLogs] = useState<DailyWorkLog[]>([]);
@@ -269,7 +267,7 @@ export default function AnalyticsPage() {
 
   const dailyUPHChartConfig = {
      uph: { label: "Actual UPH", color: CHART_COLORS.uph },
-     // targetUPH removed from config as it's no longer displayed
+     targetUPHLine: { label: "Target UPH", color: CHART_COLORS.targetUPHLine }, // Add config for the line
   };
 
    // Updated config for hourly chart legend labels
@@ -491,12 +489,17 @@ export default function AnalyticsPage() {
         </Card>
     );
 
-    const DailyUPHChart = () => (
+    const DailyUPHChart = () => {
+        // Determine Y-axis domain to ensure ReferenceLine is visible
+        const maxUph = Math.max(...dailyWorkChartData.map(d => d.uph), activeTarget?.targetUPH ?? 0);
+        const yAxisDomain: [number | string, number | string] = [0, Math.ceil((maxUph + 5) / 5) * 5]; // Auto scale with buffer
+
+        return (
          <Card>
           <CardHeader>
             <CardTitle>Daily Average UPH</CardTitle>
             <CardDescription>
-                Average Units Per Hour achieved each day (based on the log's associated target or active target as fallback).
+                Average Units Per Hour achieved each day (vs Active Target: {activeTarget?.name ?? 'None'}).
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -516,15 +519,35 @@ export default function AnalyticsPage() {
                             axisLine={false}
                             tickMargin={8}
                             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                            domain={['auto', 'auto']}
+                            domain={yAxisDomain} // Apply dynamic domain
                             allowDecimals={true}
                          />
                         <ChartTooltip
                            cursor={false}
                            content={<ChartTooltipContent hideLabel />}
                         />
-                         {/* Removed Target UPH Bar */}
+                        {/* Actual UPH Bar */}
                         <Bar dataKey="uph" fill={CHART_COLORS.uph} radius={4} name="Actual UPH"/>
+
+                        {/* Add Reference Line for Active Target UPH */}
+                        {activeTarget && activeTarget.targetUPH > 0 && (
+                             <ReferenceLine
+                                y={activeTarget.targetUPH}
+                                stroke={CHART_COLORS.targetUPHLine}
+                                strokeDasharray="3 3"
+                                strokeWidth={1.5}
+                             >
+                                {/* Optional: Add a label to the line */}
+                                 <Label
+                                    value={`Target: ${activeTarget.targetUPH.toFixed(1)}`}
+                                    position="insideTopLeft" // Adjust position as needed
+                                    fill={CHART_COLORS.targetUPHLine}
+                                    fontSize={10}
+                                    dy={-5} // Offset label slightly above the line
+                                 />
+                             </ReferenceLine>
+                        )}
+
                        <ChartLegend content={<ChartLegendContent />} />
                     </BarChart>
                 </ChartContainer>
@@ -535,7 +558,8 @@ export default function AnalyticsPage() {
             )}
           </CardContent>
         </Card>
-    );
+        );
+    };
 
   if (isLoading) {
     return <div className="p-6 text-center text-muted-foreground">Loading analytics...</div>;
