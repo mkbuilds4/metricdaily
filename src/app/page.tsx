@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link'; // Import Link
 import ProductivityDashboard from '@/components/DashboardDisplay';
 import WeeklyAverages from '@/components/WeeklyAverages';
@@ -185,7 +185,10 @@ export default function Home() {
       }
 
       let newValue: number;
-      const currentValue = todayLog[field] || 0;
+      // Preserve the other field's value
+      const currentDocValue = todayLog.documentsCompleted || 0;
+      const currentVideoValue = todayLog.videoSessionsCompleted || 0;
+      const currentValue = field === 'documentsCompleted' ? currentDocValue : currentVideoValue;
 
       if (typeof value === 'string') {
          // Treat empty string as 0, otherwise parse
@@ -220,13 +223,17 @@ export default function Home() {
        }
 
       // Construct partial log ensuring all necessary fields are present for saveWorkLog
+      // *** Include BOTH fields in the partial update ***
       const updatedLogPartial: Partial<DailyWorkLog> & { id: string; date: string; startTime: string; endTime: string; hoursWorked: number; } = {
           id: todayLog.id,
           date: todayLog.date,
           startTime: todayLog.startTime,
           endTime: todayLog.endTime,
           hoursWorked: todayLog.hoursWorked, // Pass existing hoursWorked
-          [field]: newValue,
+          // Set the updated field and preserve the other field's value
+          documentsCompleted: field === 'documentsCompleted' ? newValue : currentDocValue,
+          videoSessionsCompleted: field === 'videoSessionsCompleted' ? newValue : currentVideoValue,
+          // Include other essential fields
           breakDurationMinutes: todayLog.breakDurationMinutes,
           trainingDurationMinutes: todayLog.trainingDurationMinutes,
           targetId: todayLog.targetId,
@@ -538,6 +545,7 @@ export default function Home() {
             }
             const metAtISO = metAt.toISOString();
 
+            // Check if met time for THIS target is already recorded in the log we have
             if (!(todayLog.goalMetTimes && todayLog.goalMetTimes[targetId])) {
                 console.log(`[Home] Persisting goal met time for target ${targetId}...`);
                 const newGoalMetTimes = { ...(todayLog.goalMetTimes || {}), [targetId]: metAtISO };
@@ -574,7 +582,7 @@ export default function Home() {
                     return prevLogs; // Return previous state on error
                 }
             } else {
-                 console.log(`[Home] Goal met time already recorded or no log found for target ${targetId}.`);
+                 console.log(`[Home] Goal met time already recorded for target ${targetId}. Ignoring redundant notification.`);
                  return prevLogs; // Return previous state if no update needed
             }
         } else {
