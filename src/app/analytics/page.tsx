@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -442,7 +443,7 @@ export default function AnalyticsPage() {
                          indicator="line"
                          labelFormatter={(label, payload) => {
                            // Display only the date label once
-                           return payload?.[0]?.payload?.date ? format(parseISO(payload[0].payload.fullDate), 'PPP') : label;
+                           return payload?.[0]?.payload?.fullDate ? format(parseISO(payload[0].payload.fullDate), 'PPP') : label;
                          }}
                          formatter={(value, name, props) => {
                            // Custom formatter to display value with correct label
@@ -540,6 +541,7 @@ export default function AnalyticsPage() {
     return <div className="p-6 text-center text-muted-foreground">Loading analytics...</div>;
   }
 
+  // This is the beginning of the main return statement for the component's JSX
   return (
     <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
       <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Productivity Analytics</h1>
@@ -568,10 +570,10 @@ export default function AnalyticsPage() {
                          filterDateRange.to ? (
                             isSameDay(filterDateRange.from, filterDateRange.to)
                              ? format(filterDateRange.from, "LLL dd, y")
-                             : &lt;&gt;
+                             : <>
                                  {format(filterDateRange.from, "LLL dd, y")} -{" "}
                                  {format(filterDateRange.to, "LLL dd, y")}
-                               &lt;&gt;
+                               </>
                          ) : (
                            format(filterDateRange.from, "LLL dd, y")
                          )
@@ -656,20 +658,21 @@ export default function AnalyticsPage() {
       {/* Chart Section - Conditionally Rendered Order */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {isSingleDaySelected ? (
-          &lt;&gt;
+          <>
             <HourlyCompletionsChart />
             <DailyCountsChart />
             <DailyUPHChart />
-          &lt;&gt;
+          </>
         ) : (
-          &lt;&gt;
+          <>
             <DailyCountsChart />
             <DailyUPHChart />
             <HourlyCompletionsChart />
-          &lt;&gt;
+          </>
         )}
       </div>
     </div>
   );
-}
+} // <-- Moved the closing brace here
 
+    
