@@ -50,6 +50,7 @@ export default function PreviousLogsPage() {
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Determine active target based on uphTargets state
   const activeTarget = useMemo(() => uphTargets.find(t => t.isActive) || (uphTargets.length > 0 ? uphTargets[0] : null), [uphTargets]);
 
 
@@ -110,7 +111,6 @@ export default function PreviousLogsPage() {
         if (!isValid(logDateObj)) return false; // Skip invalid dates
 
         const isPreviousDay = isBefore(logDateObj, todayStart);
-        // Use new Date() directly here as 'today' variable is not defined in this scope
         const isFinalizedToday = log.date === formatDateISO(new Date()) && log.isFinalized;
 
         // Include if it's a previous day OR if it's today AND finalized
@@ -119,7 +119,8 @@ export default function PreviousLogsPage() {
         }
 
         const searchTerm = filterTerm.toLowerCase();
-        const logTarget = uphTargets.find(t => t.id === log.targetId) ?? activeTarget; // Target for UPH search
+        // Use the target associated with the log for UPH search, fallback to active target
+        const logTarget = uphTargets.find(t => t.id === log.targetId) ?? activeTarget;
 
         const matchesSearch = (
             log.date.toLowerCase().includes(searchTerm) ||
@@ -130,7 +131,7 @@ export default function PreviousLogsPage() {
             log.videoSessionsCompleted.toString().includes(searchTerm) ||
             (log.notes && log.notes.toLowerCase().includes(searchTerm)) ||
             format(logDateObj, 'PPP').toLowerCase().includes(searchTerm) ||
-            (logTarget && calculateDailyUPH(log, logTarget).toFixed(2).includes(searchTerm)) // Search UPH based on target
+            (logTarget && calculateDailyUPH(log, logTarget).toFixed(2).includes(searchTerm)) // Search UPH based on log's specific or active target
         );
 
         let matchesDateRange = true;
@@ -145,52 +146,53 @@ export default function PreviousLogsPage() {
     });
   }, [allLogs, filterTerm, filterDateRange, activeTarget, uphTargets]); // Added uphTargets dependency
 
-  // Sorting Logic
+  // Sorting Logic - Updated
   const sortedLogs = useMemo(() => {
-    if (sortDirection === 'none' || sortColumn === null) {
+    if (sortDirection === 'none' || !sortColumn) { // Check for !sortColumn as well
        // Default sort if sorting is cleared or column is null
        return [...filteredLogs].sort((a, b) => b.date.localeCompare(a.date));
     }
 
     return [...filteredLogs].sort((a, b) => {
-      let valA: string | number | null = null;
-      let valB: string | number | null = null;
+      let valA: string | number | Date | null = null; // Can be Date for date column
+      let valB: string | number | Date | null = null;
 
       if (sortColumn === 'avgUPH') {
+         // Important: Calculate UPH based on the target associated with *each specific log*
          const targetA = uphTargets.find(t => t.id === a.targetId) ?? activeTarget;
          const targetB = uphTargets.find(t => t.id === b.targetId) ?? activeTarget;
          valA = targetA ? calculateDailyUPH(a, targetA) : 0;
          valB = targetB ? calculateDailyUPH(b, targetB) : 0;
+      } else if (sortColumn === 'date') {
+          // Convert date strings to Date objects for proper sorting
+          valA = parseISO(a.date + 'T00:00:00');
+          valB = parseISO(b.date + 'T00:00:00');
+          if (!isValid(valA as Date)) valA = null; // Handle invalid parse
+          if (!isValid(valB as Date)) valB = null;
       } else {
+         // Access other properties directly
          valA = a[sortColumn as keyof Omit<DailyWorkLog, 'avgUPH'>];
          valB = b[sortColumn as keyof Omit<DailyWorkLog, 'avgUPH'>];
       }
 
+      // Comparison logic
       let comparison = 0;
       if (valA === null || valA === undefined) comparison = -1;
       else if (valB === null || valB === undefined) comparison = 1;
-      else if (typeof valA === 'string' && typeof valB === 'string') {
-        if (sortColumn === 'date') {
-          try {
-            const dateA = parseISO(valA + 'T00:00:00'); // Add time for proper comparison
-            const dateB = parseISO(valB + 'T00:00:00');
-            comparison = dateA.getTime() - dateB.getTime();
-          } catch (e) {
-            comparison = valA.localeCompare(valB);
-          }
-        } else {
-           comparison = valA.localeCompare(valB);
-        }
-      } else if (typeof valA === 'number' && typeof valB === 'number') {
-        comparison = valA - valB;
-      } else {
-        comparison = String(valA).localeCompare(String(valB));
+      else if (valA instanceof Date && valB instanceof Date) { // Compare dates
+          comparison = (valA as Date).getTime() - (valB as Date).getTime();
+      } else if (typeof valA === 'string' && typeof valB === 'string') { // Compare strings
+          comparison = valA.localeCompare(valB);
+      } else if (typeof valA === 'number' && typeof valB === 'number') { // Compare numbers
+          comparison = valA - valB;
+      } else { // Fallback string comparison
+          comparison = String(valA).localeCompare(String(valB));
       }
 
-      // If sortDirection is 'asc', use comparison directly, otherwise invert it
+      // Apply sort direction
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [filteredLogs, sortColumn, sortDirection, activeTarget, uphTargets]);
+  }, [filteredLogs, sortColumn, sortDirection, activeTarget, uphTargets]); // Dependencies remain the same
 
   // Pagination Logic
   const paginatedLogs = useMemo(() => {
@@ -204,27 +206,32 @@ export default function PreviousLogsPage() {
   // Handlers
   const handleSort = useCallback((column: SortableColumn) => {
     setSortDirection(prevDirection => {
-        // Cycle through: asc -> desc -> none -> asc
         if (sortColumn !== column) {
             return 'asc'; // Start with ascending if changing column
         }
+        // Cycle through: asc -> desc -> none -> asc
         if (prevDirection === 'asc') {
             return 'desc';
         }
-        // If current direction is 'desc' or 'none', clear the sort (set back to default)
-        // For third click clear:
         if (prevDirection === 'desc') {
-             return 'none';
+             return 'none'; // Clear sort on third click
         }
-        // If we want third click to clear, uncomment above and remove below 'asc'
-        return 'asc'; // Cycle back to ascending
+        return 'asc'; // Go back to ascending if currently 'none'
     });
-    setSortColumn(column);
-    // If the direction becomes 'none', reset column to default as well (optional, but logical)
+
+     setSortColumn(currentSortCol => {
+        if (currentSortCol === column && sortDirection === 'desc') {
+             // If clearing the sort, revert to default column
+             return DEFAULT_SORT_COLUMN;
+        }
+        return column; // Set the new column otherwise
+     });
+
+    // If the new direction is 'none', ensure the sort column also resets to default
     if (sortColumn === column && sortDirection === 'desc') {
-         setSortColumn(DEFAULT_SORT_COLUMN);
-         setSortDirection(DEFAULT_SORT_DIRECTION);
+         setSortDirection(DEFAULT_SORT_DIRECTION); // Reset direction to default after clearing
     }
+
     setCurrentPage(1); // Reset to first page on sort change
   }, [sortColumn, sortDirection]); // Include sortDirection in dependency
 
@@ -241,9 +248,15 @@ export default function PreviousLogsPage() {
     if (sortColumn !== column || sortDirection === 'none') {
       return <ArrowUpDown className="ml-2 h-3 w-3 opacity-50" />; // Indicate sortable but not sorted
     }
-    return sortDirection === 'asc' ?
-      <ArrowUpDown className="ml-2 h-3 w-3 text-primary" /> : // Indicate ascending (use primary color)
-      <ArrowUpDown className="ml-2 h-3 w-3 text-primary transform rotate-180" />; // Indicate descending (rotated and primary)
+    // Rotate icon based on direction
+    return (
+        <ArrowUpDown
+            className={cn(
+                "ml-2 h-3 w-3 text-primary",
+                sortDirection === 'desc' && "transform rotate-180" // Rotate if descending
+            )}
+        />
+    );
   };
 
 
@@ -287,16 +300,20 @@ export default function PreviousLogsPage() {
     const headers = [
       'Date', 'Start Time', 'End Time', 'Break Duration (min)', 'Training Duration (min)', 'Net Hours Worked',
       'Documents Completed', 'Video Sessions Completed', 'Notes', 'Finalized',
-      'Logged Target ID', 'Logged Target Name', 'Logged Target UPH (Goal)', 'Logged Target Docs/Unit', 'Logged Target Videos/Unit'
+      'Logged Target ID', 'Logged Target Name', 'Logged Target UPH (Goal)', 'Logged Target Docs/Unit', 'Logged Target Videos/Unit',
+      'Avg UPH (vs Logged Target)' // Single UPH column
     ];
 
-    targets.forEach(target => {
-      headers.push(`${target.name} - Calculated Units`);
-      headers.push(`${target.name} - Calculated UPH`);
-    });
+    // Dynamically add columns for each target's calculated units/UPH if needed (optional)
+    // targets.forEach(target => {
+    //   headers.push(`${target.name} - Calculated Units`);
+    //   headers.push(`${target.name} - Calculated UPH`);
+    // });
 
     const rows = logs.map(log => {
       const loggedTarget = targets.find(t => t.id === log.targetId);
+      const avgUph = loggedTarget ? calculateDailyUPH(log, loggedTarget) : 0; // Calculate based on logged target
+
       const row = [
         escapeCSVField(log.date),
         escapeCSVField(log.startTime),
@@ -313,14 +330,16 @@ export default function PreviousLogsPage() {
         escapeCSVField(loggedTarget?.targetUPH?.toFixed(2) || 'N/A'),
         escapeCSVField(loggedTarget?.docsPerUnit?.toString() || 'N/A'),
         escapeCSVField(loggedTarget?.videosPerUnit?.toString() || 'N/A'),
+        escapeCSVField(avgUph.toFixed(2)), // Add the calculated avg UPH
       ];
 
-      targets.forEach(target => {
-        const units = calculateDailyUnits(log, target);
-        const uph = calculateDailyUPH(log, target);
-        row.push(escapeCSVField(units.toFixed(2)));
-        row.push(escapeCSVField(uph.toFixed(2)));
-      });
+      // Add dynamic target columns if needed
+      // targets.forEach(target => {
+      //   const units = calculateDailyUnits(log, target);
+      //   const uph = calculateDailyUPH(log, target);
+      //   row.push(escapeCSVField(units.toFixed(2)));
+      //   row.push(escapeCSVField(uph.toFixed(2)));
+      // });
       return row.join(',');
     });
 
@@ -526,10 +545,9 @@ export default function PreviousLogsPage() {
                      size="sm"
                      onClick={() => handleSort('avgUPH')}
                      className="h-8 px-3"
-                     disabled={!activeTarget}
-                     title={!activeTarget ? "Set an active target to sort by UPH" : "Sort by Average UPH (based on log's target or active)"}
+                     disabled={!activeTarget && uphTargets.length === 0} // Disable only if NO targets exist at all
+                     title={!activeTarget && uphTargets.length > 0 ? "Set an active target to sort by UPH" : "Sort by Average UPH (based on log's target or active)"}
                  >
-                     {/* Using TargetIcon instead of Clock for Avg UPH */}
                     <TargetIcon className="mr-1.5 h-4 w-4" /> Avg UPH
                     {renderSortIcon('avgUPH')}
                  </Button>
@@ -553,8 +571,7 @@ export default function PreviousLogsPage() {
         targets={uphTargets}
         deleteWorkLogAction={handleDeleteWorkLog}
         showTodaySection={false} // Ensure today's section is not shown here
-        // Removed onGoalMet as it's not relevant for previous logs
-        onGoalMet={() => {}} // Provide a dummy function or handle appropriately
+        onGoalMet={() => {}} // Provide a dummy function
        />
 
       {/* Pagination Controls */}
@@ -592,5 +609,3 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
-
-
