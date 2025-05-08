@@ -203,7 +203,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
 
         const scheduleStatusText = isGoalMet ? (
-            <> <CheckCircle className="inline-block h-4 w-4 mr-1"/> Met </>
+             <> <CheckCircle className="inline-block h-4 w-4 mr-1"/> Met </>
         ) : (
             formatTimeAheadBehind(timeAheadBehindSeconds) // Includes seconds
         );
@@ -264,7 +264,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                     {scheduleStatusText}
                                     {/* Show met time only if goal is met */}
                                     {isGoalMet && goalMetTime ? ` at ${format(goalMetTime, 'h:mm:ss a')}` : ''}
-                                    {!isGoalMet && timeAheadBehindSeconds !== null ? ` (${formatTimeAheadBehind(timeAheadBehindSeconds, true)})` : ''}
+                                    {/* Removed duplicate time display: !isGoalMet && timeAheadBehindSeconds !== null ? ` (${formatTimeAheadBehind(timeAheadBehindSeconds, true)})` : '' */}
                                 </p>
                             </div>
                             <div className="col-span-1">
@@ -287,7 +287,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                     {scheduleStatusText}
                                     {/* Show met time only if goal is met */}
                                     {isGoalMet && goalMetTime ? ` at ${format(goalMetTime, 'h:mm:ss a')}` : ''}
-                                    {!isGoalMet && timeAheadBehindSeconds !== null ? ` (${formatTimeAheadBehind(timeAheadBehindSeconds, true)})` : ''}
+                                    {/* Removed duplicate time display: !isGoalMet && timeAheadBehindSeconds !== null ? ` (${formatTimeAheadBehind(timeAheadBehindSeconds, true)})` : '' */}
                                 </p>
                             </div>
                              {/* Conditionally show Avg Daily UPH only if not today */}
@@ -427,6 +427,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                     <AccordionItem value={log.id} key={log.id} className="border-none bg-card rounded-md overflow-hidden shadow-sm">
                          <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group data-[state=open]:bg-muted/50" hideChevron={false}>
                             {/* Pass all targets for calculation flexibility within summary */}
+                             {/* Ensure content within AccordionTrigger is not a button itself */}
                             <PreviousLogTriggerSummary log={log} allTargets={targets} onDelete={() => handleDeleteLog(log.id, log.date)} />
                         </AccordionTrigger>
                         <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-md">
