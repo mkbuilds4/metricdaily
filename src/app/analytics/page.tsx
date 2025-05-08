@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -89,16 +88,21 @@ export default function AnalyticsPage() {
     });
   }, [workLogs, filterDateRange]);
 
+  // Determine if the selected range is a single day
+   const isSingleDaySelected = useMemo(() => {
+        return !!(filterDateRange?.from && filterDateRange?.to && isSameDay(filterDateRange.from, filterDateRange.to));
+   }, [filterDateRange]);
+
   // Determine selected date for hourly chart
   const selectedDateForHourlyChart = useMemo(() => {
-    if (filterDateRange?.from && filterDateRange?.to && isSameDay(filterDateRange.from, filterDateRange.to)) {
-      return filterDateRange.from; // Use the date if the range is a single day
+     if (isSingleDaySelected) {
+      return filterDateRange!.from!; // Use the date if the range is a single day
     }
      if (filterDateRange?.from && !filterDateRange?.to) {
         return filterDateRange.from; // Use 'from' date if only 'from' is selected
     }
     return null; // No single date selected or range spans multiple days
-  }, [filterDateRange]);
+  }, [filterDateRange, isSingleDaySelected]);
 
    // Find the work log for the selected date
   const selectedDayLog = useMemo(() => {
@@ -307,129 +311,91 @@ export default function AnalyticsPage() {
     };
    }, [dailyWorkChartData]);
 
-  if (isLoading) {
-    return <div className="p-6 text-center text-muted-foreground">Loading analytics...</div>;
-  }
+   // --- Define Chart Components ---
 
-  return (
-    <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
-      <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Productivity Analytics</h1>
-
-        {/* Filter Controls */}
-        <Card className="shadow-sm">
-            <CardHeader>
-                <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                    <Filter className="h-5 w-5" /> Filter Data Range
-                </CardTitle>
-                <CardDescription>Select the time period for the analytics. Hourly completion chart requires a single day selection.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col sm:flex-row items-center gap-3 pt-2">
-                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-                   <PopoverTrigger asChild>
-                     <Button
-                       id="date"
-                       variant={"outline"}
-                       className={cn(
-                         "w-full sm:w-[300px] justify-start text-left font-normal h-9 text-sm",
-                         !filterDateRange && "text-muted-foreground"
-                       )}
-                     >
-                       <CalendarIcon className="mr-2 h-4 w-4" />
-                       {filterDateRange?.from ? (
-                         filterDateRange.to ? (
-                            isSameDay(filterDateRange.from, filterDateRange.to)
-                             ? format(filterDateRange.from, "LLL dd, y")
-                             : <>
-                                 {format(filterDateRange.from, "LLL dd, y")} -{" "}
-                                 {format(filterDateRange.to, "LLL dd, y")}
-                               </>
-                         ) : (
-                           format(filterDateRange.from, "LLL dd, y")
-                         )
-                       ) : (
-                         <span>Select Date Range</span>
-                       )}
-                     </Button>
-                   </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 flex flex-col sm:flex-row" align="start">
-                         <div className="flex flex-col p-2 border-b sm:border-r sm:border-b-0">
-                            <p className="text-xs font-semibold text-muted-foreground px-2 py-1">Presets</p>
-                            {presetRanges.map((preset) => (
-                                <Button
-                                    key={preset.label}
-                                    variant="ghost"
-                                    size="sm"
-                                    className="justify-start text-sm font-normal h-8"
-                                    onClick={() => setPresetDateRange(preset.range)}
-                                >
-                                    {preset.label}
-                                </Button>
-                            ))}
-                            <Separator className="my-1" />
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="justify-start text-sm font-normal h-8 text-muted-foreground"
-                                onClick={() => setPresetDateRange(undefined)} // Allow clearing the range
-                            >
-                                Clear
-                            </Button>
-                        </div>
-                        <Calendar
-                           initialFocus
-                           mode="range"
-                           defaultMonth={filterDateRange?.from}
-                           selected={filterDateRange}
-                           onSelect={setPresetDateRange} // Use the same handler
-                           numberOfMonths={1}
-                           disabled={(date) => date > new Date() || date < new Date("2023-01-01")}
-                         />
-                    </PopoverContent>
-                 </Popover>
-                  {filterDateRange && (
-                    <Button variant="link" size="sm" onClick={() => setFilterDateRange(undefined)} className="p-0 h-auto text-muted-foreground hover:text-foreground">
-                        <X className="mr-1 h-3 w-3" /> Reset Range
-                    </Button>
-                  )}
-            </CardContent>
+   const HourlyCompletionsChart = () => (
+        <Card className="lg:col-span-2"> {/* Span 2 columns on large screens */}
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" /> Hourly Completions (from Audit Log)
+            </CardTitle>
+            <CardDescription>
+              Actual documents <BookOpen className="inline h-4 w-4" /> and videos <Video className="inline h-4 w-4" /> completed per hour, based on logged updates in the audit trail.
+              {selectedDateForHourlyChart ? ` (${format(selectedDateForHourlyChart, 'MMM d, yyyy')})` : ''}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Show only if date is selected */}
+            {selectedDateForHourlyChart ? (
+              hourlyActivityChartData.length > 0 ? (
+                <ChartContainer config={hourlyActivityChartConfig} className="h-[300px] w-full">
+                  {/* Use stacked BarChart */}
+                  <BarChart data={hourlyActivityChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                    <XAxis
+                      dataKey="hourLabel"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                      angle={hourlyActivityChartData.length > 10 ? -45 : 0}
+                      textAnchor={hourlyActivityChartData.length > 10 ? "end" : "middle"}
+                      interval={hourlyActivityChartData.length > 14 ? 1 : 0}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                      allowDecimals={false} // Show whole numbers for actual counts
+                    />
+                     {/* Disable default tooltip content */}
+                     <ChartTooltip
+                       cursor={false}
+                       content={<></>} // Use empty fragment to disable content
+                     />
+                     {/* Define Bars for documents and videos */}
+                     <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs">
+                       {/* Add LabelList for documents */}
+                       <LabelList
+                         dataKey="documents"
+                         position="center"
+                         fill="hsl(var(--primary-foreground))" // Use a contrasting color
+                         fontSize={10}
+                         formatter={(value: number) => (value > 0 ? value : '')} // Hide label if value is 0
+                       />
+                     </Bar>
+                     <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos"> {/* Top bar gets radius */}
+                       {/* Add LabelList for videos */}
+                       <LabelList
+                         dataKey="videos"
+                         position="center"
+                         fill="hsl(var(--primary-foreground))" // Use a contrasting color
+                         fontSize={10}
+                         formatter={(value: number) => (value > 0 ? value : '')} // Hide label if value is 0
+                       />
+                     </Bar>
+                    <ChartLegend content={<ChartLegendContent />} />
+                  </BarChart>
+                </ChartContainer>
+              ) : (
+                <div className="h-[300px] flex items-center justify-center">
+                  <p className="text-muted-foreground">No completion updates found in audit log for {format(selectedDateForHourlyChart, 'MMM d, yyyy')}.</p>
+                </div>
+              )
+            ) : (
+              <div className="h-[300px] flex items-center justify-center">
+                <p className="text-muted-foreground">Please select a single day in the date range filter to view hourly completions.</p>
+              </div>
+            )}
+          </CardContent>
         </Card>
+   );
 
-       {/* Summary Stats */}
-        <Card>
-            <CardHeader>
-                <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" /> Summary Statistics
-                </CardTitle>
-                 <CardDescription>
-                     Overview for the selected period ({filterDateRange?.from ? format(filterDateRange.from, 'MMM d, y') : 'Start'} - {filterDateRange?.to ? format(filterDateRange.to, 'MMM d, y') : 'End'}).
-                 </CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div className="bg-muted/50 p-4 rounded-lg">
-                    <p className="text-sm font-medium text-muted-foreground">Total Documents</p>
-                    <p className="text-2xl font-bold">{summaryStats.totalDocs}</p>
-                </div>
-                 <div className="bg-muted/50 p-4 rounded-lg">
-                    <p className="text-sm font-medium text-muted-foreground">Total Videos</p>
-                    <p className="text-2xl font-bold">{summaryStats.totalVideos}</p>
-                </div>
-                 <div className="bg-muted/50 p-4 rounded-lg">
-                    <p className="text-sm font-medium text-muted-foreground">Average Daily UPH</p>
-                    <p className="text-2xl font-bold">{summaryStats.avgUPH > 0 ? summaryStats.avgUPH : '-'}</p>
-                </div>
-                 <div className="bg-muted/50 p-4 rounded-lg">
-                    <p className="text-sm font-medium text-muted-foreground">Days Logged</p>
-                    <p className="text-2xl font-bold">{summaryStats.daysLogged}</p>
-                </div>
-            </CardContent>
-        </Card>
-
-      {/* Chart Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Daily Counts Chart */}
+    const DailyCountsChart = () => (
         <Card>
           <CardHeader>
-            <CardTitle>Daily Completed Items & Hours</CardTitle>
+            <CardTitle>Daily Completed Items &amp; Hours</CardTitle>
              <CardDescription>Documents, Videos, and Hours Worked per day.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -521,9 +487,10 @@ export default function AnalyticsPage() {
             )}
           </CardContent>
         </Card>
+    );
 
-        {/* Daily UPH Chart */}
-        <Card>
+    const DailyUPHChart = () => (
+         <Card>
           <CardHeader>
             <CardTitle>Daily Average UPH</CardTitle>
             <CardDescription>
@@ -567,86 +534,140 @@ export default function AnalyticsPage() {
             )}
           </CardContent>
         </Card>
+    );
 
-        {/* Hourly Completions Chart */}
-        <Card className="lg:col-span-2"> {/* Span 2 columns on large screens */}
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" /> Hourly Completions (from Audit Log)
-            </CardTitle>
-            <CardDescription>
-              Actual documents <BookOpen className="inline h-4 w-4" /> and videos <Video className="inline h-4 w-4" /> completed per hour, based on logged updates in the audit trail.
-              {selectedDateForHourlyChart ? ` (${format(selectedDateForHourlyChart, 'MMM d, yyyy')})` : ''}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* Show only if date is selected */}
-            {selectedDateForHourlyChart ? (
-              hourlyActivityChartData.length > 0 ? (
-                <ChartContainer config={hourlyActivityChartConfig} className="h-[300px] w-full">
-                  {/* Use stacked BarChart */}
-                  <BarChart data={hourlyActivityChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis
-                      dataKey="hourLabel"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      angle={hourlyActivityChartData.length > 10 ? -45 : 0}
-                      textAnchor={hourlyActivityChartData.length > 10 ? "end" : "middle"}
-                      interval={hourlyActivityChartData.length > 14 ? 1 : 0}
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      allowDecimals={false} // Show whole numbers for actual counts
-                    />
-                     {/* Disable default tooltip content */}
-                     <ChartTooltip
-                       cursor={false}
-                       content={<></>} // Use empty fragment to disable content
-                     />
-                     {/* Define Bars for documents and videos */}
-                     <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs">
-                       {/* Add LabelList for documents */}
-                       <LabelList
-                         dataKey="documents"
-                         position="center"
-                         fill="hsl(var(--primary-foreground))" // Use a contrasting color
-                         fontSize={10}
-                         formatter={(value: number) => (value > 0 ? value : '')} // Hide label if value is 0
-                       />
-                     </Bar>
-                     <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos"> {/* Top bar gets radius */}
-                       {/* Add LabelList for videos */}
-                       <LabelList
-                         dataKey="videos"
-                         position="center"
-                         fill="hsl(var(--primary-foreground))" // Use a contrasting color
-                         fontSize={10}
-                         formatter={(value: number) => (value > 0 ? value : '')} // Hide label if value is 0
-                       />
-                     </Bar>
-                    <ChartLegend content={<ChartLegendContent />} />
-                  </BarChart>
-                </ChartContainer>
-              ) : (
-                <div className="h-[300px] flex items-center justify-center">
-                  <p className="text-muted-foreground">No completion updates found in audit log for {format(selectedDateForHourlyChart, 'MMM d, yyyy')}.</p>
-                </div>
-              )
-            ) : (
-              <div className="h-[300px] flex items-center justify-center">
-                <p className="text-muted-foreground">Please select a single day in the date range filter to view hourly completions.</p>
-              </div>
-            )}
-          </CardContent>
+  if (isLoading) {
+    return <div className="p-6 text-center text-muted-foreground">Loading analytics...</div>;
+  }
+
+  return (
+    <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
+      <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Productivity Analytics</h1>
+
+        {/* Filter Controls */}
+        <Card className="shadow-sm">
+            <CardHeader>
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                    <Filter className="h-5 w-5" /> Filter Data Range
+                </CardTitle>
+                <CardDescription>Select the time period for the analytics. Hourly completion chart requires a single day selection.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                   <PopoverTrigger asChild>
+                     <Button
+                       id="date"
+                       variant={"outline"}
+                       className={cn(
+                         "w-full sm:w-[300px] justify-start text-left font-normal h-9 text-sm",
+                         !filterDateRange && "text-muted-foreground"
+                       )}
+                     >
+                       <CalendarIcon className="mr-2 h-4 w-4" />
+                       {filterDateRange?.from ? (
+                         filterDateRange.to ? (
+                            isSameDay(filterDateRange.from, filterDateRange.to)
+                             ? format(filterDateRange.from, "LLL dd, y")
+                             : &lt;&gt;
+                                 {format(filterDateRange.from, "LLL dd, y")} -{" "}
+                                 {format(filterDateRange.to, "LLL dd, y")}
+                               &lt;&gt;
+                         ) : (
+                           format(filterDateRange.from, "LLL dd, y")
+                         )
+                       ) : (
+                         <span>Select Date Range</span>
+                       )}
+                     </Button>
+                   </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 flex flex-col sm:flex-row" align="start">
+                         <div className="flex flex-col p-2 border-b sm:border-r sm:border-b-0">
+                            <p className="text-xs font-semibold text-muted-foreground px-2 py-1">Presets</p>
+                            {presetRanges.map((preset) => (
+                                <Button
+                                    key={preset.label}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="justify-start text-sm font-normal h-8"
+                                    onClick={() => setPresetDateRange(preset.range)}
+                                >
+                                    {preset.label}
+                                </Button>
+                            ))}
+                            <Separator className="my-1" />
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="justify-start text-sm font-normal h-8 text-muted-foreground"
+                                onClick={() => setPresetDateRange(undefined)} // Allow clearing the range
+                            >
+                                Clear
+                            </Button>
+                        </div>
+                        <Calendar
+                           initialFocus
+                           mode="range"
+                           defaultMonth={filterDateRange?.from}
+                           selected={filterDateRange}
+                           onSelect={setPresetDateRange} // Use the same handler
+                           numberOfMonths={1}
+                           disabled={(date) => date > new Date() || date < new Date("2023-01-01")}
+                         />
+                    </PopoverContent>
+                 </Popover>
+                  {filterDateRange && (
+                    <Button variant="link" size="sm" onClick={() => setFilterDateRange(undefined)} className="p-0 h-auto text-muted-foreground hover:text-foreground">
+                        <X className="mr-1 h-3 w-3" /> Reset Range
+                    </Button>
+                  )}
+            </CardContent>
         </Card>
 
+       {/* Summary Stats */}
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" /> Summary Statistics
+                </CardTitle>
+                 <CardDescription>
+                     Overview for the selected period ({filterDateRange?.from ? format(filterDateRange.from, 'MMM d, y') : 'Start'} - {filterDateRange?.to ? format(filterDateRange.to, 'MMM d, y') : 'End'}).
+                 </CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Total Documents</p>
+                    <p className="text-2xl font-bold">{summaryStats.totalDocs}</p>
+                </div>
+                 <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Total Videos</p>
+                    <p className="text-2xl font-bold">{summaryStats.totalVideos}</p>
+                </div>
+                 <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Average Daily UPH</p>
+                    <p className="text-2xl font-bold">{summaryStats.avgUPH > 0 ? summaryStats.avgUPH : '-'}</p>
+                </div>
+                 <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Days Logged</p>
+                    <p className="text-2xl font-bold">{summaryStats.daysLogged}</p>
+                </div>
+            </CardContent>
+        </Card>
 
+      {/* Chart Section - Conditionally Rendered Order */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {isSingleDaySelected ? (
+          &lt;&gt;
+            <HourlyCompletionsChart />
+            <DailyCountsChart />
+            <DailyUPHChart />
+          &lt;&gt;
+        ) : (
+          &lt;&gt;
+            <DailyCountsChart />
+            <DailyUPHChart />
+            <HourlyCompletionsChart />
+          &lt;&gt;
+        )}
       </div>
     </div>
   );
