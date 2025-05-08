@@ -1,18 +1,17 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { getWorkLogs, getUPHTargets, getActiveUPHTarget, getAuditLogs } from '@/lib/actions'; // Added getAuditLogs
-import type { DailyWorkLog, UPHTarget, AuditLogEntry } from '@/types'; // Added AuditLogEntry
+import { getWorkLogs, getUPHTargets, getActiveUPHTarget, getAuditLogs } from '@/lib/actions';
+import type { DailyWorkLog, UPHTarget, AuditLogEntry } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
-import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, getHours, isSameDay, parse, setHours, setMinutes, setSeconds, isAfter } from 'date-fns'; // Added parse, setHours, setMinutes, setSeconds, isAfter
+import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, getHours, isSameDay, parse, setHours, setMinutes, setSeconds, isAfter, addDays, addHours } from 'date-fns'; // Added addDays, addHours
 import { DateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Calendar as CalendarIcon, Filter, X, Activity, TrendingUp, Clock } from 'lucide-react'; // Added Clock
+import { Calendar as CalendarIcon, Filter, X, Activity, TrendingUp, Clock, BookOpen, Video } from 'lucide-react'; // Added BookOpen, Video
 import { cn, calculateDailyUPH } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 
@@ -22,14 +21,16 @@ const CHART_COLORS = {
   videos: 'hsl(var(--chart-2))',
   uph: 'hsl(var(--chart-3))',
   targetUPH: 'hsl(var(--chart-4))',
-  hourlyActivity: 'hsl(var(--chart-5))', // Color for the new chart
+  // Colors for the hourly chart - using documents/videos colors again
+  hourlyDocuments: 'hsl(var(--chart-1))',
+  hourlyVideos: 'hsl(var(--chart-2))',
 };
 
 const DEFAULT_DAYS_TO_SHOW = 30; // Show last 30 days by default
 
 export default function AnalyticsPage() {
   const [workLogs, setWorkLogs] = useState<DailyWorkLog[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]); // State for audit logs
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]); // Keep audit logs, though not directly used for hourly completions
   const [targets, setTargets] = useState<UPHTarget[]>([]);
   const [activeTarget, setActiveTarget] = useState<UPHTarget | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,12 +47,12 @@ export default function AnalyticsPage() {
     setIsLoading(true);
     try {
       const loadedLogs = getWorkLogs();
-      const loadedAuditLogs = getAuditLogs(); // Load audit logs
+      const loadedAuditLogs = getAuditLogs(); // Keep loading audit logs
       const loadedTargets = getUPHTargets();
       const loadedActiveTarget = getActiveUPHTarget();
 
       setWorkLogs(loadedLogs);
-      setAuditLogs(loadedAuditLogs); // Set audit logs state
+      setAuditLogs(loadedAuditLogs);
       setTargets(loadedTargets);
       setActiveTarget(loadedActiveTarget);
       console.log('[AnalyticsPage] Data loaded:', { logs: loadedLogs.length, auditLogs: loadedAuditLogs.length, targets: loadedTargets.length });
@@ -106,108 +107,82 @@ export default function AnalyticsPage() {
   }, [workLogs, selectedDateForHourlyChart]);
 
 
-  // Prepare data for charts
+  // Prepare data for daily trend charts
   const dailyWorkChartData = useMemo(() => {
-    // Sort logs by date ascending for charting trends over time
     const sortedLogs = [...filteredLogs].sort((a, b) => a.date.localeCompare(b.date));
 
     return sortedLogs.map(log => {
       const logDate = parseISO(log.date);
-      // Use the target associated with the log, or fallback to active target for UPH calculation
       const targetForLog = targets.find(t => t.id === log.targetId) ?? activeTarget;
       const uph = targetForLog ? calculateDailyUPH(log, targetForLog) : null;
 
       return {
-        date: format(logDate, 'MMM d'), // Format date for XAxis label
-        fullDate: log.date, // Keep original date for sorting/tooltips if needed
+        date: format(logDate, 'MMM d'),
+        fullDate: log.date,
         documents: log.documentsCompleted,
         videos: log.videoSessionsCompleted,
-        uph: uph !== null && isFinite(uph) ? uph : 0, // Set to 0 if null or infinite
-        targetUPH: targetForLog?.targetUPH ?? null, // Include target UPH for reference line
+        uph: uph !== null && isFinite(uph) ? uph : 0,
+        targetUPH: targetForLog?.targetUPH ?? null,
       };
     });
   }, [filteredLogs, targets, activeTarget]);
 
-  // Prepare data for hourly activity chart
-   const hourlyActivityChartData = useMemo(() => {
-       if (!selectedDateForHourlyChart || auditLogs.length === 0 || !selectedDayLog) {
-         return [];
-       }
+  // Prepare data for hourly completions chart (Approximation)
+  const hourlyActivityChartData = useMemo(() => {
+    if (!selectedDateForHourlyChart || !selectedDayLog || selectedDayLog.hoursWorked <= 0) {
+      return []; // Cannot calculate if no log, no date, or zero net hours
+    }
 
-      // Attempt to parse start and end times from the selected day's log
-      const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
-      const startMatch = selectedDayLog.startTime.match(timeRegex);
-      const endMatch = selectedDayLog.endTime.match(timeRegex);
+    const netHoursWorked = selectedDayLog.hoursWorked;
+    const avgDocsPerHour = selectedDayLog.documentsCompleted / netHoursWorked;
+    const avgVideosPerHour = selectedDayLog.videoSessionsCompleted / netHoursWorked;
 
-       if (!startMatch || !endMatch) {
-           console.warn('Invalid start or end time format in log for hourly chart:', selectedDayLog);
-           return []; // Cannot determine shift range
-       }
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    const startMatch = selectedDayLog.startTime.match(timeRegex);
+    const endMatch = selectedDayLog.endTime.match(timeRegex);
 
-       const startHour = parseInt(startMatch[1], 10);
-       const startMinute = parseInt(startMatch[2], 10);
-       const endHour = parseInt(endMatch[1], 10);
-       const endMinute = parseInt(endMatch[2], 10);
+    if (!startMatch || !endMatch) {
+        console.warn('Invalid start or end time format in log for hourly chart:', selectedDayLog);
+        return [];
+    }
 
-      const shiftStartDate = setMinutes(setHours(selectedDateForHourlyChart, startHour), startMinute);
-      // Handle overnight shift if end time is on the next day
-      let shiftEndDate = setMinutes(setHours(selectedDateForHourlyChart, endHour), endMinute);
-       if (shiftEndDate <= shiftStartDate) {
-         shiftEndDate = addDays(shiftEndDate, 1);
-       }
+    const startHour = parseInt(startMatch[1], 10);
+    const startMinute = parseInt(startMatch[2], 10);
+    const endHour = parseInt(endMatch[1], 10);
+    const endMinute = parseInt(endMatch[2], 10);
 
+    const shiftStartDate = setMinutes(setHours(selectedDateForHourlyChart, startHour), startMinute);
+    let shiftEndDate = setMinutes(setHours(selectedDateForHourlyChart, endHour), endMinute);
+    if (shiftEndDate <= shiftStartDate) {
+      shiftEndDate = addDays(shiftEndDate, 1);
+    }
 
-       // Filter audit logs for the selected date's shift period and relevant actions
-       const relevantActions: AuditLogEntry['action'][] = [
-         'CREATE_WORK_LOG',
-         'UPDATE_WORK_LOG',
-         'UPDATE_WORK_LOG_QUICK_COUNT',
-         'UPDATE_WORK_LOG_BREAK',
-         'UPDATE_WORK_LOG_TRAINING',
-         'UPDATE_WORK_LOG_GOAL_MET',
-         'SYSTEM_ARCHIVE_TODAY_LOG',
-       ];
+    const hourlyData: Record<number, { documents: number; videos: number }> = {};
 
-       const hourlyCounts: Record<number, number> = {};
-
-       // Initialize hourly counts only for hours within the shift
-        let currentHourMarker = shiftStartDate;
-        while (currentHourMarker < shiftEndDate) {
-            const hour = getHours(currentHourMarker);
-            hourlyCounts[hour] = 0;
-            currentHourMarker = addHours(currentHourMarker, 1);
-            // Special case: if shift ends exactly on the hour, include that hour's bucket
-            if (getHours(currentHourMarker) === endHour && currentHourMarker <= shiftEndDate) {
-                 hourlyCounts[endHour] = 0;
-            }
+    let currentHourMarker = shiftStartDate;
+    // Iterate through each hour *within* the gross shift duration
+    while (currentHourMarker < shiftEndDate) {
+        const hour = getHours(currentHourMarker);
+        hourlyData[hour] = { documents: avgDocsPerHour, videos: avgVideosPerHour };
+        currentHourMarker = addHours(currentHourMarker, 1);
+        // Handle edge case where shift ends exactly on the hour
+        if (getHours(currentHourMarker) === endHour && currentHourMarker <= shiftEndDate) {
+            hourlyData[endHour] = { documents: avgDocsPerHour, videos: avgVideosPerHour };
         }
+    }
 
-       auditLogs.forEach(log => {
-         const logTimestamp = parseISO(log.timestamp);
-         if (
-             isValid(logTimestamp) &&
-             logTimestamp >= shiftStartDate && // Check if within shift start
-             logTimestamp < shiftEndDate &&   // Check if strictly before shift end
-             relevantActions.includes(log.action)
-         ) {
-           const hour = getHours(logTimestamp);
-           // Ensure the hour exists in our shift-based counts
-           if (hourlyCounts[hour] !== undefined) {
-                hourlyCounts[hour]++;
-           }
-         }
-       });
+    // Format for chart
+    return Object.entries(hourlyData)
+        .map(([hour, counts]) => ({
+            hour: parseInt(hour, 10),
+            hourLabel: `${String(hour).padStart(2, '0')}:00`,
+            // Round approximated values for display
+            documents: parseFloat(counts.documents.toFixed(2)),
+            videos: parseFloat(counts.videos.toFixed(2)),
+        }))
+        .sort((a, b) => a.hour - b.hour);
 
-       // Format for chart, ensuring we only include hours from the shift
-       return Object.entries(hourlyCounts)
-           .map(([hour, count]) => ({
-               hour: parseInt(hour, 10), // Keep hour as number for potential sorting
-               hourLabel: `${String(hour).padStart(2, '0')}:00`, // Format as HH:00
-               count: count,
-           }))
-           .sort((a, b) => a.hour - b.hour); // Sort by hour ascending
-
-   }, [auditLogs, selectedDateForHourlyChart, selectedDayLog]);
+  }, [selectedDayLog, selectedDateForHourlyChart]);
 
 
   // Chart Configurations
@@ -221,8 +196,10 @@ export default function AnalyticsPage() {
      targetUPH: { label: "Target UPH", color: CHART_COLORS.targetUPH },
   };
 
+   // Updated config for hourly chart
    const hourlyActivityChartConfig = {
-     count: { label: "Logged Activities", color: CHART_COLORS.hourlyActivity },
+     documents: { label: "Est. Docs/Hr", color: CHART_COLORS.hourlyDocuments },
+     videos: { label: "Est. Videos/Hr", color: CHART_COLORS.hourlyVideos },
    };
 
   // Preset Date Range Handlers
@@ -233,8 +210,8 @@ export default function AnalyticsPage() {
 
   const today = new Date();
   const presetRanges = [
-    { label: "Today", range: { from: startOfDay(today), to: endOfDay(today) } }, // Added Today
-    { label: "Yesterday", range: { from: startOfDay(subDays(today, 1)), to: endOfDay(subDays(today, 1)) } }, // Added Yesterday
+    { label: "Today", range: { from: startOfDay(today), to: endOfDay(today) } },
+    { label: "Yesterday", range: { from: startOfDay(subDays(today, 1)), to: endOfDay(subDays(today, 1)) } },
     { label: "Last 7 Days", range: { from: startOfDay(subDays(today, 6)), to: endOfDay(today) } },
     { label: "Last 30 Days", range: { from: startOfDay(subDays(today, 29)), to: endOfDay(today) } },
     { label: "This Week", range: { from: startOfWeek(today, { weekStartsOn: 1 }), to: endOfDay(today) } },
@@ -274,7 +251,7 @@ export default function AnalyticsPage() {
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
                     <Filter className="h-5 w-5" /> Filter Data Range
                 </CardTitle>
-                <CardDescription>Select the time period for the analytics. Hourly chart requires a single day selection.</CardDescription>
+                <CardDescription>Select the time period for the analytics. Hourly completion chart requires a single day selection.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col sm:flex-row items-center gap-3 pt-2">
                 <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
@@ -283,16 +260,15 @@ export default function AnalyticsPage() {
                        id="date"
                        variant={"outline"}
                        className={cn(
-                         "w-full sm:w-[300px] justify-start text-left font-normal h-9 text-sm", // Fixed width for popover trigger consistency
+                         "w-full sm:w-[300px] justify-start text-left font-normal h-9 text-sm",
                          !filterDateRange && "text-muted-foreground"
                        )}
                      >
                        <CalendarIcon className="mr-2 h-4 w-4" />
                        {filterDateRange?.from ? (
                          filterDateRange.to ? (
-                            // Check if start and end dates are the same
                             isSameDay(filterDateRange.from, filterDateRange.to)
-                             ? format(filterDateRange.from, "LLL dd, y") // Show single date
+                             ? format(filterDateRange.from, "LLL dd, y")
                              : <>
                                  {format(filterDateRange.from, "LLL dd, y")} -{" "}
                                  {format(filterDateRange.to, "LLL dd, y")}
@@ -391,7 +367,7 @@ export default function AnalyticsPage() {
               <ChartContainer config={dailyCountsChartConfig} className="h-[300px] w-full">
                 <LineChart
                   data={dailyWorkChartData}
-                  margin={{ top: 5, right: 20, left: -10, bottom: 5 }} // Adjust margins
+                  margin={{ top: 5, right: 20, left: -10, bottom: 5 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))"/>
                   <XAxis
@@ -400,9 +376,6 @@ export default function AnalyticsPage() {
                     axisLine={false}
                     tickMargin={8}
                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                    // interval="preserveStartEnd" // Show more labels potentially
-                    // angle={-30} // Angle labels if too crowded
-                    // textAnchor="end"
                   />
                   <YAxis
                     tickLine={false}
@@ -453,15 +426,13 @@ export default function AnalyticsPage() {
                             axisLine={false}
                             tickMargin={8}
                             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                            domain={['auto', 'auto']} // Let Y-axis scale automatically
+                            domain={['auto', 'auto']}
                             allowDecimals={true}
                          />
                         <ChartTooltip
                            cursor={false}
                            content={<ChartTooltipContent hideLabel />}
                         />
-                         {/* Target UPH Reference Line */}
-                         {/* We draw a bar for target UPH for comparison - could also use ReferenceLine */}
                          <Bar dataKey="targetUPH" fill={CHART_COLORS.targetUPH} radius={4} name="Target UPH" />
                         <Bar dataKey="uph" fill={CHART_COLORS.uph} radius={4} name="Actual UPH"/>
                        <ChartLegend content={<ChartLegendContent />} />
@@ -475,22 +446,24 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
 
-        {/* Hourly Activity Chart */}
+        {/* Hourly Completions Chart */}
         <Card className="lg:col-span-2"> {/* Span 2 columns on large screens */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" /> Hourly Activity
+                <Clock className="h-5 w-5" /> Estimated Hourly Completions
             </CardTitle>
             <CardDescription>
-              Number of logged activities (log creation/updates) per hour for the selected day's shift.
+              Estimated documents <BookOpen className="inline h-4 w-4" /> and videos <Video className="inline h-4 w-4" /> completed per hour, assuming a constant rate based on the daily total and net work hours.
               {selectedDateForHourlyChart ? ` (${format(selectedDateForHourlyChart, 'MMM d, yyyy')})` : ''}
-              {!selectedDayLog && selectedDateForHourlyChart && ' (No log found for shift times)'}
+              {(!selectedDayLog || (selectedDayLog && selectedDayLog.hoursWorked <= 0)) && selectedDateForHourlyChart && ' (No valid log/hours for shift)'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {selectedDateForHourlyChart && selectedDayLog ? ( // Only show if date is selected AND log exists
+            {/* Show only if date is selected AND log exists AND has positive work hours */}
+            {selectedDateForHourlyChart && selectedDayLog && selectedDayLog.hoursWorked > 0 ? (
               hourlyActivityChartData.length > 0 ? (
                 <ChartContainer config={hourlyActivityChartConfig} className="h-[300px] w-full">
+                  {/* Use stacked BarChart */}
                   <BarChart data={hourlyActivityChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis
@@ -499,33 +472,36 @@ export default function AnalyticsPage() {
                       axisLine={false}
                       tickMargin={8}
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      angle={hourlyActivityChartData.length > 10 ? -45 : 0} // Angle labels if many bars
+                      angle={hourlyActivityChartData.length > 10 ? -45 : 0}
                       textAnchor={hourlyActivityChartData.length > 10 ? "end" : "middle"}
-                      interval={hourlyActivityChartData.length > 14 ? 1 : 0} // Show every label or every other
+                      interval={hourlyActivityChartData.length > 14 ? 1 : 0}
                     />
                     <YAxis
                       tickLine={false}
                       axisLine={false}
                       tickMargin={8}
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      allowDecimals={false} // Counts are integers
+                      allowDecimals={true} // Allow decimals for estimated values
                     />
                     <ChartTooltip
                       cursor={false}
+                       // Adjust content to show both docs and videos
                       content={<ChartTooltipContent hideLabel />}
                     />
-                    <Bar dataKey="count" fill={CHART_COLORS.hourlyActivity} radius={4} name="Activities" />
-                    {/* No legend needed for single series */}
+                     {/* Define Bars for documents and videos */}
+                     <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Est. Docs" />
+                     <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Est. Videos" /> {/* Top bar gets radius */}
+                    <ChartLegend content={<ChartLegendContent />} />
                   </BarChart>
                 </ChartContainer>
               ) : (
                 <div className="h-[300px] flex items-center justify-center">
-                  <p className="text-muted-foreground">No logged activity found for the shift period on {format(selectedDateForHourlyChart, 'MMM d, yyyy')}.</p>
+                  <p className="text-muted-foreground">Could not calculate hourly data for {format(selectedDateForHourlyChart, 'MMM d, yyyy')}.</p>
                 </div>
               )
             ) : (
               <div className="h-[300px] flex items-center justify-center">
-                <p className="text-muted-foreground">Please select a single day with a valid work log in the date range filter to view hourly activity.</p>
+                <p className="text-muted-foreground">Please select a single day with a valid work log (and positive net hours) in the date range filter to view estimated hourly completions.</p>
               </div>
             )}
           </CardContent>
