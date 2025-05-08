@@ -17,7 +17,12 @@ const PreviousLogTriggerSummary: React.FC<PreviousLogTriggerSummaryProps> = ({ l
   const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date;
 
   // Find the specific target associated with this log, or fallback to active if necessary
-  const displayTarget = allTargets.find(t => t.id === log.targetId) ?? allTargets.find(t => t.isActive);
+  const logTarget = allTargets.find(t => t.id === log.targetId);
+  const activeTarget = allTargets.find(t => t.isActive);
+  const displayTarget = logTarget ?? activeTarget; // Target used for calculation/display context
+
+  // Calculate Avg UPH based on the displayTarget
+  const avgUPH = displayTarget ? calculateDailyUPH(log, displayTarget) : null;
 
 
   return (
@@ -49,35 +54,30 @@ const PreviousLogTriggerSummary: React.FC<PreviousLogTriggerSummaryProps> = ({ l
                  <Video className="h-4 w-4" />
                  <span>{log.videoSessionsCompleted}</span>
              </div>
-              {/* Display Calculated UPH for each target */}
-             {allTargets && allTargets.map(target => { // Add null check for allTargets
-                 const uphForTarget = calculateDailyUPH(log, target);
-                 // Only show UPH if it's calculable and positive
-                 if (uphForTarget > 0) {
-                    return (
-                        <div key={target.id} className="flex items-center gap-1" title={`Avg UPH (${target.name})`}>
-                            <Clock className="h-4 w-4" />
-                            <span>{uphForTarget.toFixed(2)}</span>
-                            <span className="text-xs">({target.name})</span>
-                        </div>
-                    );
-                 }
-                 return null; // Don't render if UPH is not calculable
-             })}
+              {/* Display SINGLE Average UPH based on the determined target */}
+             {avgUPH !== null && avgUPH > 0 && (
+                <div className="flex items-center gap-1" title={`Avg UPH (Based on ${displayTarget?.name || 'N/A'})`}>
+                    <Clock className="h-4 w-4" />
+                    <span>{avgUPH.toFixed(2)}</span>
+                </div>
+             )}
             {/* Delete Button */}
-            <Button
-                variant="ghost"
-                size="icon"
-                className="text-destructive hover:text-destructive h-7 w-7 ml-2" // Adjust size/margin
-                onClick={(e) => {
-                    e.stopPropagation(); // Prevent accordion toggle
-                    onDelete(log.id);
-                }}
-                title="Delete This Log"
-                aria-label="Delete This Log"
-            >
-                <Trash2 className="h-4 w-4" />
-            </Button>
+            {/* Wrap Button in a div to prevent it being direct child of button-like AccordionTrigger */}
+            <div onClick={(e) => e.stopPropagation()}>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:text-destructive h-7 w-7 ml-2" // Adjust size/margin
+                    onClick={(e) => {
+                        e.stopPropagation(); // Prevent accordion toggle
+                        onDelete(log.id);
+                    }}
+                    title="Delete This Log"
+                    aria-label="Delete This Log"
+                >
+                    <Trash2 className="h-4 w-4" />
+                </Button>
+            </div>
         </div>
     </div>
   );
