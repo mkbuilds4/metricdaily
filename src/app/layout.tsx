@@ -19,7 +19,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { Home, Settings, List, History, BarChart, HelpCircle } from 'lucide-react';
+import { Home, Settings, List, History, BarChart3, HelpCircle } from 'lucide-react'; // Changed BarChart to BarChart3
 import { usePathname } from 'next/navigation'; // Import usePathname
 import { cn } from "@/lib/utils"; // Import cn utility
 import { ThemeProvider } from '@/components/ThemeProvider'; // Import ThemeProvider
@@ -86,6 +86,13 @@ export default function RootLayout({
                                     <span>Log / Targets</span>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
+                             <SidebarMenuItem>
+                                {/* Link to Analytics page */}
+                                <SidebarMenuButton href="/analytics" isActive={pathname === '/analytics'} tooltip="Analytics">
+                                    <BarChart3 /> {/* Changed icon */}
+                                    <span>Analytics</span>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
                             <SidebarMenuItem>
                                 {/* Link to Previous Logs page */}
                                 <SidebarMenuButton href="/previous-logs" isActive={pathname === '/previous-logs'} tooltip="Previous Logs">
@@ -135,3 +142,5 @@ export default function RootLayout({
     </html>
   );
 }
+
+]

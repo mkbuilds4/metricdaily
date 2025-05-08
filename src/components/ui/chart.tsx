@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -52,7 +53,9 @@ const ChartContainer = React.forwardRef<
         data-chart={chartId}
         ref={ref}
         className={cn(
-          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
+          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line]:stroke-[var(--color-border)] [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
+          // Use HSL variables for grid lines
+          "[&_.recharts-cartesian-grid_line]:stroke-border/50",
           className
         )}
         {...props}
@@ -83,6 +86,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
           .map(
             ([theme, prefix]) => `
 ${prefix} [data-chart=${id}] {
+  --color-border: hsl(var(--border));
 ${colorConfig
   .map(([key, itemConfig]) => {
     const color =
@@ -99,6 +103,7 @@ ${colorConfig
     />
   )
 }
+
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
@@ -188,7 +193,7 @@ const ChartTooltipContent = React.forwardRef<
           {payload.map((item, index) => {
             const key = `${nameKey || item.name || item.dataKey || "value"}`
             const itemConfig = getPayloadConfigFromPayload(config, item, key)
-            const indicatorColor = color || item.payload.fill || item.color
+            const indicatorColor = color || item.payload.fill || item.color || `var(--color-${key})`
 
             return (
               <div
@@ -363,3 +368,5 @@ export {
   ChartLegendContent,
   ChartStyle,
 }
+
+]

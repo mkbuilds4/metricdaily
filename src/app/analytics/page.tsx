@@ -1,0 +1,364 @@
+
+'use client';
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { getWorkLogs, getUPHTargets, getActiveUPHTarget } from '@/lib/actions';
+import type { DailyWorkLog, UPHTarget } from '@/types';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
+import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
+import { DateRange } from 'react-day-picker';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Calendar as CalendarIcon, Filter, X, Activity, TrendingUp } from 'lucide-react';
+import { cn, calculateDailyUPH } from '@/lib/utils';
+import { Separator } from '@/components/ui/separator';
+
+// Define chart colors using HSL variables from globals.css
+const CHART_COLORS = {
+  documents: 'hsl(var(--chart-1))',
+  videos: 'hsl(var(--chart-2))',
+  uph: 'hsl(var(--chart-3))',
+  targetUPH: 'hsl(var(--chart-4))',
+};
+
+const DEFAULT_DAYS_TO_SHOW = 30; // Show last 30 days by default
+
+export default function AnalyticsPage() {
+  const [workLogs, setWorkLogs] = useState<DailyWorkLog[]>([]);
+  const [targets, setTargets] = useState<UPHTarget[]>([]);
+  const [activeTarget, setActiveTarget] = useState<UPHTarget | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filterDateRange, setFilterDateRange] = useState<DateRange | undefined>(() => {
+    // Default to last 30 days
+    const endDate = endOfDay(new Date());
+    const startDate = startOfDay(subDays(endDate, DEFAULT_DAYS_TO_SHOW - 1));
+    return { from: startDate, to: endDate };
+  });
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+
+  const loadData = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    setIsLoading(true);
+    try {
+      const loadedLogs = getWorkLogs();
+      const loadedTargets = getUPHTargets();
+      const loadedActiveTarget = getActiveUPHTarget();
+
+      setWorkLogs(loadedLogs);
+      setTargets(loadedTargets);
+      setActiveTarget(loadedActiveTarget);
+      console.log('[AnalyticsPage] Data loaded:', { logs: loadedLogs.length, targets: loadedTargets.length });
+    } catch (error) {
+      console.error('[AnalyticsPage] Error loading data:', error);
+      // Add toast notification here if needed
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      loadData();
+    }
+  }, [loadData]);
+
+  // Filter logs based on selected date range
+  const filteredLogs = useMemo(() => {
+    return workLogs.filter(log => {
+      const logDate = parseISO(log.date + 'T00:00:00'); // Ensure proper date object
+      if (!isValid(logDate)) return false;
+
+      let matchesDateRange = true;
+      if (filterDateRange?.from) {
+        matchesDateRange = logDate >= startOfDay(filterDateRange.from);
+      }
+      if (filterDateRange?.to) {
+        matchesDateRange = matchesDateRange && logDate <= endOfDay(filterDateRange.to);
+      }
+      return matchesDateRange;
+    });
+  }, [workLogs, filterDateRange]);
+
+  // Prepare data for charts
+  const chartData = useMemo(() => {
+    // Sort logs by date ascending for charting trends over time
+    const sortedLogs = [...filteredLogs].sort((a, b) => a.date.localeCompare(b.date));
+
+    return sortedLogs.map(log => {
+      const logDate = parseISO(log.date);
+      // Use the target associated with the log, or fallback to active target for UPH calculation
+      const targetForLog = targets.find(t => t.id === log.targetId) ?? activeTarget;
+      const uph = targetForLog ? calculateDailyUPH(log, targetForLog) : null;
+
+      return {
+        date: format(logDate, 'MMM d'), // Format date for XAxis label
+        fullDate: log.date, // Keep original date for sorting/tooltips if needed
+        documents: log.documentsCompleted,
+        videos: log.videoSessionsCompleted,
+        uph: uph !== null && isFinite(uph) ? uph : 0, // Set to 0 if null or infinite
+        targetUPH: targetForLog?.targetUPH ?? null, // Include target UPH for reference line
+      };
+    });
+  }, [filteredLogs, targets, activeTarget]);
+
+  // Chart Configurations
+  const dailyCountsChartConfig = {
+    documents: { label: "Documents", color: CHART_COLORS.documents },
+    videos: { label: "Videos", color: CHART_COLORS.videos },
+  };
+
+  const dailyUPHChartConfig = {
+     uph: { label: "Actual UPH", color: CHART_COLORS.uph },
+     targetUPH: { label: "Target UPH", color: CHART_COLORS.targetUPH },
+  };
+
+  // Preset Date Range Handlers
+  const setPresetDateRange = (range: DateRange | undefined) => {
+      setFilterDateRange(range);
+      setDatePickerOpen(false); // Close popover after selection
+  };
+
+  const today = new Date();
+  const presetRanges = [
+    { label: "Last 7 Days", range: { from: startOfDay(subDays(today, 6)), to: endOfDay(today) } },
+    { label: "Last 30 Days", range: { from: startOfDay(subDays(today, 29)), to: endOfDay(today) } },
+    { label: "This Week", range: { from: startOfWeek(today, { weekStartsOn: 1 }), to: endOfDay(today) } },
+    { label: "Last Week", range: { from: startOfWeek(subWeeks(today, 1), { weekStartsOn: 1 }), to: endOfWeek(subWeeks(today, 1), { weekStartsOn: 1 }) } },
+    { label: "This Month", range: { from: startOfDay(new Date(today.getFullYear(), today.getMonth(), 1)), to: endOfDay(today) } },
+    { label: "Last Month", range: { from: startOfDay(new Date(today.getFullYear(), today.getMonth() - 1, 1)), to: endOfDay(new Date(today.getFullYear(), today.getMonth(), 0)) } },
+  ];
+
+   // Calculate Summary Statistics
+   const summaryStats = useMemo(() => {
+    const totalDocs = chartData.reduce((sum, d) => sum + d.documents, 0);
+    const totalVideos = chartData.reduce((sum, d) => sum + d.videos, 0);
+    const avgUPH = chartData.length > 0 ? chartData.reduce((sum, d) => sum + d.uph, 0) / chartData.length : 0;
+    const daysLogged = chartData.length;
+    return {
+      totalDocs,
+      totalVideos,
+      avgUPH: parseFloat(avgUPH.toFixed(2)),
+      daysLogged
+    };
+   }, [chartData]);
+
+  if (isLoading) {
+    return <div className="p-6 text-center text-muted-foreground">Loading analytics...</div>;
+  }
+
+  return (
+    <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
+      <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Productivity Analytics</h1>
+
+        {/* Filter Controls */}
+        <Card className="shadow-sm">
+            <CardHeader>
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                    <Filter className="h-5 w-5" /> Filter Data Range
+                </CardTitle>
+                <CardDescription>Select the time period for the analytics.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                   <PopoverTrigger asChild>
+                     <Button
+                       id="date"
+                       variant={"outline"}
+                       className={cn(
+                         "w-full sm:w-[300px] justify-start text-left font-normal h-9 text-sm", // Fixed width for popover trigger consistency
+                         !filterDateRange && "text-muted-foreground"
+                       )}
+                     >
+                       <CalendarIcon className="mr-2 h-4 w-4" />
+                       {filterDateRange?.from ? (
+                         filterDateRange.to ? (
+                           <>
+                             {format(filterDateRange.from, "LLL dd, y")} -{" "}
+                             {format(filterDateRange.to, "LLL dd, y")}
+                           </>
+                         ) : (
+                           format(filterDateRange.from, "LLL dd, y")
+                         )
+                       ) : (
+                         <span>Select Date Range</span>
+                       )}
+                     </Button>
+                   </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 flex flex-col sm:flex-row" align="start">
+                         <div className="flex flex-col p-2 border-b sm:border-r sm:border-b-0">
+                            <p className="text-xs font-semibold text-muted-foreground px-2 py-1">Presets</p>
+                            {presetRanges.map((preset) => (
+                                <Button
+                                    key={preset.label}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="justify-start text-sm font-normal h-8"
+                                    onClick={() => setPresetDateRange(preset.range)}
+                                >
+                                    {preset.label}
+                                </Button>
+                            ))}
+                            <Separator className="my-1" />
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="justify-start text-sm font-normal h-8 text-muted-foreground"
+                                onClick={() => setPresetDateRange(undefined)} // Allow clearing the range
+                            >
+                                Clear
+                            </Button>
+                        </div>
+                        <Calendar
+                           initialFocus
+                           mode="range"
+                           defaultMonth={filterDateRange?.from}
+                           selected={filterDateRange}
+                           onSelect={setPresetDateRange} // Use the same handler
+                           numberOfMonths={1}
+                           disabled={(date) => date > new Date() || date < new Date("2023-01-01")}
+                         />
+                    </PopoverContent>
+                 </Popover>
+                  {filterDateRange && (
+                    <Button variant="link" size="sm" onClick={() => setFilterDateRange(undefined)} className="p-0 h-auto text-muted-foreground hover:text-foreground">
+                        <X className="mr-1 h-3 w-3" /> Reset Range
+                    </Button>
+                  )}
+            </CardContent>
+        </Card>
+
+       {/* Summary Stats */}
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" /> Summary Statistics
+                </CardTitle>
+                 <CardDescription>
+                     Overview for the selected period ({filterDateRange?.from ? format(filterDateRange.from, 'MMM d, y') : 'Start'} - {filterDateRange?.to ? format(filterDateRange.to, 'MMM d, y') : 'End'}).
+                 </CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Total Documents</p>
+                    <p className="text-2xl font-bold">{summaryStats.totalDocs}</p>
+                </div>
+                 <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Total Videos</p>
+                    <p className="text-2xl font-bold">{summaryStats.totalVideos}</p>
+                </div>
+                 <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Average Daily UPH</p>
+                    <p className="text-2xl font-bold">{summaryStats.avgUPH > 0 ? summaryStats.avgUPH : '-'}</p>
+                </div>
+                 <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Days Logged</p>
+                    <p className="text-2xl font-bold">{summaryStats.daysLogged}</p>
+                </div>
+            </CardContent>
+        </Card>
+
+      {/* Chart Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Daily Counts Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Daily Completed Items</CardTitle>
+             <CardDescription>Documents and Video Sessions completed per day.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {chartData.length > 0 ? (
+              <ChartContainer config={dailyCountsChartConfig} className="h-[300px] w-full">
+                <LineChart
+                  data={chartData}
+                  margin={{ top: 5, right: 20, left: -10, bottom: 5 }} // Adjust margins
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))"/>
+                  <XAxis
+                    dataKey="date"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                    // interval="preserveStartEnd" // Show more labels potentially
+                    // angle={-30} // Angle labels if too crowded
+                    // textAnchor="end"
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                  />
+                   <ChartTooltip
+                     cursor={false}
+                     content={<ChartTooltipContent hideLabel indicator="line" />}
+                   />
+                  <Line type="monotone" dataKey="documents" stroke={CHART_COLORS.documents} strokeWidth={2} dot={false} name="Documents" />
+                  <Line type="monotone" dataKey="videos" stroke={CHART_COLORS.videos} strokeWidth={2} dot={false} name="Videos" />
+                   <ChartLegend content={<ChartLegendContent />} />
+                </LineChart>
+              </ChartContainer>
+            ) : (
+                 <div className="h-[300px] flex items-center justify-center">
+                    <p className="text-muted-foreground">No data available for the selected range.</p>
+                 </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Daily UPH Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Daily Average UPH</CardTitle>
+            <CardDescription>
+                Average Units Per Hour achieved each day compared to the target for that day's log.
+                ({activeTarget ? `Using "${activeTarget.name}" as fallback` : 'Requires an active target as fallback'})
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {chartData.length > 0 ? (
+                <ChartContainer config={dailyUPHChartConfig} className="h-[300px] w-full">
+                    <BarChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))"/>
+                        <XAxis
+                            dataKey="date"
+                            tickLine={false}
+                            axisLine={false}
+                            tickMargin={8}
+                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                        />
+                         <YAxis
+                            tickLine={false}
+                            axisLine={false}
+                            tickMargin={8}
+                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                            domain={['auto', 'auto']} // Let Y-axis scale automatically
+                            allowDecimals={true}
+                         />
+                        <ChartTooltip
+                           cursor={false}
+                           content={<ChartTooltipContent hideLabel />}
+                        />
+                         {/* Target UPH Reference Line */}
+                         {/* We draw a bar for target UPH for comparison - could also use ReferenceLine */}
+                         <Bar dataKey="targetUPH" fill={CHART_COLORS.targetUPH} radius={4} name="Target UPH" />
+                        <Bar dataKey="uph" fill={CHART_COLORS.uph} radius={4} name="Actual UPH"/>
+                       <ChartLegend content={<ChartLegendContent />} />
+                    </BarChart>
+                </ChartContainer>
+            ) : (
+                 <div className="h-[300px] flex items-center justify-center">
+                    <p className="text-muted-foreground">No data available for the selected range.</p>
+                 </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+]
