@@ -6,12 +6,12 @@ import type { DailyWorkLog, UPHTarget, AuditLogEntry } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
-import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, getHours, isSameDay, parse, setHours, setMinutes, setSeconds, isAfter, addDays, addHours } from 'date-fns'; // Added addDays, addHours
+import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, getHours, isSameDay, parse, setHours, setMinutes, setSeconds, isAfter, addDays, addHours } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Calendar as CalendarIcon, Filter, X, Activity, TrendingUp, Clock, BookOpen, Video } from 'lucide-react'; // Added BookOpen, Video
+import { Calendar as CalendarIcon, Filter, X, Activity, TrendingUp, Clock, BookOpen, Video } from 'lucide-react';
 import { cn, calculateDailyUPH } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 
@@ -30,7 +30,7 @@ const DEFAULT_DAYS_TO_SHOW = 30; // Show last 30 days by default
 
 export default function AnalyticsPage() {
   const [workLogs, setWorkLogs] = useState<DailyWorkLog[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]); // Keep audit logs, though not directly used for hourly completions
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [targets, setTargets] = useState<UPHTarget[]>([]);
   const [activeTarget, setActiveTarget] = useState<UPHTarget | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,12 +47,12 @@ export default function AnalyticsPage() {
     setIsLoading(true);
     try {
       const loadedLogs = getWorkLogs();
-      const loadedAuditLogs = getAuditLogs(); // Keep loading audit logs
+      const loadedAuditLogs = getAuditLogs();
       const loadedTargets = getUPHTargets();
       const loadedActiveTarget = getActiveUPHTarget();
 
       setWorkLogs(loadedLogs);
-      setAuditLogs(loadedAuditLogs);
+      setAuditLogs(loadedAuditLogs); // Now uses auditLogs
       setTargets(loadedTargets);
       setActiveTarget(loadedActiveTarget);
       console.log('[AnalyticsPage] Data loaded:', { logs: loadedLogs.length, auditLogs: loadedAuditLogs.length, targets: loadedTargets.length });
@@ -127,62 +127,125 @@ export default function AnalyticsPage() {
     });
   }, [filteredLogs, targets, activeTarget]);
 
-  // Prepare data for hourly completions chart (Approximation)
+  // Prepare data for hourly completions chart (based on audit log)
   const hourlyActivityChartData = useMemo(() => {
-    if (!selectedDateForHourlyChart || !selectedDayLog || selectedDayLog.hoursWorked <= 0) {
-      return []; // Cannot calculate if no log, no date, or zero net hours
-    }
+     if (!selectedDateForHourlyChart || !selectedDayLog || !auditLogs || auditLogs.length === 0) {
+       return []; // Cannot calculate if no log, no date, or no audit logs
+     }
 
-    const netHoursWorked = selectedDayLog.hoursWorked;
-    const avgDocsPerHour = selectedDayLog.documentsCompleted / netHoursWorked;
-    const avgVideosPerHour = selectedDayLog.videoSessionsCompleted / netHoursWorked;
+     const selectedDateStr = format(selectedDateForHourlyChart, 'yyyy-MM-dd');
+     const startOfSelectedDay = startOfDay(selectedDateForHourlyChart);
+     const endOfSelectedDay = endOfDay(selectedDateForHourlyChart);
 
-    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
-    const startMatch = selectedDayLog.startTime.match(timeRegex);
-    const endMatch = selectedDayLog.endTime.match(timeRegex);
+     // 1. Filter relevant WorkLog audit logs for the selected day
+     const relevantAuditLogs = auditLogs
+       .filter(log => {
+         if (log.entityType !== 'WorkLog') return false;
+         if (log.entityId !== selectedDayLog.id) return false; // Filter by the specific log ID for the day
+         const logTimestamp = parseISO(log.timestamp);
+         return isValid(logTimestamp) && logTimestamp >= startOfSelectedDay && logTimestamp <= endOfSelectedDay;
+       })
+       .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()); // Sort chronologically
 
-    if (!startMatch || !endMatch) {
-        console.warn('Invalid start or end time format in log for hourly chart:', selectedDayLog);
-        return [];
-    }
+      if (relevantAuditLogs.length === 0) {
+          console.log(`[AnalyticsPage] No relevant audit logs found for ${selectedDateStr}`);
+          return [];
+      }
 
-    const startHour = parseInt(startMatch[1], 10);
-    const startMinute = parseInt(startMatch[2], 10);
-    const endHour = parseInt(endMatch[1], 10);
-    const endMinute = parseInt(endMatch[2], 10);
+     // 2. Track hourly states based on newState in audit logs
+     const hourlyStates: Record<number, { documents: number; videos: number; timestamp: string }> = {};
+     for (const auditEntry of relevantAuditLogs) {
+         if (auditEntry.newState && typeof auditEntry.newState === 'object') {
+             const newState = auditEntry.newState as Partial<DailyWorkLog>;
+             // Check if newState contains count information
+             if (newState.documentsCompleted !== undefined || newState.videoSessionsCompleted !== undefined) {
+                 const timestamp = parseISO(auditEntry.timestamp);
+                 if (isValid(timestamp)) {
+                     const hour = getHours(timestamp);
+                     // Update the state for this hour with the latest known counts from this log entry
+                     hourlyStates[hour] = {
+                         // Use count from newState if present, otherwise fallback to previous state in this hour or 0
+                         documents: newState.documentsCompleted ?? hourlyStates[hour]?.documents ?? 0,
+                         videos: newState.videoSessionsCompleted ?? hourlyStates[hour]?.videos ?? 0,
+                         timestamp: auditEntry.timestamp,
+                     };
+                 }
+             }
+         }
+     }
 
-    const shiftStartDate = setMinutes(setHours(selectedDateForHourlyChart, startHour), startMinute);
-    let shiftEndDate = setMinutes(setHours(selectedDateForHourlyChart, endHour), endMinute);
-    if (shiftEndDate <= shiftStartDate) {
-      shiftEndDate = addDays(shiftEndDate, 1);
-    }
+     // 3. Calculate hourly deltas
+     const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+     const startMatch = selectedDayLog.startTime.match(timeRegex);
+     const endMatch = selectedDayLog.endTime.match(timeRegex);
 
-    const hourlyData: Record<number, { documents: number; videos: number }> = {};
+     if (!startMatch || !endMatch) {
+       console.warn('Invalid start or end time format in log for hourly chart:', selectedDayLog);
+       return [];
+     }
 
-    let currentHourMarker = shiftStartDate;
-    // Iterate through each hour *within* the gross shift duration
-    while (currentHourMarker < shiftEndDate) {
-        const hour = getHours(currentHourMarker);
-        hourlyData[hour] = { documents: avgDocsPerHour, videos: avgVideosPerHour };
-        currentHourMarker = addHours(currentHourMarker, 1);
-        // Handle edge case where shift ends exactly on the hour
-        if (getHours(currentHourMarker) === endHour && currentHourMarker <= shiftEndDate) {
-            hourlyData[endHour] = { documents: avgDocsPerHour, videos: avgVideosPerHour };
+     const startHour = parseInt(startMatch[1], 10);
+     const endHour = parseInt(endMatch[1], 10);
+
+     const hourlyDeltas: Record<number, { documents: number; videos: number }> = {};
+     let lastKnownCounts = { documents: 0, videos: 0 };
+
+     // Find initial state from the first relevant log if available
+       const firstLogState = relevantAuditLogs[0]?.previousState as Partial<DailyWorkLog> ?? relevantAuditLogs[0]?.newState as Partial<DailyWorkLog>;
+       if (firstLogState) {
+           lastKnownCounts = {
+               documents: firstLogState.documentsCompleted ?? 0,
+               videos: firstLogState.videoSessionsCompleted ?? 0,
+           };
+            // Assign initial counts to the start hour if they occurred before or during the start hour
+            const firstLogTimestamp = parseISO(relevantAuditLogs[0].timestamp);
+            if (isValid(firstLogTimestamp) && getHours(firstLogTimestamp) <= startHour) {
+                const initialHourState = hourlyStates[startHour] ?? lastKnownCounts;
+                 hourlyDeltas[startHour] = {
+                    documents: Math.max(0, initialHourState.documents - 0), // Delta from 0
+                    videos: Math.max(0, initialHourState.videos - 0),     // Delta from 0
+                };
+                lastKnownCounts = initialHourState; // Update last known counts
+            }
+       }
+
+
+     // Iterate through hours of the shift
+     for (let hour = startHour; hour <= endHour; hour++) {
+        // Skip initializing if already done for the start hour
+        if (hour === startHour && hourlyDeltas[startHour]) {
+             continue;
         }
-    }
 
-    // Format for chart
-    return Object.entries(hourlyData)
-        .map(([hour, counts]) => ({
-            hour: parseInt(hour, 10),
-            hourLabel: `${String(hour).padStart(2, '0')}:00`,
-            // Round approximated values for display
-            documents: parseFloat(counts.documents.toFixed(2)),
-            videos: parseFloat(counts.videos.toFixed(2)),
-        }))
-        .sort((a, b) => a.hour - b.hour);
+       const currentHourState = hourlyStates[hour];
+       // If no update occurred in this hour, the counts remain the same as the last known counts
+       const currentHourCounts = currentHourState
+         ? { documents: currentHourState.documents, videos: currentHourState.videos }
+         : lastKnownCounts;
 
-  }, [selectedDayLog, selectedDateForHourlyChart]);
+       // Calculate the difference from the last known state
+       const deltaDocs = Math.max(0, currentHourCounts.documents - lastKnownCounts.documents);
+       const deltaVideos = Math.max(0, currentHourCounts.videos - lastKnownCounts.videos);
+
+       hourlyDeltas[hour] = { documents: deltaDocs, videos: deltaVideos };
+
+       // Update last known counts for the next iteration
+       lastKnownCounts = currentHourCounts;
+     }
+
+     // 4. Format for Chart
+     return Object.entries(hourlyDeltas)
+       .map(([hour, counts]) => ({
+         hour: parseInt(hour, 10),
+         hourLabel: `${String(hour).padStart(2, '0')}:00`,
+         documents: counts.documents,
+         videos: counts.videos,
+       }))
+       .sort((a, b) => a.hour - b.hour)
+       .filter(item => item.documents > 0 || item.videos > 0); // Optionally filter out hours with zero activity
+
+
+   }, [selectedDayLog, selectedDateForHourlyChart, auditLogs]);
 
 
   // Chart Configurations
@@ -198,8 +261,8 @@ export default function AnalyticsPage() {
 
    // Updated config for hourly chart
    const hourlyActivityChartConfig = {
-     documents: { label: "Est. Docs/Hr", color: CHART_COLORS.hourlyDocuments },
-     videos: { label: "Est. Videos/Hr", color: CHART_COLORS.hourlyVideos },
+     documents: { label: "Docs/Hr", color: CHART_COLORS.hourlyDocuments }, // Shortened label
+     videos: { label: "Videos/Hr", color: CHART_COLORS.hourlyVideos }, // Shortened label
    };
 
   // Preset Date Range Handlers
@@ -450,17 +513,16 @@ export default function AnalyticsPage() {
         <Card className="lg:col-span-2"> {/* Span 2 columns on large screens */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" /> Estimated Hourly Completions
+                <Clock className="h-5 w-5" /> Hourly Completions (from Audit Log)
             </CardTitle>
             <CardDescription>
-              Estimated documents <BookOpen className="inline h-4 w-4" /> and videos <Video className="inline h-4 w-4" /> completed per hour, assuming a constant rate based on the daily total and net work hours.
+              Actual documents <BookOpen className="inline h-4 w-4" /> and videos <Video className="inline h-4 w-4" /> completed per hour, based on logged updates in the audit trail.
               {selectedDateForHourlyChart ? ` (${format(selectedDateForHourlyChart, 'MMM d, yyyy')})` : ''}
-              {(!selectedDayLog || (selectedDayLog && selectedDayLog.hoursWorked <= 0)) && selectedDateForHourlyChart && ' (No valid log/hours for shift)'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Show only if date is selected AND log exists AND has positive work hours */}
-            {selectedDateForHourlyChart && selectedDayLog && selectedDayLog.hoursWorked > 0 ? (
+            {/* Show only if date is selected */}
+            {selectedDateForHourlyChart ? (
               hourlyActivityChartData.length > 0 ? (
                 <ChartContainer config={hourlyActivityChartConfig} className="h-[300px] w-full">
                   {/* Use stacked BarChart */}
@@ -481,7 +543,7 @@ export default function AnalyticsPage() {
                       axisLine={false}
                       tickMargin={8}
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      allowDecimals={true} // Allow decimals for estimated values
+                      allowDecimals={false} // Show whole numbers for actual counts
                     />
                     <ChartTooltip
                       cursor={false}
@@ -489,19 +551,19 @@ export default function AnalyticsPage() {
                       content={<ChartTooltipContent hideLabel />}
                     />
                      {/* Define Bars for documents and videos */}
-                     <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Est. Docs" />
-                     <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Est. Videos" /> {/* Top bar gets radius */}
+                     <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs" />
+                     <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos" /> {/* Top bar gets radius */}
                     <ChartLegend content={<ChartLegendContent />} />
                   </BarChart>
                 </ChartContainer>
               ) : (
                 <div className="h-[300px] flex items-center justify-center">
-                  <p className="text-muted-foreground">Could not calculate hourly data for {format(selectedDateForHourlyChart, 'MMM d, yyyy')}.</p>
+                  <p className="text-muted-foreground">No completion updates found in audit log for {format(selectedDateForHourlyChart, 'MMM d, yyyy')}.</p>
                 </div>
               )
             ) : (
               <div className="h-[300px] flex items-center justify-center">
-                <p className="text-muted-foreground">Please select a single day with a valid work log (and positive net hours) in the date range filter to view estimated hourly completions.</p>
+                <p className="text-muted-foreground">Please select a single day in the date range filter to view hourly completions.</p>
               </div>
             )}
           </CardContent>
