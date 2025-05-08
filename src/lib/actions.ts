@@ -84,11 +84,16 @@ export function addAuditLog(
 
 // --- Work Log Actions ---
 
+/**
+ * Retrieves all work logs from local storage, sorted by date descending.
+ */
 export function getWorkLogs(): DailyWorkLog[] {
   const logs = getFromLocalStorage<DailyWorkLog[]>(WORK_LOGS_KEY, []);
+  // Sort by date descending AFTER retrieving all logs
   logs.sort((a, b) => b.date.localeCompare(a.date));
   return logs;
 }
+
 
 export function saveWorkLog(
   logData: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { id?: string; hoursWorked?: number; }
@@ -120,7 +125,7 @@ export function saveWorkLog(
        }
   }
 
-  const logs = getWorkLogs();
+  const logs = getWorkLogs(); // Retrieve all logs
   let savedLog: DailyWorkLog;
   let operation: 'CREATE_WORK_LOG' | 'UPDATE_WORK_LOG' | 'UPDATE_WORK_LOG_GOAL_MET' = 'CREATE_WORK_LOG';
   let previousState: DailyWorkLog | null = null;
@@ -187,7 +192,7 @@ export function saveWorkLog(
      }
   }
 
-  logs.sort((a, b) => b.date.localeCompare(a.date));
+  logs.sort((a, b) => b.date.localeCompare(a.date)); // Keep sorted
   saveToLocalStorage(WORK_LOGS_KEY, logs);
   saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false);
 
@@ -515,7 +520,7 @@ export function loadSampleData(): boolean {
           saveDefaultSettings({
             defaultStartTime: '14:00',
             defaultEndTime: '22:30',
-            defaultBreakMinutes: 65, // Use default from previous changes
+            defaultBreakMinutes: 0, // Start with 0 break
             defaultTrainingMinutes: 0, // Start with 0 training
           });
           addAuditLog('UPDATE_SETTINGS', 'Settings', 'Saved initial default settings during sample data load.');
@@ -541,20 +546,42 @@ export function clearAllData(): void {
     addAuditLog('SYSTEM_CLEAR_ALL_DATA', 'System', 'Cleared all work logs, UPH targets, and settings.');
 }
 
+/**
+ * Archives today's log by removing it from the main work log list.
+ * This effectively moves it to "previous logs" implicitly.
+ */
 export function archiveTodayLog(): DailyWorkLog | null {
     if (typeof window === 'undefined') return null;
-    const todayDateStr = formatDateISO(new Date());
-    const logs = getWorkLogs();
-    const todayLog = logs.find(log => log.date === todayDateStr);
 
-    if (todayLog) {
-        // No actual data change, just logging the event conceptually
-        addAuditLog('SYSTEM_ARCHIVE_TODAY_LOG', 'WorkLog', `Today's log for ${todayLog.date} finalized (End Day clicked).`, todayLog.id, todayLog, todayLog);
-        return todayLog; // Return the log that was "archived"
+    const todayDateStr = formatDateISO(new Date());
+    let allLogs = getWorkLogs(); // Get all logs
+    const todayLogIndex = allLogs.findIndex(log => log.date === todayDateStr);
+
+    if (todayLogIndex > -1) {
+        const logToArchive = { ...allLogs[todayLogIndex] }; // Copy the log before removing
+
+        // Remove the log from the array
+        allLogs.splice(todayLogIndex, 1);
+
+        // Save the updated array (without today's log)
+        saveToLocalStorage(WORK_LOGS_KEY, allLogs);
+        saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Indicate real data might still exist
+
+        addAuditLog(
+            'SYSTEM_ARCHIVE_TODAY_LOG',
+            'WorkLog',
+            `Finalized log for ${logToArchive.date} (End Day clicked). It will now appear in Previous Logs.`,
+            logToArchive.id,
+            logToArchive, // Log the full archived log as previous state
+            null // Log null as new state, signifying removal from active logs
+        );
+        return logToArchive; // Return the log that was archived
+    } else {
+        addAuditLog('SYSTEM_ARCHIVE_TODAY_LOG', 'System', `Attempted to finalize today's log, but no log found for ${todayDateStr}.`);
+        return null; // No log found for today
     }
-    addAuditLog('SYSTEM_ARCHIVE_TODAY_LOG', 'System', `Attempted to finalize today's log, but no log found for ${todayDateStr}.`);
-    return null;
 }
+
 
 // --- User Settings Actions ---
 
@@ -566,7 +593,7 @@ export function getDefaultSettings(): UserSettings {
   const defaultSettings: UserSettings = {
     defaultStartTime: '14:00',
     defaultEndTime: '22:30',
-    defaultBreakMinutes: 65, // Updated default
+    defaultBreakMinutes: 0, // Default break to 0
     defaultTrainingMinutes: 0, // Default training to 0
   };
   return getFromLocalStorage<UserSettings>(SETTINGS_KEY, defaultSettings);
@@ -620,3 +647,6 @@ export function saveDefaultSettings(settings: UserSettings): UserSettings {
 }
 
 
+
+
+    

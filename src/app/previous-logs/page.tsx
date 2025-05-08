@@ -59,7 +59,7 @@ export default function PreviousLogsPage() {
     console.log('[PreviousLogsPage] Loading data...');
     setIsLoading(true);
     try {
-      const loadedLogs = getWorkLogs();
+      const loadedLogs = getWorkLogs(); // getWorkLogs now returns all logs
       const loadedTargets = getUPHTargets();
       setAllLogs(loadedLogs); // Store all logs initially
       setUphTargets(loadedTargets);
@@ -102,9 +102,9 @@ export default function PreviousLogsPage() {
 
   // Filtering Logic
   const filteredLogs = useMemo(() => {
-    const todayDateStr = formatDateISO(new Date());
+    // Remove the explicit filtering of today's date
     return allLogs.filter(log => {
-        if (log.date === todayDateStr) return false; // Exclude today's log
+        // Removed: if (log.date === todayDateStr) return false;
 
         const searchTerm = filterTerm.toLowerCase();
         const logTimestamp = parseISO(log.date + 'T00:00:00'); // Ensure time for correct comparison
@@ -578,5 +578,7 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
+
+    
 
     
