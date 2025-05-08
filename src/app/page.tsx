@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link'; // Import Link
 import ProductivityDashboard from '@/components/DashboardDisplay';
 import WeeklyAverages from '@/components/WeeklyAverages';
@@ -20,7 +20,7 @@ import {
   getDefaultSettings,
   isSampleDataLoaded, // Import check for sample data
 } from '@/lib/actions'; // Using client-side actions
-import type { DailyWorkLog, UPHTarget } from '@/types';
+import type { DailyWorkLog, UPHTarget, UserSettings } from '@/types';
 import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -117,7 +117,7 @@ export default function Home() {
   }, [workLogs, isClient]);
 
   // --- Action Handlers ---
-  const handleSaveWorkLog = useCallback((logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked?: number }) => {
+  const handleSaveWorkLog = useCallback((logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked?: number; goalMetTimes?: Record<string, string> }) => {
     if (!isClient) return {} as DailyWorkLog;
     try {
         // The saveWorkLog itself will now handle detailed audit logging
@@ -224,7 +224,7 @@ export default function Home() {
 
       // Construct partial log ensuring all necessary fields are present for saveWorkLog
       // *** Include BOTH fields in the partial update ***
-      const updatedLogPartial: Partial<DailyWorkLog> & { id: string; date: string; startTime: string; endTime: string; hoursWorked: number; } = {
+      const updatedLogPartial: Partial<DailyWorkLog> & { id: string; date: string; startTime: string; endTime: string; hoursWorked: number; goalMetTimes?: Record<string, string> } = {
           id: todayLog.id,
           date: todayLog.date,
           startTime: todayLog.startTime,
@@ -340,14 +340,14 @@ export default function Home() {
     const defaultStartTime = userSettings.defaultStartTime || '14:00';
     const defaultEndTime = userSettings.defaultEndTime || '22:30';
     // Start with 0 break/training minutes for a new day
-    const defaultBreakMinutes = userSettings.defaultBreakMinutes ?? 0;
-    const defaultTrainingMinutes = userSettings.defaultTrainingMinutes ?? 0;
-    const totalNonWorkMinutes = defaultBreakMinutes + defaultTrainingMinutes;
+    const defaultBreakMinutes = 0; // Start day with 0 break
+    const defaultTrainingMinutes = 0; // Start day with 0 training
+    const totalNonWorkMinutes = defaultBreakMinutes + defaultTrainingMinutes; // Should be 0
 
     // Calculate hours based on fetched or fallback defaults
     const defaultHoursWorked = calculateHoursWorked(todayDateStr, defaultStartTime, defaultEndTime, totalNonWorkMinutes);
 
-    const newLog: Omit<DailyWorkLog, 'id'> & { hoursWorked: number } = {
+    const newLog: Omit<DailyWorkLog, 'id'> & { hoursWorked: number; goalMetTimes?: Record<string, string> } = {
       date: todayDateStr,
       startTime: defaultStartTime,
       endTime: defaultEndTime,
@@ -365,7 +365,7 @@ export default function Home() {
       handleSaveWorkLog(newLog); // saveWorkLog will log as CREATE_WORK_LOG
       toast({
         title: "New Day Started",
-        description: `Work log for ${todayDateStr} created with default times. Break/Training starts at ${defaultBreakMinutes}/${defaultTrainingMinutes} mins.`,
+        description: `Work log for ${todayDateStr} created with default times.`,
       });
     } catch (error) {
       // Error handling is within handleSaveWorkLog
@@ -552,7 +552,7 @@ export default function Home() {
 
                 // Construct the payload for saving
                 // Important: ensure all required fields for saveWorkLog are included
-                 const payloadToSave: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number } = {
+                 const payloadToSave: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number; goalMetTimes?: Record<string, string> } = {
                     id: todayLog.id, // Pass the ID for update
                     date: todayLog.date,
                     startTime: todayLog.startTime,
@@ -590,7 +590,8 @@ export default function Home() {
             return prevLogs; // No log for today, return previous state
         }
     });
-  }, [isClient, toast]); // Removed handleSaveWorkLog from dependencies
+  // Removed handleSaveWorkLog from dependencies as it caused issues, relies on closure now
+  }, [isClient, toast]); // Removed handleSaveWorkLog, added toast
 
 
   const todayLog = workLogs.find(log => log.date === formatDateISO(new Date())) || null;
@@ -807,5 +808,3 @@ export default function Home() {
     </div>
   );
 }
-
-
