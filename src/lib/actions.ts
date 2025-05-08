@@ -1,5 +1,3 @@
-
-
 // src/lib/actions.ts
 // Client-side actions interacting with localStorage.
 
@@ -11,6 +9,7 @@ const WORK_LOGS_KEY = 'workLogs';
 const UPH_TARGETS_KEY = 'uphTargets';
 const AUDIT_LOGS_KEY = 'auditLogs';
 const SETTINGS_KEY = 'userSettings'; // Key for storing user settings
+const SAMPLE_DATA_LOADED_KEY = 'sampleDataLoaded'; // Key to track if sample data is active
 
 // --- Local Storage Helpers ---
 
@@ -197,6 +196,7 @@ export function saveWorkLog(
   // Sort and save
   logs.sort((a, b) => b.date.localeCompare(a.date));
   saveToLocalStorage(WORK_LOGS_KEY, logs);
+  saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Mark that real data exists
 
   // Generate audit log details if not already set for goal met
   if (!details) {
@@ -231,6 +231,7 @@ export function deleteWorkLog(id: string): void {
     if (logToDelete) {
         logs = logs.filter(log => log.id !== id);
         saveToLocalStorage(WORK_LOGS_KEY, logs);
+        saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Mark that real data exists
         addAuditLog(
           'DELETE_WORK_LOG',
           'WorkLog',
@@ -267,6 +268,7 @@ export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): UP
 
   targets.push(newTarget);
   saveToLocalStorage(UPH_TARGETS_KEY, targets);
+  saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Mark that real data exists
   addAuditLog(
     'CREATE_UPH_TARGET',
     'UPHTarget',
@@ -293,6 +295,7 @@ export function updateUPHTarget(targetData: UPHTarget): UPHTarget {
     previousState = { ...targets[index] };
     targets[index] = targetData; // Replace the entire target object
     saveToLocalStorage(UPH_TARGETS_KEY, targets);
+    saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Mark that real data exists
 
     // Generate details for audit log
     const changes: string[] = [];
@@ -325,6 +328,7 @@ export function deleteUPHTarget(id: string): void {
 
   targets = targets.filter((t) => t.id !== id);
   saveToLocalStorage(UPH_TARGETS_KEY, targets);
+  saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Mark that real data exists
   addAuditLog(
     'DELETE_UPH_TARGET',
     'UPHTarget',
@@ -355,6 +359,7 @@ export function setActiveUPHTarget(id: string): UPHTarget {
   if (!activatedTarget) throw new Error(`Target with ID ${id} not found.`);
 
   saveToLocalStorage(UPH_TARGETS_KEY, updatedTargets);
+  saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Mark that real data exists
   addAuditLog(
     'SET_ACTIVE_UPH_TARGET',
     'UPHTarget',
@@ -412,6 +417,7 @@ export function duplicateUPHTarget(id: string): UPHTarget {
 
   targets.push(newTarget);
   saveToLocalStorage(UPH_TARGETS_KEY, targets);
+  saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Mark that real data exists
   addAuditLog(
     'DUPLICATE_UPH_TARGET', // Changed action type
     'UPHTarget',
@@ -439,6 +445,7 @@ export function addBreakTimeToLog(logId: string, breakMinutes: number): DailyWor
 
   logs[logIndex] = updatedLog;
   saveToLocalStorage(WORK_LOGS_KEY, logs);
+  saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Mark that real data exists
 
   addAuditLog(
     'UPDATE_WORK_LOG_BREAK',
@@ -446,7 +453,7 @@ export function addBreakTimeToLog(logId: string, breakMinutes: number): DailyWor
     `Added ${breakMinutes}m break to log for ${updatedLog.date}. Total break: ${updatedLog.breakDurationMinutes}m.`,
     updatedLog.id,
     { breakDurationMinutes: originalLog.breakDurationMinutes, hoursWorked: originalLog.hoursWorked },
-    { breakDurationMinutes: updatedLog.breakDurationMinutes, hoursWorked: updatedLog.hoursWorked }
+    { breakDurationMinutes: updatedLog.breakDurationMinutes, hoursWorked: originalLog.hoursWorked }
   );
   return updatedLog;
 }
@@ -465,6 +472,7 @@ export function addTrainingTimeToLog(logId: string, trainingMinutes: number): Da
 
   logs[logIndex] = updatedLog;
   saveToLocalStorage(WORK_LOGS_KEY, logs);
+  saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Mark that real data exists
 
   addAuditLog(
     'UPDATE_WORK_LOG_TRAINING',
@@ -472,12 +480,18 @@ export function addTrainingTimeToLog(logId: string, trainingMinutes: number): Da
     `Added ${trainingMinutes}m training to log for ${updatedLog.date}. Total training: ${updatedLog.trainingDurationMinutes}m.`,
     updatedLog.id,
     { trainingDurationMinutes: originalLog.trainingDurationMinutes || 0, hoursWorked: originalLog.hoursWorked },
-    { trainingDurationMinutes: updatedLog.trainingDurationMinutes, hoursWorked: updatedLog.hoursWorked }
+    { trainingDurationMinutes: updatedLog.trainingDurationMinutes, hoursWorked: originalLog.hoursWorked }
   );
   return updatedLog;
 }
 
 // --- System Data Actions ---
+
+/** Checks if sample data has been loaded */
+export function isSampleDataLoaded(): boolean {
+    return getFromLocalStorage<boolean>(SAMPLE_DATA_LOADED_KEY, false);
+}
+
 
 export function loadSampleData(): boolean {
     const currentLogs = getWorkLogs();
@@ -503,8 +517,11 @@ export function loadSampleData(): boolean {
 
         saveToLocalStorage(WORK_LOGS_KEY, processedLogs);
         saveToLocalStorage(UPH_TARGETS_KEY, processedTargets);
+        saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, true); // Set sample data flag
+
         // Save default settings if none exist when loading sample data
-        if (!getDefaultSettings()) {
+        const currentSettings = getFromLocalStorage<UserSettings | null>(SETTINGS_KEY, null);
+        if (!currentSettings || Object.keys(currentSettings).length === 0) {
           saveDefaultSettings({
             defaultStartTime: '14:00',
             defaultEndTime: '22:30',
@@ -528,6 +545,7 @@ export function clearAllData(): void {
     saveToLocalStorage(WORK_LOGS_KEY, []);
     saveToLocalStorage(UPH_TARGETS_KEY, []);
     saveToLocalStorage(SETTINGS_KEY, {}); // Clear settings as well
+    saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Reset sample data flag
     // Keep audit logs for now, could add an option to clear them too
     // saveToLocalStorage(AUDIT_LOGS_KEY, []);
     addAuditLog('SYSTEM_CLEAR_ALL_DATA', 'System', 'Cleared all work logs, UPH targets, and settings.');
@@ -588,6 +606,7 @@ export function saveDefaultSettings(settings: UserSettings): UserSettings {
 
   const previousSettings = getDefaultSettings();
   saveToLocalStorage(SETTINGS_KEY, settings);
+  saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Mark that real data exists
   addAuditLog(
     'UPDATE_SETTINGS',
     'Settings',
@@ -598,4 +617,3 @@ export function saveDefaultSettings(settings: UserSettings): UserSettings {
   );
   return settings;
 }
-

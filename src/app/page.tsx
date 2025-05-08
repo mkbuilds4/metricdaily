@@ -16,7 +16,8 @@ import {
   addBreakTimeToLog,
   addTrainingTimeToLog,
   archiveTodayLog,
-  getDefaultSettings, // Import function to get default settings
+  getDefaultSettings,
+  isSampleDataLoaded, // Import check for sample data
 } from '@/lib/actions'; // Using client-side actions
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
@@ -24,7 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain, Edit3, HelpCircle, Archive } from 'lucide-react';
+import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain, Edit3, HelpCircle, Archive, RefreshCcw } from 'lucide-react'; // Added RefreshCcw
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -49,6 +50,7 @@ export default function Home() {
   const [docInputValue, setDocInputValue] = useState<string>('');
   const [videoInputValue, setVideoInputValue] = useState<string>('');
   const [hasInitialData, setHasInitialData] = useState(false);
+  const [sampleDataActive, setSampleDataActive] = useState(false); // State to track if sample data is loaded
   const { toast } = useToast();
 
   // --- Data Loading ---
@@ -63,16 +65,18 @@ export default function Home() {
       const loadedLogs = getWorkLogs();
       const loadedTargets = getUPHTargets();
       const loadedActiveTarget = getActiveUPHTarget();
+      const isSampleLoaded = isSampleDataLoaded(); // Check if sample data flag is set
 
       setWorkLogs(loadedLogs);
       setUphTargets(loadedTargets);
       setActiveTarget(loadedActiveTarget);
       setHasInitialData(loadedLogs.length > 0 || loadedTargets.length > 0);
+      setSampleDataActive(isSampleLoaded); // Update sample data state
 
       const today = loadedLogs.find(log => log.date === formatDateISO(new Date()));
       setDocInputValue(today?.documentsCompleted?.toString() ?? '');
       setVideoInputValue(today?.videoSessionsCompleted?.toString() ?? '');
-      console.log('[Home Page] Data loaded. Active target:', loadedActiveTarget?.name);
+      console.log('[Home Page] Data loaded. Active target:', loadedActiveTarget?.name, 'Sample Data Loaded:', isSampleLoaded);
 
     } catch (error) {
       console.error('[Home] Error loading data:', error);
@@ -82,6 +86,7 @@ export default function Home() {
         description: "Could not load work logs or targets from local storage.",
       });
       setHasInitialData(false);
+      setSampleDataActive(false); // Assume no sample data on error
     } finally {
       if (showLoadingIndicator) {
         setIsLoading(false);
@@ -125,6 +130,7 @@ export default function Home() {
         });
 
         setHasInitialData(true); // Assume data exists after save
+        setSampleDataActive(false); // Any save operation clears sample data status
         // Toast moved to the specific actions calling this handler for better context
         return savedLog; // Return the saved log
     } catch (error) {
@@ -254,17 +260,34 @@ export default function Home() {
     }
   };
 
-  const handleClearAllData = () => {
-     if (typeof window === 'undefined') return;
+   // Handler for the "Clear Sample Data & Start Fresh" button
+  const handleClearSampleAndStart = () => {
+    if (typeof window === 'undefined') return;
     try {
-      clearAllData(); // This action now handles its own audit log
+      clearAllData(); // Clears logs, targets, settings, and the sample data flag
       toast({
         title: "Data Cleared",
-        description: "All work logs and targets have been removed.",
+        description: "Sample data removed. Starting fresh!",
       });
-      loadData(); // Reload data after clearing
+      // Immediately try to start a new day after clearing
+      // Note: handleStartNewDay depends on having an active target.
+      // Since clearAllData removes targets, we need to guide the user.
+      // It's better to reload and let the "No Active Target" state guide them.
+      loadData(); // Reload to show the initial state after clearing
+
+      // Instead of auto-starting, prompt user:
+      // setTimeout(() => { // Delay slightly for UI update
+      //   toast({
+      //     title: "Next Step",
+      //     description: "Please go to 'Log / Targets' to set up your first UPH target.",
+      //     duration: 5000,
+      //   });
+      // }, 500);
+       // Or directly navigate, though letting the user control is better UX
+       // router.push('/log-input');
+
     } catch (error) {
-      console.error('[Home] Error clearing data:', error);
+      console.error('[Home] Error clearing sample data:', error);
       toast({
         variant: "destructive",
         title: "Clear Data Error",
@@ -273,10 +296,12 @@ export default function Home() {
     }
   };
 
+
   // --- Start/End Day Handlers ---
   const handleStartNewDay = useCallback(() => {
     if (typeof window === 'undefined') return;
-    if (!activeTarget) {
+    const activeTargetCheck = getActiveUPHTarget(); // Re-fetch active target state directly
+    if (!activeTargetCheck) {
       toast({
         variant: "destructive",
         title: "Cannot Start New Day",
@@ -307,7 +332,7 @@ export default function Home() {
       hoursWorked: defaultHoursWorked,
       documentsCompleted: 0,
       videoSessionsCompleted: 0,
-      targetId: activeTarget.id,
+      targetId: activeTargetCheck.id, // Use the fetched active target ID
       notes: 'New day started from dashboard.',
       goalMetTimes: {}, // Initialize empty goal met times
     };
@@ -321,7 +346,7 @@ export default function Home() {
     } catch (error) {
       // Error handling is within handleSaveWorkLog
     }
-  }, [activeTarget, handleSaveWorkLog, toast]);
+  }, [handleSaveWorkLog, toast]);
 
   const handleEndDay = useCallback(() => {
      if (typeof window === 'undefined') return;
@@ -479,31 +504,46 @@ export default function Home() {
   const handleGoalMet = useCallback((targetId: string, metAt: Date) => {
      if (typeof window === 'undefined') return;
      console.log(`[Home] Received goal met notification for target ${targetId} at ${metAt.toISOString()}`);
-     const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
+     // Use a functional update for setWorkLogs to ensure we're working with the latest state
+    setWorkLogs(prevLogs => {
+        const todayLog = prevLogs.find(log => log.date === formatDateISO(new Date()));
 
-     if (todayLog && !(todayLog.goalMetTimes && todayLog.goalMetTimes[targetId])) {
-        console.log(`[Home] Persisting goal met time for target ${targetId}...`);
-        const newGoalMetTimes = { ...(todayLog.goalMetTimes || {}), [targetId]: metAt.toISOString() };
+        if (todayLog && !(todayLog.goalMetTimes && todayLog.goalMetTimes[targetId])) {
+            console.log(`[Home] Persisting goal met time for target ${targetId}...`);
+            const newGoalMetTimes = { ...(todayLog.goalMetTimes || {}), [targetId]: metAt.toISOString() };
 
-        // Create payload for saving, ensuring all necessary fields are present
-         const payloadToSave: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked?: number } = {
-             ...todayLog, // Spread existing data
-             goalMetTimes: newGoalMetTimes, // Add the new met time
-             hoursWorked: todayLog.hoursWorked, // Pass existing hoursWorked
-         };
+            const payloadToSave: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked?: number } = {
+                ...todayLog,
+                goalMetTimes: newGoalMetTimes,
+                hoursWorked: todayLog.hoursWorked,
+            };
 
-        try {
-            handleSaveWorkLog(payloadToSave); // This will update state via setWorkLogs
-            // Toast can be added here or kept in TargetMetricsDisplay if preferred
-            // toast({ title: "Goal Met!", description: `Target goal met time recorded for target ID: ${targetId}.` });
-        } catch (error) {
-            // Error is handled within handleSaveWorkLog
-             console.error(`[Home] Error saving goal met time for target ${targetId}:`, error);
+            try {
+                // Call saveWorkLog (which is synchronous for localStorage)
+                // NOTE: This saveWorkLog updates localStorage but doesn't directly cause the state update here.
+                // The state update happens via the return value of this functional update.
+                const savedLog = saveWorkLog(payloadToSave);
+
+                // Update the log within the current state array
+                const index = prevLogs.findIndex(l => l.id === savedLog.id);
+                if (index > -1) {
+                    const updatedLogs = [...prevLogs];
+                    updatedLogs[index] = savedLog; // Use the log returned by saveWorkLog
+                    return updatedLogs.sort((a, b) => b.date.localeCompare(a.date)); // Return the updated, sorted array
+                }
+                // If somehow the log wasn't found by ID, return previous state unchanged
+                return prevLogs;
+            } catch (error) {
+                console.error(`[Home] Error saving goal met time for target ${targetId}:`, error);
+                // Toast handled in saveWorkLog
+                return prevLogs; // Return previous state on error
+            }
+        } else {
+            console.log(`[Home] Goal met time already recorded or no log found for target ${targetId}.`);
+            return prevLogs; // Return previous state if no update needed
         }
-     } else {
-          console.log(`[Home] Goal met time already recorded or no log found for target ${targetId}.`);
-     }
-  }, [workLogs, handleSaveWorkLog]); // Depends on workLogs and handleSaveWorkLog
+    });
+  }, [toast]); // Removed handleSaveWorkLog from dependencies as it's called internally now
 
 
   const todayLog = workLogs.find(log => log.date === formatDateISO(new Date())) || null;
@@ -556,35 +596,36 @@ export default function Home() {
     <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 md:mb-8">
             <h1 className="text-3xl md:text-4xl font-bold text-center sm:text-left">Daily Dashboard</h1>
-            <div className="flex items-center gap-2">
-                {todayLog && (
-                    <Button onClick={handleEndDay} variant="outline" size="sm" disabled={isLoading}>
-                        <Archive className="mr-2 h-4 w-4" /> End Today&apos;s Log
-                    </Button>
-                )}
+             {/* Conditionally render "Clear Sample Data" button */}
+             {sampleDataActive && (
                 <AlertDialog>
                     <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm">
-                            <Trash2 className="mr-2 h-4 w-4" /> Clear All My Data
+                        <Button variant="outline">
+                            <RefreshCcw className="mr-2 h-4 w-4" /> Clear Sample Data &amp; Start Fresh
                         </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                         <AlertDialogHeader>
-                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete all your
-                                saved work logs and UPH targets from local storage.
-                            </AlertDialogDescription>
+                        <AlertDialogTitle>Ready to track your own data?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will remove all sample work logs and targets. Are you sure you want to continue?
+                        </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleClearAllData} className="bg-destructive hover:bg-destructive/90">
-                                Yes, delete everything
-                            </AlertDialogAction>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleClearSampleAndStart}>
+                            Yes, Clear and Start
+                        </AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>
-                </AlertDialog>
-            </div>
+                 </AlertDialog>
+             )}
+             {/* Keep the end day button if today's log exists */}
+            {todayLog && !sampleDataActive && ( // Only show End Day if not in sample mode
+                    <Button onClick={handleEndDay} variant="outline" size="sm" disabled={isLoading}>
+                        <Archive className="mr-2 h-4 w-4" /> End Today&apos;s Log
+                    </Button>
+             )}
         </div>
 
          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start"> {/* Use items-start */}
