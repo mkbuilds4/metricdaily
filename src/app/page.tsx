@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -52,10 +53,15 @@ export default function Home() {
   const [hasInitialData, setHasInitialData] = useState(false);
   const [sampleDataActive, setSampleDataActive] = useState(false); // State to track if sample data is loaded
   const { toast } = useToast();
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // --- Data Loading ---
   const loadData = useCallback((showLoadingIndicator = true) => {
-    if (typeof window === 'undefined') return;
+    if (!isClient) return;
 
     if (showLoadingIndicator) {
       setIsLoading(true);
@@ -92,26 +98,27 @@ export default function Home() {
         setIsLoading(false);
       }
     }
-  }, [toast]); // toast is stable
+  }, [toast, isClient]); // toast is stable, isClient triggers reload when ready
 
   useEffect(() => {
-     if (typeof window !== 'undefined') {
-        console.log('[Home Page] useEffect triggered due to mount.');
+     if (isClient) {
+        console.log('[Home Page] useEffect triggered due to isClient change.');
         loadData();
      }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only on mount
+  }, [isClient]); // Run when isClient becomes true
 
    // Effect to update input values when workLogs change (e.g., after saving)
    useEffect(() => {
+    if (!isClient) return; // Only run on client
     const today = workLogs.find(log => log.date === formatDateISO(new Date()));
     setDocInputValue(today?.documentsCompleted?.toString() ?? '');
     setVideoInputValue(today?.videoSessionsCompleted?.toString() ?? '');
-  }, [workLogs]);
+  }, [workLogs, isClient]);
 
   // --- Action Handlers ---
-  const handleSaveWorkLog = useCallback((logData: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { id?: string; hoursWorked?: number }) => {
-    if (typeof window === 'undefined') return {} as DailyWorkLog;
+  const handleSaveWorkLog = useCallback((logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked?: number }) => {
+    if (!isClient) return {} as DailyWorkLog;
     try {
         // The saveWorkLog itself will now handle detailed audit logging
         const savedLog = saveWorkLog(logData);
@@ -142,10 +149,10 @@ export default function Home() {
         });
         throw error;
     }
-  }, [toast]); // Depends on toast
+  }, [toast, isClient]); // Depends on toast and isClient
 
   const handleDeleteWorkLog = useCallback((id: string) => {
-     if (typeof window === 'undefined') return;
+     if (!isClient) return;
     try {
         deleteWorkLog(id);
         loadData(false); // Reload data without main loading indicator
@@ -159,11 +166,11 @@ export default function Home() {
         });
         throw error;
     }
-  }, [loadData, toast]);
+  }, [loadData, toast, isClient]);
 
   // --- Quick Update Handlers ---
    const handleQuickUpdate = (field: 'documentsCompleted' | 'videoSessionsCompleted', value: number | string) => {
-      if (typeof window === 'undefined') return;
+      if (!isClient) return;
       const todayDateStr = formatDateISO(new Date());
       const todayLog = workLogs.find(log => log.date === todayDateStr);
 
@@ -181,46 +188,56 @@ export default function Home() {
       const currentValue = todayLog[field] || 0;
 
       if (typeof value === 'string') {
-         newValue = parseInt(value, 10);
+         // Treat empty string as 0, otherwise parse
+         newValue = value.trim() === '' ? 0 : parseInt(value, 10);
          if (isNaN(newValue)) {
-              // Revert input if invalid number entered
+              // Revert input if invalid number entered (e.g., non-numeric string)
               if (field === 'documentsCompleted') setDocInputValue(currentValue.toString());
               if (field === 'videoSessionsCompleted') setVideoInputValue(currentValue.toString());
               toast({ variant: "destructive", title: "Invalid Input", description: "Please enter a valid number." });
               return;
          }
       } else {
+            // If value is a number (from +/- buttons), add it to current value
             newValue = currentValue + value;
       }
 
+       // Ensure the result is non-negative
        if (newValue < 0) {
+            newValue = 0; // Set to 0 if it goes below zero
             toast({
                 variant: "default",
                 title: "Limit Reached",
                 description: `Cannot decrease ${field === 'documentsCompleted' ? 'documents' : 'videos'} below zero.`,
             });
-            if (typeof value === 'string') { // Revert input if it was direct text entry
-                if (field === 'documentsCompleted') setDocInputValue(currentValue.toString());
-                if (field === 'videoSessionsCompleted') setVideoInputValue(currentValue.toString());
+            // If the original action was a text input resulting in negative, reset input
+            if (typeof value === 'string') {
+                 if (field === 'documentsCompleted') setDocInputValue('0');
+                 if (field === 'videoSessionsCompleted') setVideoInputValue('0');
             }
+           // For +/- buttons, just prevent going below 0, don't need to revert input display immediately
            return;
        }
 
-      const updatedLogPartial: Partial<DailyWorkLog> & { id: string; date: string; startTime: string; endTime: string } = {
+      // Construct partial log ensuring all necessary fields are present for saveWorkLog
+      const updatedLogPartial: Partial<DailyWorkLog> & { id: string; date: string; startTime: string; endTime: string; hoursWorked: number; } = {
           id: todayLog.id,
           date: todayLog.date,
           startTime: todayLog.startTime,
           endTime: todayLog.endTime,
+          hoursWorked: todayLog.hoursWorked, // Pass existing hoursWorked
           [field]: newValue,
           breakDurationMinutes: todayLog.breakDurationMinutes,
           trainingDurationMinutes: todayLog.trainingDurationMinutes,
-          // Crucially include goalMetTimes so they are not overwritten
-          goalMetTimes: todayLog.goalMetTimes || {},
+          targetId: todayLog.targetId,
+          notes: todayLog.notes,
+          goalMetTimes: todayLog.goalMetTimes || {}, // Ensure goalMetTimes is preserved
       };
 
 
       try {
-           const saved = handleSaveWorkLog(updatedLogPartial as any);
+           // Pass the complete object required by saveWorkLog
+           handleSaveWorkLog(updatedLogPartial as any); // Type assertion might be needed if TS struggles with the dynamic field
            // Inputs will update via the useEffect watching workLogs
            toast({ title: "Count Updated", description: `Today's ${field === 'documentsCompleted' ? 'document' : 'video'} count set to ${newValue}.` });
       } catch(error) {
@@ -235,7 +252,7 @@ export default function Home() {
 
   // --- Sample Data / Clear Data Handlers ---
   const handleLoadSampleData = () => {
-     if (typeof window === 'undefined') return;
+     if (!isClient) return;
     try {
       const loaded = loadSampleData(); // This action now handles its own audit log
       if (loaded) {
@@ -262,7 +279,7 @@ export default function Home() {
 
    // Handler for the "Clear Sample Data & Start Fresh" button
   const handleClearSampleAndStart = () => {
-    if (typeof window === 'undefined') return;
+    if (!isClient) return;
     try {
       clearAllData(); // Clears logs, targets, settings, and the sample data flag
       toast({
@@ -299,7 +316,7 @@ export default function Home() {
 
   // --- Start/End Day Handlers ---
   const handleStartNewDay = useCallback(() => {
-    if (typeof window === 'undefined') return;
+    if (!isClient) return;
     const activeTargetCheck = getActiveUPHTarget(); // Re-fetch active target state directly
     if (!activeTargetCheck) {
       toast({
@@ -323,7 +340,7 @@ export default function Home() {
     // Calculate hours based on fetched or fallback defaults
     const defaultHoursWorked = calculateHoursWorked(todayDateStr, defaultStartTime, defaultEndTime, totalNonWorkMinutes);
 
-    const newLog: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { hoursWorked: number } = {
+    const newLog: Omit<DailyWorkLog, 'id'> & { hoursWorked: number } = {
       date: todayDateStr,
       startTime: defaultStartTime,
       endTime: defaultEndTime,
@@ -346,10 +363,10 @@ export default function Home() {
     } catch (error) {
       // Error handling is within handleSaveWorkLog
     }
-  }, [handleSaveWorkLog, toast]);
+  }, [handleSaveWorkLog, toast, isClient]);
 
   const handleEndDay = useCallback(() => {
-     if (typeof window === 'undefined') return;
+     if (!isClient) return;
     const todayLogToEnd = workLogs.find(log => log.date === formatDateISO(new Date()));
     if (!todayLogToEnd) {
       toast({
@@ -374,7 +391,7 @@ export default function Home() {
             description: "Could not finalize today's log. It might have already been processed or an error occurred.",
          });
     }
-  }, [workLogs, loadData, toast]);
+  }, [workLogs, loadData, toast, isClient]);
 
 
   // --- Input Handlers ---
@@ -394,6 +411,7 @@ export default function Home() {
 
    // Handle saving when input loses focus (onBlur)
   const handleDocInputBlur = () => {
+       if (!isClient) return;
        const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
        const currentValStr = todayLog?.documentsCompleted?.toString() ?? '0';
        // Treat empty input as 0 for comparison and saving
@@ -407,9 +425,12 @@ export default function Home() {
             handleQuickUpdate('documentsCompleted', inputValStr);
        } else if (!todayLog && inputValStr !== '0') {
            // Don't attempt update if no log exists and input is not 0
+           // (e.g., user typed something then deleted before starting day)
+           setDocInputValue(''); // Clear the orphaned input
        }
    };
   const handleVideoInputBlur = () => {
+        if (!isClient) return;
        const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
        const currentValStr = todayLog?.videoSessionsCompleted?.toString() ?? '0';
        const inputValStr = videoInputValue.trim() === '' ? '0' : videoInputValue.trim();
@@ -421,13 +442,13 @@ export default function Home() {
        if (todayLog && inputValStr !== currentValStr) {
             handleQuickUpdate('videoSessionsCompleted', inputValStr);
        } else if (!todayLog && inputValStr !== '0') {
-           // Don't attempt update if no log exists
+            setVideoInputValue(''); // Clear the orphaned input
        }
   };
 
   // --- Break/Training Handlers ---
   const handleAddBreak = useCallback((breakMinutes: number) => {
-    if (typeof window === 'undefined') return;
+    if (!isClient) return;
     const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
     if (!todayLog) {
       toast({
@@ -461,10 +482,10 @@ export default function Home() {
         description: error instanceof Error ? error.message : "Could not add break time.",
       });
     }
-  }, [workLogs, toast]); // Depends on workLogs to find todayLog
+  }, [workLogs, toast, isClient]); // Depends on workLogs to find todayLog
 
   const handleAddTraining = useCallback((trainingMinutes: number) => {
-    if (typeof window === 'undefined') return;
+    if (!isClient) return;
     const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
     if (!todayLog) {
       toast({
@@ -498,58 +519,76 @@ export default function Home() {
         description: error instanceof Error ? error.message : "Could not add training time.",
       });
     }
-  }, [workLogs, toast]); // Depends on workLogs to find todayLog
+  }, [workLogs, toast, isClient]); // Depends on workLogs to find todayLog
 
   // --- Goal Met Handler ---
   const handleGoalMet = useCallback((targetId: string, metAt: Date) => {
-     if (typeof window === 'undefined') return;
+     if (!isClient) return;
      console.log(`[Home] Received goal met notification for target ${targetId} at ${metAt.toISOString()}`);
      // Use a functional update for setWorkLogs to ensure we're working with the latest state
     setWorkLogs(prevLogs => {
-        const todayLog = prevLogs.find(log => log.date === formatDateISO(new Date()));
+        const todayLogIndex = prevLogs.findIndex(log => log.date === formatDateISO(new Date()));
 
-        if (todayLog && !(todayLog.goalMetTimes && todayLog.goalMetTimes[targetId])) {
-            console.log(`[Home] Persisting goal met time for target ${targetId}...`);
-            const newGoalMetTimes = { ...(todayLog.goalMetTimes || {}), [targetId]: metAt.toISOString() };
+        if (todayLogIndex > -1) {
+            const todayLog = prevLogs[todayLogIndex];
+             // Ensure metAt is a valid Date object before converting to ISO string
+            if (!metAt || !(metAt instanceof Date) || isNaN(metAt.getTime())) {
+                console.error("[Home] Goal met handler received invalid 'metAt' date:", metAt);
+                return prevLogs; // Return previous state if date is invalid
+            }
+            const metAtISO = metAt.toISOString();
 
-            const payloadToSave: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked?: number } = {
-                ...todayLog,
-                goalMetTimes: newGoalMetTimes,
-                hoursWorked: todayLog.hoursWorked,
-            };
+            if (!(todayLog.goalMetTimes && todayLog.goalMetTimes[targetId])) {
+                console.log(`[Home] Persisting goal met time for target ${targetId}...`);
+                const newGoalMetTimes = { ...(todayLog.goalMetTimes || {}), [targetId]: metAtISO };
 
-            try {
-                // Call saveWorkLog (which is synchronous for localStorage)
-                // NOTE: This saveWorkLog updates localStorage but doesn't directly cause the state update here.
-                // The state update happens via the return value of this functional update.
-                const savedLog = saveWorkLog(payloadToSave);
+                // Construct the payload for saving
+                // Important: ensure all required fields for saveWorkLog are included
+                 const payloadToSave: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number } = {
+                    id: todayLog.id, // Pass the ID for update
+                    date: todayLog.date,
+                    startTime: todayLog.startTime,
+                    endTime: todayLog.endTime,
+                    breakDurationMinutes: todayLog.breakDurationMinutes,
+                    trainingDurationMinutes: todayLog.trainingDurationMinutes,
+                    hoursWorked: todayLog.hoursWorked,
+                    documentsCompleted: todayLog.documentsCompleted,
+                    videoSessionsCompleted: todayLog.videoSessionsCompleted,
+                    targetId: todayLog.targetId,
+                    notes: todayLog.notes,
+                    goalMetTimes: newGoalMetTimes, // The updated goalMetTimes
+                 };
 
-                // Update the log within the current state array
-                const index = prevLogs.findIndex(l => l.id === savedLog.id);
-                if (index > -1) {
+
+                try {
+                    // Call saveWorkLog synchronously (localStorage is sync)
+                    const savedLog = saveWorkLog(payloadToSave);
+
+                    // Update the log within the current state array
                     const updatedLogs = [...prevLogs];
-                    updatedLogs[index] = savedLog; // Use the log returned by saveWorkLog
+                    updatedLogs[todayLogIndex] = savedLog; // Use the log returned by saveWorkLog
                     return updatedLogs.sort((a, b) => b.date.localeCompare(a.date)); // Return the updated, sorted array
+                } catch (error) {
+                    console.error(`[Home] Error saving goal met time for target ${targetId}:`, error);
+                    // Toast handled in saveWorkLog
+                    return prevLogs; // Return previous state on error
                 }
-                // If somehow the log wasn't found by ID, return previous state unchanged
-                return prevLogs;
-            } catch (error) {
-                console.error(`[Home] Error saving goal met time for target ${targetId}:`, error);
-                // Toast handled in saveWorkLog
-                return prevLogs; // Return previous state on error
+            } else {
+                 console.log(`[Home] Goal met time already recorded or no log found for target ${targetId}.`);
+                 return prevLogs; // Return previous state if no update needed
             }
         } else {
-            console.log(`[Home] Goal met time already recorded or no log found for target ${targetId}.`);
-            return prevLogs; // Return previous state if no update needed
+            console.warn("[Home] Goal met handler called, but no log found for today.");
+            return prevLogs; // No log for today, return previous state
         }
     });
-  }, [toast]); // Removed handleSaveWorkLog from dependencies as it's called internally now
+  }, [isClient, toast]); // Removed handleSaveWorkLog from dependencies
 
 
   const todayLog = workLogs.find(log => log.date === formatDateISO(new Date())) || null;
 
   // --- Render Logic ---
-  if (isLoading) {
+  if (!isClient || isLoading) {
     return (
       <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
         <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Daily Dashboard</h1>
@@ -760,3 +799,5 @@ export default function Home() {
     </div>
   );
 }
+
+
