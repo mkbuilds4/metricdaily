@@ -27,7 +27,7 @@ const ITEMS_PER_PAGE = 10;
 
 // Define sortable columns
 type SortableColumn = keyof Pick<DailyWorkLog, 'date' | 'hoursWorked' | 'documentsCompleted' | 'videoSessionsCompleted'> | 'avgUPH';
-type SortDirection = 'asc' | 'desc' | 'none'; // Add 'none' state for clearing sort
+type SortDirection = 'asc' | 'desc'; // Removed 'none' state
 
 const DEFAULT_SORT_COLUMN: SortableColumn = 'date';
 const DEFAULT_SORT_DIRECTION: SortDirection = 'desc';
@@ -151,15 +151,7 @@ export default function PreviousLogsPage() {
     const currentSortCol = sortColumn; // Capture state for closure
     const currentSortDir = sortDirection;
 
-    // Apply default sort if sorting is cleared
-    if (currentSortDir === 'none' || !currentSortCol) {
-       return [...filteredLogs].sort((a, b) => {
-            const dateA = parseISO(a.date + 'T00:00:00');
-            const dateB = parseISO(b.date + 'T00:00:00');
-            if (!isValid(dateA) || !isValid(dateB)) return 0; // Handle invalid dates
-            return dateB.getTime() - dateA.getTime(); // Default: Date Descending
-       });
-    }
+    // Removed 'none' logic - sort is always active based on state
 
     return [...filteredLogs].sort((a, b) => {
       let valA: string | number | Date | null = null;
@@ -210,28 +202,13 @@ export default function PreviousLogsPage() {
 
   // Handlers
   const handleSort = useCallback((column: SortableColumn) => {
-    setSortDirection(prevDirection => {
-        if (sortColumn !== column) {
-            return 'asc'; // Start with ascending if changing column
-        }
-        // Cycle through: asc -> desc -> none -> asc
-        if (prevDirection === 'asc') {
-            return 'desc';
-        }
-        if (prevDirection === 'desc') {
-             return 'none'; // Clear sort on third click
-        }
-        return 'asc'; // Go back to ascending if currently 'none'
-    });
+    // If clicking a new column, sort ascending.
+    // If clicking the same column, toggle direction.
+    const isNewColumn = sortColumn !== column;
+    const newDirection = isNewColumn ? 'asc' : (sortDirection === 'asc' ? 'desc' : 'asc');
 
-     setSortColumn(currentSortCol => {
-        if (currentSortCol === column && sortDirection === 'desc') {
-             // If clearing the sort ('none' will be set above), keep the column for next click cycle
-             return column;
-        }
-        return column; // Set the new column otherwise
-     });
-
+    setSortColumn(column);
+    setSortDirection(newDirection);
     setCurrentPage(1); // Reset to first page on sort change
   }, [sortColumn, sortDirection]); // Include sortDirection in dependency
 
@@ -245,10 +222,11 @@ export default function PreviousLogsPage() {
 
   // Render sort icon for buttons
   const renderSortIcon = (column: SortableColumn) => {
-    if (sortColumn !== column || sortDirection === 'none') {
+    // Show generic icon if not the active sort column
+    if (sortColumn !== column) {
       return <ArrowUpDown className="ml-2 h-3 w-3 opacity-50" />; // Indicate sortable but not sorted
     }
-    // Rotate icon based on direction
+    // Show directional icon if it is the active sort column
     return (
         <ArrowUpDown
             className={cn(
@@ -596,3 +574,5 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
+
+    
