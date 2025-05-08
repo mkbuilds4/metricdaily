@@ -50,24 +50,24 @@ body {
   .dark {
     /* Dark Theme - Adjusted for contrast with the new primary/accent */
     --background: 240 6% 12%; /* Dark Grey */
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%; /* Kept card darker for contrast */
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%; /* Kept popover darker for contrast */
-    --popover-foreground: 0 0% 98%;
+    --foreground: 0 0% 98%; /* White - ensures text is visible */
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%; /* White text on cards */
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%; /* White text on popovers */
     --primary: 207 70% 53%; /* Blue #3498db */
     --primary-foreground: 0 0% 98%; /* White */
-    --secondary: 240 3.7% 15.9%; /* Dark Gray */
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%; /* Dark Gray */
-    --muted-foreground: 0 0% 63.9%; /* Lighter gray */
+    --secondary: 240 5% 20%; /* Slightly lighter dark gray for secondary elements */
+    --secondary-foreground: 0 0% 98%; /* White text on secondary elements */
+    --muted: 240 5% 20%; /* Match secondary for muted elements */
+    --muted-foreground: 0 0% 65%; /* Lighter gray for muted text */
     --accent: 145 63% 49%; /* Green #2ecc71 */
     --accent-foreground: 0 0% 98%; /* White */
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%; /* Input background in dark mode */
-    /* --foreground is already defined for dark mode, input text should use it */
+    /* Ensure input text uses the default foreground color */
     --ring: 207 70% 53%; /* Blue for focus rings */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
@@ -76,7 +76,7 @@ body {
     --chart-5: 340 75% 55%;
 
     /* Sidebar variables (dark) */
-    --sidebar-background: 240 5.9% 10%; /* Kept sidebar dark */
+    --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
     --sidebar-primary-foreground: 0 0% 100%;
