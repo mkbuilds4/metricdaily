@@ -4,9 +4,10 @@ import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, AlertCircle, TrendingUp, CalendarDays } from 'lucide-react'; // Added icons
-import { startOfWeek, endOfWeek, parseISO, isValid, isWithinInterval, format, subDays, startOfDay, endOfDay } from 'date-fns';
+import { startOfWeek, endOfWeek, parseISO, isValid, isWithinInterval, format, subDays, startOfDay, endOfDay, addWeeks } from 'date-fns'; // Added addWeeks
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { calculateDailyUPH, formatFriendlyDate } from '@/lib/utils'; // Import formatFriendlyDate
+import { cn } from '@/lib/utils'; // Import cn
 
 interface WeeklyAveragesProps {
   allWorkLogs: DailyWorkLog[];
@@ -25,43 +26,53 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
   targets = [],
   activeTarget,
 }) => {
-  const [clientNow, setClientNow] = useState<Date | null>(null);
+  const [currentDate, setCurrentDate] = useState<Date>(new Date()); // Start with today
 
   useEffect(() => {
     // Ensure this runs only on the client to avoid hydration mismatch for current date
-    setClientNow(new Date());
+    setCurrentDate(new Date());
   }, []);
 
+  const handlePreviousWeek = () => {
+    setCurrentDate(prev => addWeeks(prev, -1));
+  };
+
+  const handleNextWeek = () => {
+    // Only allow navigating to the week containing the current actual date
+    const nextWeekStart = startOfWeek(addWeeks(currentDate, 1), { weekStartsOn: 1 });
+    if (nextWeekStart <= startOfWeek(new Date(), { weekStartsOn: 1 })) {
+      setCurrentDate(prev => addWeeks(prev, 1));
+    }
+  };
+
   const weeklyData = useMemo(() => {
-    if (!activeTarget || allWorkLogs.length === 0 || !clientNow) {
-      return { averageUPH: null, dailyBreakdown: [] }; // No active target, no logs, or clientNow not ready
+    if (!activeTarget || allWorkLogs.length === 0) {
+      return { averageUPH: null, dailyBreakdown: [] }; // No active target or no logs
     }
 
-    // Calculate the start and end of the *current* week (Monday to Sunday)
-    const currentWeekStart = startOfWeek(clientNow, { weekStartsOn: 1 }); // Monday
-    // End date is the *current* day, not the end of the week
-    const currentWeekEnd = endOfDay(clientNow);
+    // Calculate the start and end of the *selected* week (Monday to Sunday)
+    const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 }); // Monday
+    const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 }); // Sunday
 
-    const logsThisWeekSoFar = allWorkLogs.filter(log => {
+    const logsThisWeek = allWorkLogs.filter(log => {
       try {
-        const logDate = parseISO(log.date + 'T00:00:00'); // Ensure time component for accurate ISO parsing
-        // Check if log date is valid and within the interval from Monday to Today
-        return isValid(logDate) && isWithinInterval(logDate, { start: currentWeekStart, end: currentWeekEnd });
+        const logDate = parseISO(log.date + 'T00:00:00'); // Ensure time component
+        return isValid(logDate) && isWithinInterval(logDate, { start: weekStart, end: weekEnd });
       } catch (e) {
         console.warn(`Invalid date format for log: ${log.id}, date: ${log.date}`);
         return false;
       }
     });
 
-    if (logsThisWeekSoFar.length === 0) {
-      return { averageUPH: 0, dailyBreakdown: [] }; // No logs this week so far to average
+    if (logsThisWeek.length === 0) {
+      return { averageUPH: 0, dailyBreakdown: [] }; // No logs this week to average
     }
 
     let totalUPHSum = 0;
     let daysWithValidUPH = 0;
     const dailyBreakdown: DailyUPHEntry[] = [];
 
-    logsThisWeekSoFar.forEach(log => {
+    logsThisWeek.forEach(log => {
       // Use the target associated with the log, fallback to active target if missing
       const targetForLog = targets.find(t => t.id === log.targetId) ?? activeTarget;
       if (targetForLog) {
@@ -92,61 +103,68 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
 
     return { averageUPH, dailyBreakdown };
 
-  }, [allWorkLogs, activeTarget, clientNow, targets]); // Added clientNow and targets as dependencies
-
-
-  if (!clientNow) {
-    // Render a placeholder or skeleton while waiting for clientNow
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle>Current Week Avg UPH</CardTitle>
-           <CardDescription>Mon - Today</CardDescription>
-        </CardHeader>
-        <CardContent className="pt-2 flex items-center justify-center h-[calc(100%-4.5rem)]"> {/* Adjust height if needed */}
-          <p className="text-muted-foreground text-sm text-center">Loading...</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  }, [allWorkLogs, activeTarget, currentDate, targets]); // Added currentDate and targets as dependencies
 
   // Format start and end dates for display
-  const currentWeekStartDateFormatted = format(startOfWeek(clientNow, { weekStartsOn: 1 }), 'MMM d');
-  const currentDayFormatted = format(clientNow, 'MMM d');
+  const weekStartDateFormatted = format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d');
+  const weekEndDateFormatted = format(endOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d');
+
+  // Determine if the "Next Week" button should be disabled
+  const isCurrentWeekSelected = startOfWeek(currentDate, { weekStartsOn: 1 }).getTime() === startOfWeek(new Date(), { weekStartsOn: 1 }).getTime();
 
 
   return (
     <Card>
       <CardHeader className="pb-2 flex flex-row items-center justify-between">
         <div>
-            <CardTitle>Current Week Avg UPH</CardTitle>
-            {/* Display Mon - Today range */}
-            <CardDescription className="whitespace-nowrap text-xs" title={`Average UPH calculated from ${currentWeekStartDateFormatted} to ${currentDayFormatted}`}>
-                {currentWeekStartDateFormatted} - {currentDayFormatted}
-            </CardDescription>
+            <CardTitle>Weekly Avg UPH</CardTitle>
+            {/* Display Mon - Sun range */}
+             <CardDescription
+                className="whitespace-nowrap text-xs"
+                title={`Average UPH calculated from ${weekStartDateFormatted} to ${weekEndDateFormatted}`}
+             >
+                {weekStartDateFormatted} - {weekEndDateFormatted}
+             </CardDescription>
         </div>
-        {/* Removed navigation buttons */}
+         <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" className="h-6 w-6" onClick={handlePreviousWeek}>
+                <ChevronLeft className="h-4 w-4" />
+                <span className="sr-only">Previous Week</span>
+            </Button>
+             <Button variant="outline" size="icon" className="h-6 w-6" onClick={handleNextWeek} disabled={isCurrentWeekSelected}>
+                <ChevronRight className="h-4 w-4" />
+                 <span className="sr-only">Next Week</span>
+            </Button>
+        </div>
       </CardHeader>
-      <CardContent className="pt-2 flex flex-col justify-center h-[calc(100%-4rem)]"> {/* Adjusted height */}
+      <CardContent className="pt-2 flex flex-col justify-center h-[calc(100%-4rem)]">
         {weeklyData.averageUPH === null ? (
-          <p className="text-muted-foreground text-sm text-center flex items-center gap-1 mx-auto"> {/* Centered message */}
+          <p className="text-muted-foreground text-sm text-center flex items-center gap-1 mx-auto">
             <AlertCircle className="h-4 w-4" /> No active target.
           </p>
         ) : (
           <>
-            <div className="text-center mb-2"> {/* Centered main average */}
-              <div className="text-2xl font-bold tabular-nums">
+            <div className="text-center mb-2">
+               {/* Conditional coloring for the average UPH */}
+                <div
+                    className={cn(
+                        "text-2xl font-bold tabular-nums",
+                        activeTarget && weeklyData.averageUPH !== 0 && weeklyData.averageUPH !== null && (
+                            weeklyData.averageUPH >= activeTarget.targetUPH
+                                ? "text-green-600 dark:text-green-500"
+                                : "text-red-600 dark:text-red-500"
+                        )
+                    )}
+                >
                 {weeklyData.averageUPH > 0 ? weeklyData.averageUPH.toFixed(2) : '-'}
                 <span className="text-sm font-normal text-muted-foreground ml-1">UPH</span>
               </div>
-              {activeTarget && (
-                <p className="text-xs text-muted-foreground mt-0.5" title={`Calculated based on Active Target: ${activeTarget.name}`}>
-                    (Target: {activeTarget.name})
-                </p>
-              )}
+              {/* Tooltip remains the same */}
+              <p className="text-xs text-muted-foreground mt-0.5" title={`Calculated based on Target: ${activeTarget?.name || 'N/A'}`}>
+                    (Target: {activeTarget?.name || 'N/A'})
+              </p>
             </div>
 
-             {/* Daily Breakdown Section */}
             {weeklyData.dailyBreakdown.length > 0 && (
               <div className="mt-2 pt-2 border-t border-border/50">
                  <p className="text-xs font-medium text-muted-foreground text-center mb-1">Daily UPH</p>
