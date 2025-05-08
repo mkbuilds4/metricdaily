@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -17,15 +16,15 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FileSpreadsheet, Filter, X, Calendar as CalendarIcon, ArrowUpDown } from 'lucide-react';
-import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks } from 'date-fns'; // Added subWeeks
+import { FileSpreadsheet, Filter, X, Calendar as CalendarIcon, ArrowUpDown, BookOpen, Clock, Video } from 'lucide-react'; // Added icons
+import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { Separator } from '@/components/ui/separator';
 
 // Pagination settings
 const ITEMS_PER_PAGE = 10;
 
-// Sorting is now handled visually by date order in accordion, but keep types if needed elsewhere
+// Define sortable columns
 type SortableColumn = keyof Pick<DailyWorkLog, 'date' | 'hoursWorked' | 'documentsCompleted' | 'videoSessionsCompleted'> | 'avgUPH';
 type SortDirection = 'asc' | 'desc';
 
@@ -40,7 +39,7 @@ export default function PreviousLogsPage() {
   const [filterDateRange, setFilterDateRange] = useState<DateRange | undefined>(undefined);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
 
-  // Sorting State (kept for filtering logic, display is implicit)
+  // Sorting State - Default to date descending
   const [sortColumn, setSortColumn] = useState<SortableColumn>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
@@ -105,6 +104,7 @@ export default function PreviousLogsPage() {
 
         const searchTerm = filterTerm.toLowerCase();
         const logTimestamp = parseISO(log.date + 'T00:00:00'); // Ensure time for correct comparison
+        const logTarget = uphTargets.find(t => t.id === log.targetId) ?? activeTarget; // Target for UPH search
 
         const matchesSearch = (
             log.date.toLowerCase().includes(searchTerm) ||
@@ -115,7 +115,7 @@ export default function PreviousLogsPage() {
             log.videoSessionsCompleted.toString().includes(searchTerm) ||
             (log.notes && log.notes.toLowerCase().includes(searchTerm)) ||
             (isValid(logTimestamp) ? format(logTimestamp, 'PPP').toLowerCase().includes(searchTerm) : false) ||
-            (activeTarget && calculateDailyUPH(log, activeTarget).toFixed(2).includes(searchTerm))
+            (logTarget && calculateDailyUPH(log, logTarget).toFixed(2).includes(searchTerm)) // Search UPH based on target
         );
 
         let matchesDateRange = true;
@@ -128,17 +128,20 @@ export default function PreviousLogsPage() {
 
         return matchesSearch && matchesDateRange;
     });
-  }, [allLogs, filterTerm, filterDateRange, activeTarget]);
+  }, [allLogs, filterTerm, filterDateRange, activeTarget, uphTargets]); // Added uphTargets dependency
 
-  // Sorting Logic - Keep for ordering before pagination, even though table headers removed
+  // Sorting Logic
   const sortedLogs = useMemo(() => {
     return [...filteredLogs].sort((a, b) => {
       let valA: string | number | null = null;
       let valB: string | number | null = null;
 
       if (sortColumn === 'avgUPH') {
-         valA = activeTarget ? calculateDailyUPH(a, activeTarget) : 0;
-         valB = activeTarget ? calculateDailyUPH(b, activeTarget) : 0;
+         // Calculate UPH based on the *log's specific target* if available, else active target
+         const targetA = uphTargets.find(t => t.id === a.targetId) ?? activeTarget;
+         const targetB = uphTargets.find(t => t.id === b.targetId) ?? activeTarget;
+         valA = targetA ? calculateDailyUPH(a, targetA) : 0;
+         valB = targetB ? calculateDailyUPH(b, targetB) : 0;
       } else {
          valA = a[sortColumn as keyof Omit<DailyWorkLog, 'avgUPH'>];
          valB = b[sortColumn as keyof Omit<DailyWorkLog, 'avgUPH'>];
@@ -148,7 +151,18 @@ export default function PreviousLogsPage() {
       if (valA === null || valA === undefined) comparison = -1;
       else if (valB === null || valB === undefined) comparison = 1;
       else if (typeof valA === 'string' && typeof valB === 'string') {
-        comparison = valA.localeCompare(valB);
+        // For date sorting, parse first
+        if (sortColumn === 'date') {
+          try {
+            const dateA = parseISO(valA);
+            const dateB = parseISO(valB);
+            comparison = dateA.getTime() - dateB.getTime();
+          } catch (e) {
+            comparison = valA.localeCompare(valB);
+          }
+        } else {
+           comparison = valA.localeCompare(valB);
+        }
       } else if (typeof valA === 'number' && typeof valB === 'number') {
         comparison = valA - valB;
       } else {
@@ -157,7 +171,7 @@ export default function PreviousLogsPage() {
 
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [filteredLogs, sortColumn, sortDirection, activeTarget]);
+  }, [filteredLogs, sortColumn, sortDirection, activeTarget, uphTargets]); // Added uphTargets dependency
 
   // Pagination Logic
   const paginatedLogs = useMemo(() => {
@@ -169,7 +183,13 @@ export default function PreviousLogsPage() {
 
 
   // Handlers
-  // Sort handlers removed as table headers are gone
+  const handleSort = useCallback((column: SortableColumn) => {
+      setSortDirection(prevDirection =>
+          sortColumn === column && prevDirection === 'desc' ? 'asc' : 'desc' // Toggle or set to desc
+      );
+      setSortColumn(column);
+      setCurrentPage(1); // Reset to first page on sort change
+  }, [sortColumn]);
 
   const handleResetFilters = () => {
      setFilterTerm('');
@@ -179,7 +199,16 @@ export default function PreviousLogsPage() {
      setCurrentPage(1);
   };
 
-  // Render sort icon removed
+  // Render sort icon for buttons
+  const renderSortIcon = (column: SortableColumn) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="ml-2 h-3 w-3 opacity-50" />;
+    }
+    return sortDirection === 'asc' ?
+      <ArrowUpDown className="ml-2 h-3 w-3" /> : // Indicate ascending
+      <ArrowUpDown className="ml-2 h-3 w-3 transform rotate-180" />; // Indicate descending (or use different icon)
+  };
+
 
   const hasActiveFilters = filterTerm || filterDateRange;
 
@@ -194,7 +223,7 @@ export default function PreviousLogsPage() {
   const presetRanges = [
     { label: "Yesterday", range: { from: startOfDay(subDays(today, 1)), to: endOfDay(subDays(today, 1)) } },
     { label: "This Week", range: { from: startOfWeek(today, { weekStartsOn: 1 }), to: endOfWeek(today, { weekStartsOn: 1 }) } },
-    { label: "Last Week", range: { from: startOfWeek(subWeeks(today, 1), { weekStartsOn: 1 }), to: endOfWeek(subWeeks(today, 1), { weekStartsOn: 1 }) } }, // Added Last Week
+    { label: "Last Week", range: { from: startOfWeek(subWeeks(today, 1), { weekStartsOn: 1 }), to: endOfWeek(subWeeks(today, 1), { weekStartsOn: 1 }) } },
     { label: "Last 7 Days", range: { from: startOfDay(subDays(today, 6)), to: endOfDay(today) } },
     { label: "Last 30 Days", range: { from: startOfDay(subDays(today, 29)), to: endOfDay(today) } },
   ];
@@ -323,15 +352,16 @@ export default function PreviousLogsPage() {
         </Button>
       </div>
 
-      {/* Filter Controls Card */}
+      {/* Filter & Sort Controls Card */}
       <Card className="shadow-sm">
         <CardHeader>
              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <Filter className="h-5 w-5" /> Filter Logs
+                <Filter className="h-5 w-5" /> Filter & Sort Logs
              </CardTitle>
-             <CardDescription>Refine the list of previous work logs.</CardDescription>
+             <CardDescription>Refine and order the list of previous work logs.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-2">
+            {/* Search and Date Filter Row */}
             <div className="flex flex-col md:flex-row items-center gap-3">
               <Input
                 type="text"
@@ -408,10 +438,64 @@ export default function PreviousLogsPage() {
                     </PopoverContent>
                  </Popover>
             </div>
+
+             {/* Sorting Buttons Row */}
+            <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground mr-2">Sort by:</span>
+                 <Button
+                    variant={sortColumn === 'date' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    onClick={() => handleSort('date')}
+                    className="h-8 px-3"
+                 >
+                    <CalendarIcon className="mr-1.5 h-4 w-4" /> Date
+                    {sortColumn === 'date' && renderSortIcon('date')}
+                 </Button>
+                 <Button
+                     variant={sortColumn === 'hoursWorked' ? 'secondary' : 'ghost'}
+                     size="sm"
+                     onClick={() => handleSort('hoursWorked')}
+                     className="h-8 px-3"
+                 >
+                    <Clock className="mr-1.5 h-4 w-4" /> Hours
+                    {sortColumn === 'hoursWorked' && renderSortIcon('hoursWorked')}
+                 </Button>
+                  <Button
+                     variant={sortColumn === 'documentsCompleted' ? 'secondary' : 'ghost'}
+                     size="sm"
+                     onClick={() => handleSort('documentsCompleted')}
+                     className="h-8 px-3"
+                 >
+                    <BookOpen className="mr-1.5 h-4 w-4" /> Docs
+                    {sortColumn === 'documentsCompleted' && renderSortIcon('documentsCompleted')}
+                 </Button>
+                 <Button
+                     variant={sortColumn === 'videoSessionsCompleted' ? 'secondary' : 'ghost'}
+                     size="sm"
+                     onClick={() => handleSort('videoSessionsCompleted')}
+                     className="h-8 px-3"
+                 >
+                    <Video className="mr-1.5 h-4 w-4" /> Videos
+                    {sortColumn === 'videoSessionsCompleted' && renderSortIcon('videoSessionsCompleted')}
+                 </Button>
+                 <Button
+                     variant={sortColumn === 'avgUPH' ? 'secondary' : 'ghost'}
+                     size="sm"
+                     onClick={() => handleSort('avgUPH')}
+                     className="h-8 px-3"
+                     disabled={!activeTarget}
+                     title={!activeTarget ? "Set an active target to sort by UPH" : "Sort by Average UPH (based on log's target or active)"}
+                 >
+                    <Clock className="mr-1.5 h-4 w-4" /> Avg UPH
+                    {sortColumn === 'avgUPH' && renderSortIcon('avgUPH')}
+                 </Button>
+             </div>
+
+
               {hasActiveFilters && (
                  <div className="flex justify-end">
                     <Button variant="link" size="sm" onClick={handleResetFilters} className="p-0 h-auto text-muted-foreground hover:text-foreground">
-                        <X className="mr-1 h-3 w-3" /> Reset Filters
+                        <X className="mr-1 h-3 w-3" /> Reset Filters & Sort
                     </Button>
                  </div>
               )}
@@ -461,4 +545,3 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
-
