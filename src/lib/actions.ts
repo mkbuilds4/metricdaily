@@ -51,6 +51,7 @@ export function getAuditLogs(): AuditLogEntry[] {
   const logs = getFromLocalStorage<AuditLogEntry[]>(AUDIT_LOGS_KEY, []);
   // Sort logs by timestamp descending (most recent first)
   logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  // console.log(`[Action] getAuditLogs returning ${logs.length} logs.`); // Debugging
   return logs;
 }
 
@@ -143,13 +144,13 @@ export function saveWorkLog(
       targetId: logData.targetId,
       notes: logData.notes,
       goalMetTimes: logData.goalMetTimes ?? {},
+      // isFinalized is handled below based on whether it's an update or create
   };
 
   if (logData.id) {
     const index = logs.findIndex((log) => log.id === logData.id);
     if (index > -1) {
       // --- Update Existing Log ---
-      // Preserve the existing isFinalized flag unless explicitly provided in logData
       const existingLog = logs[index];
       savedLog = {
           ...existingLog, // Start with existing log data (including isFinalized)
@@ -157,14 +158,16 @@ export function saveWorkLog(
           isFinalized: logData.isFinalized !== undefined ? logData.isFinalized : existingLog.isFinalized, // Preserve or update isFinalized
       };
       logs[index] = savedLog;
+      // console.log('[Action] Updated existing log:', savedLog.id);
     } else {
       // --- Create New Log (ID provided but not found - treat as new) ---
       savedLog = { ...baseLogData, id: generateLocalId(), isFinalized: logData.isFinalized ?? false };
       logs.push(savedLog);
+      // console.log('[Action] Created new log (ID provided but not found):', savedLog.id);
     }
   } else {
      // --- No ID provided ---
-     const existingLogIndex = logs.findIndex(log => log.date === logData.date && !log.isFinalized); // Find non-finalized log for today
+     const existingLogIndex = logs.findIndex(log => log.date === logData.date && !log.isFinalized); // Find non-finalized log for the same date
      if (existingLogIndex > -1) {
         // --- Update Existing Log (found by date, not finalized) ---
          const existingLog = logs[existingLogIndex];
@@ -174,10 +177,12 @@ export function saveWorkLog(
              isFinalized: logData.isFinalized !== undefined ? logData.isFinalized : existingLog.isFinalized,
          };
          logs[existingLogIndex] = savedLog;
+         // console.log('[Action] Updated existing log (found by date):', savedLog.id);
      } else {
         // --- Create New Log ---
         savedLog = { ...baseLogData, id: generateLocalId(), isFinalized: logData.isFinalized ?? false };
         logs.push(savedLog);
+        // console.log('[Action] Created new log:', savedLog.id);
      }
   }
 
@@ -477,7 +482,10 @@ export function loadSampleData(): boolean {
     const currentTargets = getUPHTargets();
     const currentAuditLogs = getAuditLogs();
 
+    // Only load sample data if ALL stores are empty
     if (currentLogs.length === 0 && currentTargets.length === 0 && currentAuditLogs.length === 0) {
+        console.log("[Action] Loading sample data...");
+
         // Make sure sample targets are set up correctly
         const processedTargets = sampleUPHTargets.map((target, index) => ({
             ...target,
@@ -496,8 +504,9 @@ export function loadSampleData(): boolean {
             isFinalized: log.date !== formatDateISO(new Date()), // Finalize logs before today
         }));
 
-        // Save sample audit logs
+        // Save sample audit logs directly (overwriting anything existing)
         saveToLocalStorage(AUDIT_LOGS_KEY, sampleAuditLogs);
+        console.log(`[Action] Saved ${sampleAuditLogs.length} sample audit logs.`);
 
         saveToLocalStorage(WORK_LOGS_KEY, processedLogs);
         saveToLocalStorage(UPH_TARGETS_KEY, processedTargets);
@@ -512,14 +521,17 @@ export function loadSampleData(): boolean {
             defaultBreakMinutes: 0, // Start with 0 break
             defaultTrainingMinutes: 0, // Start with 0 training
           });
-          addAuditLog('UPDATE_SETTINGS', 'Settings', 'Saved initial default settings during sample data load.');
+          // Note: saveDefaultSettings logs its own audit entry
         }
 
         addAuditLog('SYSTEM_LOAD_SAMPLE_DATA', 'System', 'Loaded sample work logs, UPH targets, and audit logs.');
         return true;
+    } else {
+        console.log("[Action] Existing data found. Skipping sample data load.");
+        return false; // Existing data found, don't load samples
     }
-    return false;
 }
+
 
 export function clearAllData(): void {
     if (typeof window === 'undefined') {
@@ -544,7 +556,7 @@ export function archiveTodayLog(): DailyWorkLog | null {
     if (typeof window === 'undefined') return null;
 
     const todayDateStr = formatDateISO(new Date());
-    let allLogs = getWorkLogs();
+    let allLogs = getWorkLogs(); // Get current logs
     const todayLogIndex = allLogs.findIndex(log => log.date === todayDateStr && !log.isFinalized);
 
     if (todayLogIndex > -1) {
@@ -564,8 +576,10 @@ export function archiveTodayLog(): DailyWorkLog | null {
             { isFinalized: originalLog.isFinalized }, // Log the change in finalization status
             { isFinalized: finalizedLog.isFinalized }
         );
+        console.log(`[Action] Finalized log for ${finalizedLog.date}`);
         return finalizedLog; // Return the finalized log
     } else {
+        console.warn(`[Action] Attempted to finalize today's log, but no active log found for ${todayDateStr}.`);
         addAuditLog('SYSTEM_ARCHIVE_TODAY_LOG', 'System', `Attempted to finalize today's log, but no active log found for ${todayDateStr}.`);
         return null; // No active log found for today
     }
