@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -141,7 +140,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     });
 
   // Ensure dependencies are correct. Depends on todayLog (and its goalMetTimes), targets, currentTime, etc.
-  }, [todayLog, targets, currentTime, showTodaySection, isClient, onGoalMet, toast]);
+  }, [todayLog, targets, currentTime, showTodaySection, isClient, onGoalMet]);
 
 
   const activeTarget = useMemo(() => targets.find(t => t.isActive) ?? (targets.length > 0 ? targets[0] : null), [targets]);
@@ -191,7 +190,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
             currentMetrics = calculateCurrentMetrics(log, target, currentTime);
             unitsToGoal = totalRequiredUnits - currentMetrics.currentUnits;
             timeAheadBehindSeconds = calculateTimeAheadBehindSchedule(log, target, currentTime);
-            projectedHitTimeFormatted = calculateProjectedGoalHitTime(log, target, timeAheadBehindSeconds, currentTime);
+            projectedHitTimeFormatted = calculateProjectedGoalHitTime(log, target, timeAheadBehindSeconds); // Removed currentTime
 
         } else if (!isToday) {
              // Previous log, calculate final status
@@ -203,10 +202,10 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
 
         const scheduleStatusText = isGoalMet ? (
-             <> <CheckCircle className="inline-block h-4 w-4 mr-1"/> Met </>
-        ) : (
-            formatTimeAheadBehind(timeAheadBehindSeconds) // Includes seconds
-        );
+            <> <CheckCircle className="inline-block h-4 w-4 mr-1"/> Met </>
+        ) : timeAheadBehindSeconds !== null ? (
+             formatTimeAheadBehind(timeAheadBehindSeconds) // Includes seconds
+        ) : '-'; // Fallback if calculation not possible
 
         const scheduleStatusColor = isGoalMet ? "text-green-600 dark:text-green-500" :
                                      (timeAheadBehindSeconds !== null && timeAheadBehindSeconds >= 0 ? "text-green-600 dark:text-green-500" : // >= 0 for on schedule or ahead
@@ -214,7 +213,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
         // Handler for clicking the card (only if it's today and setActiveUPHTargetAction is provided)
         const handleCardClick = () => {
-             if (isToday && setActiveUPHTargetAction) {
+             // Prevent update if the target is already active
+             if (isToday && setActiveUPHTargetAction && target.id !== activeTarget?.id) {
                 setActiveUPHTargetAction(target.id);
              }
         };
@@ -225,10 +225,12 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                 key={`${log.id}-${target.id}`}
                 className={cn(
                     "flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow duration-200",
-                    isToday && setActiveUPHTargetAction && "cursor-pointer hover:ring-2 hover:ring-primary/50", // Add cursor and hover ring if clickable
+                    // Make clickable only if today and action is available AND not already active
+                    isToday && setActiveUPHTargetAction && target.id !== activeTarget?.id && "cursor-pointer hover:ring-2 hover:ring-primary/50",
                     target.id === activeTarget?.id && isToday && "ring-2 ring-primary" // Highlight active target
                 )}
-                onClick={handleCardClick} // Add onClick handler
+                // Only add onClick if action is available and it's today
+                {...(isToday && setActiveUPHTargetAction && { onClick: handleCardClick })}
             >
                 <CardHeader className="pb-2">
                     <div className="flex justify-between items-start">
@@ -264,7 +266,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                     {scheduleStatusText}
                                     {/* Show met time only if goal is met */}
                                     {isGoalMet && goalMetTime ? ` at ${format(goalMetTime, 'h:mm:ss a')}` : ''}
-                                    {/* Removed duplicate time display: !isGoalMet && timeAheadBehindSeconds !== null ? ` (${formatTimeAheadBehind(timeAheadBehindSeconds, true)})` : '' */}
                                 </p>
                             </div>
                             <div className="col-span-1">
@@ -287,7 +288,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                     {scheduleStatusText}
                                     {/* Show met time only if goal is met */}
                                     {isGoalMet && goalMetTime ? ` at ${format(goalMetTime, 'h:mm:ss a')}` : ''}
-                                    {/* Removed duplicate time display: !isGoalMet && timeAheadBehindSeconds !== null ? ` (${formatTimeAheadBehind(timeAheadBehindSeconds, true)})` : '' */}
                                 </p>
                             </div>
                              {/* Conditionally show Avg Daily UPH only if not today */}
@@ -295,6 +295,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 <p className="text-muted-foreground">Avg Daily UPH</p>
                                 <p className="font-medium tabular-nums">{dailyUPHForTarget.toFixed(2)}</p>
                               </div>
+                              {/* Display Units Left/Surplus for previous logs */}
+                                <div>
+                                    <p className="text-muted-foreground">Units vs Goal</p>
+                                    <p className={cn("font-medium tabular-nums", unitsToGoal <= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500')}>
+                                        {unitsToGoal <= 0 ? `+${Math.abs(unitsToGoal).toFixed(2)}` : `-${unitsToGoal.toFixed(2)}`}
+                                    </p>
+                                </div>
                         </>
                     )}
                 </CardContent>
@@ -461,4 +468,3 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
-
