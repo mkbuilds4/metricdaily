@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -6,7 +7,7 @@ import {
   getWorkLogs,
   getUPHTargets,
   deleteWorkLog,
-  addAuditLog,
+  addAuditLog, // Keep addAuditLog for export action
 } from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { formatDateISO, calculateDailyUPH, calculateDailyUnits, cn, formatFriendlyDate } from '@/lib/utils';
@@ -16,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FileSpreadsheet, Filter, X, Calendar as CalendarIcon, ArrowUpDown, BookOpen, Clock, Video } from 'lucide-react'; // Added icons
+import { FileSpreadsheet, Filter, X, Calendar as CalendarIcon, ArrowUpDown, BookOpen, Clock, Video, Target as TargetIcon } from 'lucide-react'; // Added TargetIcon
 import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { Separator } from '@/components/ui/separator';
@@ -26,7 +27,10 @@ const ITEMS_PER_PAGE = 10;
 
 // Define sortable columns
 type SortableColumn = keyof Pick<DailyWorkLog, 'date' | 'hoursWorked' | 'documentsCompleted' | 'videoSessionsCompleted'> | 'avgUPH';
-type SortDirection = 'asc' | 'desc';
+type SortDirection = 'asc' | 'desc' | 'none'; // Add 'none' state for clearing sort
+
+const DEFAULT_SORT_COLUMN: SortableColumn = 'date';
+const DEFAULT_SORT_DIRECTION: SortDirection = 'desc';
 
 export default function PreviousLogsPage() {
   const [allLogs, setAllLogs] = useState<DailyWorkLog[]>([]);
@@ -40,8 +44,8 @@ export default function PreviousLogsPage() {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   // Sorting State - Default to date descending
-  const [sortColumn, setSortColumn] = useState<SortableColumn>('date');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [sortColumn, setSortColumn] = useState<SortableColumn>(DEFAULT_SORT_COLUMN);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(DEFAULT_SORT_DIRECTION);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -132,12 +136,16 @@ export default function PreviousLogsPage() {
 
   // Sorting Logic
   const sortedLogs = useMemo(() => {
+    if (sortDirection === 'none' || sortColumn === null) {
+       // Default sort if sorting is cleared or column is null
+       return [...filteredLogs].sort((a, b) => b.date.localeCompare(a.date));
+    }
+
     return [...filteredLogs].sort((a, b) => {
       let valA: string | number | null = null;
       let valB: string | number | null = null;
 
       if (sortColumn === 'avgUPH') {
-         // Calculate UPH based on the *log's specific target* if available, else active target
          const targetA = uphTargets.find(t => t.id === a.targetId) ?? activeTarget;
          const targetB = uphTargets.find(t => t.id === b.targetId) ?? activeTarget;
          valA = targetA ? calculateDailyUPH(a, targetA) : 0;
@@ -151,7 +159,6 @@ export default function PreviousLogsPage() {
       if (valA === null || valA === undefined) comparison = -1;
       else if (valB === null || valB === undefined) comparison = 1;
       else if (typeof valA === 'string' && typeof valB === 'string') {
-        // For date sorting, parse first
         if (sortColumn === 'date') {
           try {
             const dateA = parseISO(valA);
@@ -169,9 +176,10 @@ export default function PreviousLogsPage() {
         comparison = String(valA).localeCompare(String(valB));
       }
 
+      // If sortDirection is 'asc', use comparison directly, otherwise invert it
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [filteredLogs, sortColumn, sortDirection, activeTarget, uphTargets]); // Added uphTargets dependency
+  }, [filteredLogs, sortColumn, sortDirection, activeTarget, uphTargets]);
 
   // Pagination Logic
   const paginatedLogs = useMemo(() => {
@@ -184,33 +192,57 @@ export default function PreviousLogsPage() {
 
   // Handlers
   const handleSort = useCallback((column: SortableColumn) => {
-      setSortDirection(prevDirection =>
-          sortColumn === column && prevDirection === 'desc' ? 'asc' : 'desc' // Toggle or set to desc
-      );
-      setSortColumn(column);
-      setCurrentPage(1); // Reset to first page on sort change
-  }, [sortColumn]);
+    setSortDirection(prevDirection => {
+        // Cycle through: asc -> desc -> none -> asc
+        if (sortColumn !== column) {
+            return 'asc'; // Start with ascending if changing column
+        }
+        if (prevDirection === 'asc') {
+            return 'desc';
+        }
+        // If current direction is 'desc' or 'none', clear the sort (set back to default)
+        // For third click clear:
+        // if (prevDirection === 'desc') {
+        //     return 'none';
+        // }
+        // If we want third click to clear, uncomment above and remove below 'asc'
+        return 'asc'; // Cycle back to ascending
+    });
+    setSortColumn(column);
+    // If the direction becomes 'none', reset column to default as well (optional, but logical)
+    // if (sortColumn === column && sortDirection === 'desc') {
+    //     setSortColumn(DEFAULT_SORT_COLUMN);
+    //     setSortDirection(DEFAULT_SORT_DIRECTION);
+    // }
+    setCurrentPage(1); // Reset to first page on sort change
+  }, [sortColumn, sortDirection]); // Include sortDirection in dependency
 
   const handleResetFilters = () => {
      setFilterTerm('');
      setFilterDateRange(undefined);
-     setSortColumn('date'); // Reset sort logic to default
-     setSortDirection('desc');
+     setSortColumn(DEFAULT_SORT_COLUMN); // Reset sort logic to default column
+     setSortDirection(DEFAULT_SORT_DIRECTION); // Reset sort logic to default direction
      setCurrentPage(1);
   };
 
   // Render sort icon for buttons
   const renderSortIcon = (column: SortableColumn) => {
-    if (sortColumn !== column) {
-      return <ArrowUpDown className="ml-2 h-3 w-3 opacity-50" />;
+    if (sortColumn !== column || sortDirection === 'none') {
+      return <ArrowUpDown className="ml-2 h-3 w-3 opacity-50" />; // Indicate sortable but not sorted
     }
     return sortDirection === 'asc' ?
-      <ArrowUpDown className="ml-2 h-3 w-3" /> : // Indicate ascending
-      <ArrowUpDown className="ml-2 h-3 w-3 transform rotate-180" />; // Indicate descending (or use different icon)
+      <ArrowUpDown className="ml-2 h-3 w-3 text-primary" /> : // Indicate ascending (use primary color)
+      <ArrowUpDown className="ml-2 h-3 w-3 text-primary transform rotate-180" />; // Indicate descending (rotated and primary)
   };
 
 
-  const hasActiveFilters = filterTerm || filterDateRange;
+  // Check if filters OR non-default sorting are active
+  const hasActiveFiltersOrSort =
+    filterTerm ||
+    filterDateRange ||
+    sortColumn !== DEFAULT_SORT_COLUMN ||
+    sortDirection !== DEFAULT_SORT_DIRECTION;
+
 
   // Preset Date Range Handlers
   const setPresetDateRange = (range: DateRange | undefined) => {
@@ -306,7 +338,6 @@ export default function PreviousLogsPage() {
   }, [toast]);
 
   const handleExportData = useCallback(() => {
-     // Use sortedLogs for export to respect current filters/sort order
     if (sortedLogs.length === 0) {
       toast({
         title: "No Data to Export",
@@ -449,7 +480,7 @@ export default function PreviousLogsPage() {
                     className="h-8 px-3"
                  >
                     <CalendarIcon className="mr-1.5 h-4 w-4" /> Date
-                    {sortColumn === 'date' && renderSortIcon('date')}
+                    {renderSortIcon('date')}
                  </Button>
                  <Button
                      variant={sortColumn === 'hoursWorked' ? 'secondary' : 'ghost'}
@@ -458,7 +489,7 @@ export default function PreviousLogsPage() {
                      className="h-8 px-3"
                  >
                     <Clock className="mr-1.5 h-4 w-4" /> Hours
-                    {sortColumn === 'hoursWorked' && renderSortIcon('hoursWorked')}
+                    {renderSortIcon('hoursWorked')}
                  </Button>
                   <Button
                      variant={sortColumn === 'documentsCompleted' ? 'secondary' : 'ghost'}
@@ -467,7 +498,7 @@ export default function PreviousLogsPage() {
                      className="h-8 px-3"
                  >
                     <BookOpen className="mr-1.5 h-4 w-4" /> Docs
-                    {sortColumn === 'documentsCompleted' && renderSortIcon('documentsCompleted')}
+                    {renderSortIcon('documentsCompleted')}
                  </Button>
                  <Button
                      variant={sortColumn === 'videoSessionsCompleted' ? 'secondary' : 'ghost'}
@@ -476,7 +507,7 @@ export default function PreviousLogsPage() {
                      className="h-8 px-3"
                  >
                     <Video className="mr-1.5 h-4 w-4" /> Videos
-                    {sortColumn === 'videoSessionsCompleted' && renderSortIcon('videoSessionsCompleted')}
+                    {renderSortIcon('videoSessionsCompleted')}
                  </Button>
                  <Button
                      variant={sortColumn === 'avgUPH' ? 'secondary' : 'ghost'}
@@ -486,13 +517,15 @@ export default function PreviousLogsPage() {
                      disabled={!activeTarget}
                      title={!activeTarget ? "Set an active target to sort by UPH" : "Sort by Average UPH (based on log's target or active)"}
                  >
-                    <Clock className="mr-1.5 h-4 w-4" /> Avg UPH
-                    {sortColumn === 'avgUPH' && renderSortIcon('avgUPH')}
+                     {/* Using TargetIcon instead of Clock for Avg UPH */}
+                    <TargetIcon className="mr-1.5 h-4 w-4" /> Avg UPH
+                    {renderSortIcon('avgUPH')}
                  </Button>
              </div>
 
 
-              {hasActiveFilters && (
+              {/* Show reset button if filters OR non-default sorting is active */}
+              {hasActiveFiltersOrSort && (
                  <div className="flex justify-end">
                     <Button variant="link" size="sm" onClick={handleResetFilters} className="p-0 h-auto text-muted-foreground hover:text-foreground">
                         <X className="mr-1 h-3 w-3" /> Reset Filters & Sort
@@ -545,3 +578,5 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
+
+    
