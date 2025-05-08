@@ -6,7 +6,7 @@ import { getWorkLogs, getUPHTargets, getActiveUPHTarget, getAuditLogs } from '@/
 import type { DailyWorkLog, UPHTarget, AuditLogEntry } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LabelList, ReferenceLine } from 'recharts'; // Added ReferenceLine
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LabelList, ReferenceLine, Label } from 'recharts'; // Added ReferenceLine and Label
 import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, getHours, isSameDay, parse, setHours, setMinutes, setSeconds, isAfter, addDays, addHours } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
@@ -561,6 +561,7 @@ export default function AnalyticsPage() {
         );
     };
 
+
   if (isLoading) {
     return <div className="p-6 text-center text-muted-foreground">Loading analytics...</div>;
   }
@@ -642,7 +643,7 @@ export default function AnalyticsPage() {
                     </PopoverContent>
                  </Popover>
                   {filterDateRange && (
-                    <Button variant="link" size="sm" onClick={() => setFilterDateRange(undefined)} className="p-0 h-auto text-muted-foreground hover:text-foreground">
+                    <Button variant="link" size="sm" onClick={() => setPresetDateRange(undefined)} className="p-0 h-auto text-muted-foreground hover:text-foreground">
                         <X className="mr-1 h-3 w-3" /> Reset Range
                     </Button>
                   )}
@@ -698,5 +699,6 @@ export default function AnalyticsPage() {
     </div>
   );
 }
+
 
     
