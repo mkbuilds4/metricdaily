@@ -14,6 +14,8 @@ interface ProductivityDashboardProps {
   initialUphTargets: UPHTarget[];
   initialActiveTarget: UPHTarget | null;
   deleteWorkLogAction: (id: string) => void;
+  setActiveUPHTargetAction: (id: string) => void; // Action to set the active target
+  onGoalMet: (targetId: string, metAt: Date) => void; // New callback prop
 }
 
 // --- Component ---
@@ -23,6 +25,8 @@ const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
   initialUphTargets = [],
   initialActiveTarget = null,
   deleteWorkLogAction,
+  setActiveUPHTargetAction, // Receive the action
+  onGoalMet, // Receive the callback
 }) => {
 
   const todayLog = initialWorkLogs.length > 0 ? initialWorkLogs[0] : null;
@@ -48,10 +52,11 @@ const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
                  {!logTarget && initialActiveTarget && !todayLog?.targetId && todayLog && (
                    <span className="text-xs text-muted-foreground ml-1">(Using active target)</span>
                 )}
+                 <br/> <span className="text-xs italic text-muted-foreground">Click a card below to set it as the active target for the dashboard.</span>
              </CardDescription>
             ) : todayLog && initialUphTargets.length > 0 ? ( // Log exists, targets exist, but no active/associated one found
              <CardDescription className="text-sm text-destructive mt-1 flex items-center gap-1">
-                 <AlertCircle className="h-4 w-4" /> No active UPH target set and log has no target. Define/activate one.
+                 <AlertCircle className="h-4 w-4" /> No active UPH target set or target for today's log not found. Define/activate one in Log / Targets.
              </CardDescription>
             ) : !todayLog && initialUphTargets.length === 0 ? ( // No log AND no targets
                  <CardDescription className="text-sm text-muted-foreground mt-2">
@@ -74,6 +79,8 @@ const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
             allWorkLogs={initialWorkLogs} // Pass only today's log
             targets={initialUphTargets} // Pass all available targets for context/comparison
             deleteWorkLogAction={deleteWorkLogAction}
+            setActiveUPHTargetAction={setActiveUPHTargetAction} // Pass the action down
+            onGoalMet={onGoalMet} // Pass callback
             showTodaySection={true} // Only show today's section in this instance
          />
       </CardContent>

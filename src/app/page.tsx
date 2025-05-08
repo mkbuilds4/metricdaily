@@ -19,6 +19,7 @@ import {
   archiveTodayLog,
   getDefaultSettings,
   isSampleDataLoaded, // Import check for sample data
+  setActiveUPHTarget, // Import setActiveUPHTarget
 } from '@/lib/actions'; // Using client-side actions
 import type { DailyWorkLog, UPHTarget, UserSettings } from '@/types';
 import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
@@ -594,6 +595,26 @@ export default function Home() {
   }, [isClient, toast]); // Removed handleSaveWorkLog, added toast
 
 
+  // --- Set Active Target Handler ---
+  const handleSetActiveTarget = useCallback((id: string) => {
+     if (!isClient) return {} as UPHTarget;
+    try {
+      const newActiveTarget = setActiveUPHTarget(id);
+      setUphTargets(prev => prev.map(t => ({...t, isActive: t.id === newActiveTarget.id})));
+      setActiveTarget(newActiveTarget);
+      toast({ title: "Target Activated", description: `"${newActiveTarget.name}" is now the active target for dashboard progress.` });
+      return newActiveTarget;
+    } catch (error) {
+      console.error('[Home] Error setting active target:', error);
+       toast({
+            variant: "destructive",
+            title: "Activation Failed",
+            description: error instanceof Error ? error.message : "Could not activate the target.",
+       });
+      throw error;
+    }
+  }, [toast, isClient]);
+
   const todayLog = workLogs.find(log => log.date === formatDateISO(new Date())) || null;
 
   // --- Render Logic ---
@@ -796,6 +817,7 @@ export default function Home() {
                 initialUphTargets={uphTargets}
                 initialActiveTarget={activeTarget} // Pass active target for context
                 deleteWorkLogAction={handleDeleteWorkLog} // Pass delete action
+                setActiveUPHTargetAction={handleSetActiveTarget} // Pass set active action
                 onGoalMet={handleGoalMet} // Pass the callback
             />
         )}
@@ -808,3 +830,4 @@ export default function Home() {
     </div>
   );
 }
+

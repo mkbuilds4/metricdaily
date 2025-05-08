@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -34,7 +35,6 @@ import {
     calculateRequiredUnitsForTarget,
     formatDateISO,
     formatFriendlyDate,
-    calculateRemainingUnits,
     calculateTimeAheadBehindSchedule,
     formatTimeAheadBehind,
     formatDurationFromMinutes,
@@ -44,17 +44,14 @@ import {
 import { Separator } from '@/components/ui/separator';
 import PreviousLogTriggerSummary from './PreviousLogTriggerSummary'; // Import the component for previous log triggers
 import { cn } from '@/lib/utils';
-// Removed saveWorkLog import as it's now handled by the parent
 
-// Define sortable columns type locally if needed or import from page
-type SortableColumn = keyof Pick<DailyWorkLog, 'date' | 'hoursWorked' | 'documentsCompleted' | 'videoSessionsCompleted'> | 'avgUPH';
-type SortDirection = 'asc' | 'desc';
 
 interface TargetMetricsDisplayProps {
   allWorkLogs: DailyWorkLog[]; // Receives filtered and sorted logs from parent
   targets: UPHTarget[];
   deleteWorkLogAction: (id: string) => void;
-  onGoalMet: (targetId: string, metAt: Date) => void; // New callback prop
+  setActiveUPHTargetAction?: (id: string) => void; // Optional: Action to set active target
+  onGoalMet: (targetId: string, metAt: Date) => void; // Callback prop for goal met
   showTodaySection?: boolean;
 }
 
@@ -63,6 +60,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   allWorkLogs = [], // Receives pre-filtered and pre-sorted logs
   targets = [],
   deleteWorkLogAction,
+  setActiveUPHTargetAction, // Receive the action
   onGoalMet, // Use the new prop
   showTodaySection = true,
 }) => {
@@ -78,26 +76,23 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   const { todayLog, previousLogsByDate } = useMemo(() => {
     const todayDateStr = formatDateISO(new Date());
     let foundTodayLog: DailyWorkLog | null = null;
-    const prevLogsMap: Record<string, DailyWorkLog[]> = {}; // Group by date
+    const prevLogsMap: Record<string, DailyWorkLog> = {}; // Store only one log per date
 
     allWorkLogs.forEach(log => {
       if (showTodaySection && log.date === todayDateStr && !foundTodayLog) {
         foundTodayLog = log;
       } else if (log.date !== todayDateStr) {
+         // Only store the first log found for a given previous date
+         // (assuming parent component provides sorted data if needed)
          if (!prevLogsMap[log.date]) {
-          prevLogsMap[log.date] = [];
-        }
-        // Only store the first log found for a given previous date
-        // (assuming parent component provides sorted data if needed)
-        if (prevLogsMap[log.date].length === 0) {
-            prevLogsMap[log.date].push(log);
-        }
+             prevLogsMap[log.date] = log;
+         }
       }
     });
 
-     // Convert map to array of { date, log } for easier mapping, taking only the first log per date
+     // Convert map to array of { date, log } for easier mapping
     const prevLogsGrouped = Object.entries(prevLogsMap)
-                                .map(([date, logs]) => ({ date, log: logs[0] })) // Take the first log per date
+                                .map(([date, log]) => ({ date, log })) // Take the single log per date
                                 .sort((a, b) => b.date.localeCompare(a.date)); // Sort dates descending
 
 
@@ -189,7 +184,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
             // Goal is permanently met according to saved data
             timeAheadBehindSeconds = 0; // Effectively on schedule or ahead
             projectedHitTimeFormatted = '-'; // No projection needed
-            unitsToGoal = totalRequiredUnits - totalActualUnits; // Calculate final difference if needed
+            unitsToGoal = 0; // Goal is met
 
         } else if (isToday && currentTime) {
             // Goal not permanently met, calculate current status
@@ -200,7 +195,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
         } else if (!isToday) {
              // Previous log, calculate final status
-            unitsToGoal = totalRequiredUnits - totalActualUnits;
+            unitsToGoal = totalRequiredUnits - totalActualUnits; // Calculate final difference if needed
             timeAheadBehindSeconds = calculateTimeAheadBehindSchedule(log, target, null); // Full day difference
             projectedHitTimeFormatted = '-';
         }
@@ -217,22 +212,37 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                      (timeAheadBehindSeconds !== null && timeAheadBehindSeconds >= 0 ? "text-green-600 dark:text-green-500" : // >= 0 for on schedule or ahead
                                      (timeAheadBehindSeconds !== null && timeAheadBehindSeconds < 0 ? "text-red-600 dark:text-red-500" : ""));
 
+        // Handler for clicking the card (only if it's today and setActiveUPHTargetAction is provided)
+        const handleCardClick = () => {
+             if (isToday && setActiveUPHTargetAction) {
+                setActiveUPHTargetAction(target.id);
+             }
+        };
+
 
         return (
-            <Card key={`${log.id}-${target.id}`} className="flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow duration-200">
+            <Card
+                key={`${log.id}-${target.id}`}
+                className={cn(
+                    "flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow duration-200",
+                    isToday && setActiveUPHTargetAction && "cursor-pointer hover:ring-2 hover:ring-primary/50", // Add cursor and hover ring if clickable
+                    target.id === activeTarget?.id && isToday && "ring-2 ring-primary" // Highlight active target
+                )}
+                onClick={handleCardClick} // Add onClick handler
+            >
                 <CardHeader className="pb-2">
                     <div className="flex justify-between items-start">
                         <CardTitle className="text-lg font-semibold">{target.name}</CardTitle>
                          {/* Display Units to Goal */}
                          <span className={cn(
                             "text-base font-medium",
-                            isGoalMet ? 'text-green-600 dark:text-green-500' : (unitsToGoal <= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500')
+                             isGoalMet ? 'text-green-600 dark:text-green-500' : (unitsToGoal <= 0 ? 'text-green-600 dark:text-green-500' : 'text-muted-foreground') // Muted if not met yet
                         )}>
                            {isGoalMet ? (
                                 <> <CheckCircle className="inline-block h-4 w-4 mr-1"/> Met </>
                            ) : (
-                               unitsToGoal > 0 ? `-${unitsToGoal.toFixed(2)}` : `+${Math.abs(unitsToGoal).toFixed(2)}`
-                           )} Units
+                               `${unitsToGoal > 0 ? unitsToGoal.toFixed(2) : '0.00'} Units Left`
+                           )}
                         </span>
                     </div>
                     <CardDescription>Goal UPH: {target.targetUPH.toFixed(1)}</CardDescription>
@@ -245,29 +255,22 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 <p className="font-medium tabular-nums">{currentMetrics.currentUnits.toFixed(2)}</p>
                             </div>
                              <div>
-                                <p className="text-muted-foreground">Units to Goal</p>
-                                <p className="font-medium tabular-nums">
-                                     {isGoalMet ? (
-                                         <> <CheckCircle className="inline-block h-4 w-4 mr-1 text-green-600 dark:text-green-500"/> Met </>
-                                     ) : (
-                                         unitsToGoal > 0 ? unitsToGoal.toFixed(2) : '0.00'
-                                     )}
-                                 </p>
-                             </div>
-                             <div>
                                 <p className="text-muted-foreground">Current UPH</p>
                                 <p className="font-medium tabular-nums">{currentMetrics.currentUPH.toFixed(2)}</p>
                              </div>
-                            <div>
+                            <div className="col-span-1">
                                 <p className="text-muted-foreground">Schedule Status</p>
                                 <p className={cn("font-medium tabular-nums", scheduleStatusColor)}>
                                     {scheduleStatusText}
-                                    {isGoalMet && ` at ${format(goalMetTime!, 'h:mm:ss a')}`}
+                                    {/* Show met time only if goal is met */}
+                                    {isGoalMet && goalMetTime ? ` at ${format(goalMetTime, 'h:mm:ss a')}` : ''}
+                                    {!isGoalMet && timeAheadBehindSeconds !== null ? ` (${formatTimeAheadBehind(timeAheadBehindSeconds, true)})` : ''}
                                 </p>
                             </div>
-                            <div className="col-span-2">
+                            <div className="col-span-1">
                                 <p className="text-muted-foreground">Est. Goal Hit Time</p>
                                 <p className="font-medium tabular-nums">
+                                    {/* Show projection only if goal is NOT met */}
                                     {isGoalMet ? '-' : projectedHitTimeFormatted}
                                 </p>
                             </div>
@@ -278,22 +281,20 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 <p className="text-muted-foreground">Units Completed</p>
                                 <p className="font-medium tabular-nums">{totalActualUnits.toFixed(2)}</p>
                             </div>
-                            <div>
-                                <p className="text-muted-foreground">Avg Daily UPH</p>
-                                <p className="font-medium tabular-nums">{dailyUPHForTarget.toFixed(2)}</p>
-                            </div>
                              <div>
                                 <p className="text-muted-foreground">Schedule Result</p>
                                 <p className={cn("font-medium tabular-nums", scheduleStatusColor)}>
                                     {scheduleStatusText}
-                                     {isGoalMet && ` at ${format(goalMetTime!, 'h:mm:ss a')}`}
+                                    {/* Show met time only if goal is met */}
+                                    {isGoalMet && goalMetTime ? ` at ${format(goalMetTime, 'h:mm:ss a')}` : ''}
+                                    {!isGoalMet && timeAheadBehindSeconds !== null ? ` (${formatTimeAheadBehind(timeAheadBehindSeconds, true)})` : ''}
                                 </p>
                             </div>
-                            {/* Can add Target Units for previous logs if desired */}
-                            {/* <div>
-                                <p className="text-muted-foreground">Target Units</p>
-                                <p className="font-medium tabular-nums">{totalRequiredUnits.toFixed(2)}</p>
-                            </div> */}
+                             {/* Conditionally show Avg Daily UPH only if not today */}
+                              <div>
+                                <p className="text-muted-foreground">Avg Daily UPH</p>
+                                <p className="font-medium tabular-nums">{dailyUPHForTarget.toFixed(2)}</p>
+                              </div>
                         </>
                     )}
                 </CardContent>
@@ -330,7 +331,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
 
         return (
-            <Card className="mb-4 relative shadow-sm"> {/* Added relative positioning for delete button */}
+            <Card className="mb-4 relative shadow-sm"> {/* Added relative positioning */}
                  <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                          <div>
@@ -347,7 +348,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 {!targetForSummaryCalc && targets.length === 0 && <span className="text-muted-foreground ml-2">(No targets defined)</span>}
                             </CardDescription>
                          </div>
-                          {/* Delete button is now part of PreviousLogTriggerSummary for previous logs */}
                     </div>
                 </CardHeader>
                  <CardContent className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -460,3 +460,4 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
+
