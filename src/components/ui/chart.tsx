@@ -245,7 +245,8 @@ const ChartTooltipContent = React.forwardRef<
                       </div>
                       {item.value && (
                         <span className="font-mono font-medium tabular-nums text-foreground">
-                          {item.value.toLocaleString()}
+                          {/* Ensure item.value is treated as a number for formatting */}
+                          {typeof item.value === 'number' ? item.value.toLocaleString() : String(item.value)}
                         </span>
                       )}
                     </div>
@@ -368,5 +369,3 @@ export {
   ChartLegendContent,
   ChartStyle,
 }
-
-]
