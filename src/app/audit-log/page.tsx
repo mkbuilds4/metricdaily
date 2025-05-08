@@ -12,7 +12,7 @@ import { Combobox, ComboboxOption } from '@/components/ui/combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { format, parseISO, startOfDay, endOfDay, isValid, subDays, startOfWeek, endOfWeek } from 'date-fns';
-import { RefreshCw, Download, Filter, X, Calendar as CalendarIcon, Activity, Database, Settings as SettingsIcon, System, Shield } from 'lucide-react';
+import { RefreshCw, Download, Filter, X, Calendar as CalendarIcon, Activity, Database, Settings as SettingsIcon, Server, Shield } from 'lucide-react'; // Changed System to Server
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'; // Import Cell from recharts
 import { useToast } from '@/hooks/use-toast';
 import { DateRange } from 'react-day-picker';
@@ -296,7 +296,7 @@ export default function AuditLogPage() {
                                     <span className="font-medium flex items-center gap-1.5">
                                         {entity === 'WorkLog' && <Database className="h-4 w-4 text-blue-500" />}
                                         {entity === 'UPHTarget' && <Activity className="h-4 w-4 text-green-500" />}
-                                        {entity === 'System' && <System className="h-4 w-4 text-purple-500" />}
+                                        {entity === 'System' && <Server className="h-4 w-4 text-purple-500" />} {/* Changed System to Server */}
                                         {entity === 'Security' && <Shield className="h-4 w-4 text-red-500" />}
                                         {entity === 'Settings' && <SettingsIcon className="h-4 w-4 text-orange-500" />}
                                         {entity}
