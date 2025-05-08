@@ -17,7 +17,6 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { FileSpreadsheet, Filter, X, Calendar as CalendarIcon, ArrowUpDown } from 'lucide-react';
 import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks } from 'date-fns'; // Added subWeeks
 import { DateRange } from 'react-day-picker';
@@ -26,6 +25,7 @@ import { Separator } from '@/components/ui/separator';
 // Pagination settings
 const ITEMS_PER_PAGE = 10;
 
+// Sorting is now handled visually by date order in accordion, but keep types if needed elsewhere
 type SortableColumn = keyof Pick<DailyWorkLog, 'date' | 'hoursWorked' | 'documentsCompleted' | 'videoSessionsCompleted'> | 'avgUPH';
 type SortDirection = 'asc' | 'desc';
 
@@ -40,7 +40,7 @@ export default function PreviousLogsPage() {
   const [filterDateRange, setFilterDateRange] = useState<DateRange | undefined>(undefined);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
 
-  // Sorting State
+  // Sorting State (kept for filtering logic, display is implicit)
   const [sortColumn, setSortColumn] = useState<SortableColumn>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
@@ -83,7 +83,6 @@ export default function PreviousLogsPage() {
      if (typeof window === 'undefined') return;
     try {
       deleteWorkLog(id);
-      // Refetch or update local state after deletion
       loadData(); // Reload all data to reflect the deletion
       toast({ title: "Log Deleted", description: "Previous work log deleted successfully." });
     } catch (error) {
@@ -131,7 +130,7 @@ export default function PreviousLogsPage() {
     });
   }, [allLogs, filterTerm, filterDateRange, activeTarget]);
 
-  // Sorting Logic
+  // Sorting Logic - Keep for ordering before pagination, even though table headers removed
   const sortedLogs = useMemo(() => {
     return [...filteredLogs].sort((a, b) => {
       let valA: string | number | null = null;
@@ -144,7 +143,6 @@ export default function PreviousLogsPage() {
          valA = a[sortColumn as keyof Omit<DailyWorkLog, 'avgUPH'>];
          valB = b[sortColumn as keyof Omit<DailyWorkLog, 'avgUPH'>];
       }
-
 
       let comparison = 0;
       if (valA === null || valA === undefined) comparison = -1;
@@ -171,30 +169,17 @@ export default function PreviousLogsPage() {
 
 
   // Handlers
-  const handleSort = useCallback((column: SortableColumn) => {
-    setSortDirection(prevDirection =>
-      sortColumn === column && prevDirection === 'desc' ? 'asc' : 'desc' // Default to desc first for date
-    );
-    setSortColumn(column);
-    setCurrentPage(1); // Reset page when sorting changes
-  }, [sortColumn]);
+  // Sort handlers removed as table headers are gone
 
   const handleResetFilters = () => {
      setFilterTerm('');
      setFilterDateRange(undefined);
-     setSortColumn('date'); // Reset sort to default
+     setSortColumn('date'); // Reset sort logic to default
      setSortDirection('desc');
      setCurrentPage(1);
   };
 
-  const renderSortIcon = (column: SortableColumn) => {
-    if (sortColumn !== column) {
-      return <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />;
-    }
-    return sortDirection === 'asc' ?
-      <ArrowUpDown className="ml-2 h-4 w-4 text-accent" /> : // Use accent color for active sort
-      <ArrowUpDown className="ml-2 h-4 w-4 text-accent transform rotate-180" />; // Rotate for desc
-  };
+  // Render sort icon removed
 
   const hasActiveFilters = filterTerm || filterDateRange;
 
@@ -215,7 +200,7 @@ export default function PreviousLogsPage() {
   ];
 
 
-  // CSV Export (remains largely the same, uses filteredLogs)
+  // CSV Export
   const escapeCSVField = (field: any): string => {
     if (field === null || field === undefined) return '';
     let stringField = String(field);
@@ -292,7 +277,7 @@ export default function PreviousLogsPage() {
   }, [toast]);
 
   const handleExportData = useCallback(() => {
-     // Use sortedLogs for export to respect current view
+     // Use sortedLogs for export to respect current filters/sort order
     if (sortedLogs.length === 0) {
       toast({
         title: "No Data to Export",
@@ -338,11 +323,11 @@ export default function PreviousLogsPage() {
         </Button>
       </div>
 
-      {/* Filter and Sort Controls */}
+      {/* Filter Controls Card */}
       <Card className="shadow-sm">
         <CardHeader>
              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <Filter className="h-5 w-5" /> Filter & Sort Logs
+                <Filter className="h-5 w-5" /> Filter Logs
              </CardTitle>
              <CardDescription>Refine the list of previous work logs.</CardDescription>
         </CardHeader>
@@ -433,19 +418,13 @@ export default function PreviousLogsPage() {
         </CardContent>
       </Card>
 
-      {/* Pass filtered and sorted logs to TargetMetricsDisplay */}
+      {/* Render logs using TargetMetricsDisplay with Accordion */}
       <TargetMetricsDisplay
         allWorkLogs={paginatedLogs} // Pass only the logs for the current page
         targets={uphTargets}
         deleteWorkLogAction={handleDeleteWorkLog}
-        showTodaySection={false}
-        paginatePreviousLogs={false} // Disable internal pagination
-        showSortingHeaders={true} // Indicate headers should be shown (or handle header display logic here)
-        currentSortColumn={sortColumn}
-        currentSortDirection={sortDirection}
-        onSort={handleSort}
-        renderSortIcon={renderSortIcon}
-      />
+        showTodaySection={false} // Ensure today's section is not shown here
+       />
 
       {/* Pagination Controls */}
       {totalPages > 1 && (
@@ -482,3 +461,4 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
+
