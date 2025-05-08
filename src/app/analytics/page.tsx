@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -213,140 +214,140 @@ export default function AnalyticsPage() {
    }, [dailyWorkChartData]);
 
   if (isLoading) {
-    return &lt;div className="p-6 text-center text-muted-foreground"&gt;Loading analytics...&lt;/div&gt;;
+    return <div className="p-6 text-center text-muted-foreground">Loading analytics...</div>;
   }
 
   return (
-    &lt;div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8"&gt;
-      &lt;h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center"&gt;Productivity Analytics&lt;/h1&gt;
+    <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
+      <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Productivity Analytics</h1>
 
-        {&/* Filter Controls */}
-        &lt;Card className="shadow-sm"&gt;
-            &lt;CardHeader&gt;
-                &lt;CardTitle className="text-lg font-semibold flex items-center gap-2"&gt;
-                    &lt;Filter className="h-5 w-5" /&gt; Filter Data Range
-                &lt;/CardTitle&gt;
-                &lt;CardDescription&gt;Select the time period for the analytics. Hourly chart requires a single day selection.&lt;/CardDescription&gt;
-            &lt;/CardHeader&gt;
-            &lt;CardContent className="flex flex-col sm:flex-row items-center gap-3 pt-2"&gt;
-                &lt;Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}&gt;
-                   &lt;PopoverTrigger asChild&gt;
-                     &lt;Button
+        {/* Filter Controls */}
+        <Card className="shadow-sm">
+            <CardHeader>
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                    <Filter className="h-5 w-5" /> Filter Data Range
+                </CardTitle>
+                <CardDescription>Select the time period for the analytics. Hourly chart requires a single day selection.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                   <PopoverTrigger asChild>
+                     <Button
                        id="date"
                        variant={"outline"}
                        className={cn(
                          "w-full sm:w-[300px] justify-start text-left font-normal h-9 text-sm", // Fixed width for popover trigger consistency
                          !filterDateRange && "text-muted-foreground"
                        )}
-                     &gt;
-                       &lt;CalendarIcon className="mr-2 h-4 w-4" /&gt;
+                     >
+                       <CalendarIcon className="mr-2 h-4 w-4" />
                        {filterDateRange?.from ? (
                          filterDateRange.to ? (
                             // Check if start and end dates are the same
                             isSameDay(filterDateRange.from, filterDateRange.to)
                              ? format(filterDateRange.from, "LLL dd, y") // Show single date
-                             : &lt;&gt;
-                                 {format(filterDateRange.from, "LLL dd, y")} -&lt;{" "}
+                             : <>
+                                 {format(filterDateRange.from, "LLL dd, y")} -{" "}
                                  {format(filterDateRange.to, "LLL dd, y")}
-                               &lt;/&gt;
+                               </>
                          ) : (
                            format(filterDateRange.from, "LLL dd, y")
                          )
                        ) : (
-                         &lt;span&gt;Select Date Range&lt;/span&gt;
+                         <span>Select Date Range</span>
                        )}
-                     &lt;/Button&gt;
-                   &lt;/PopoverTrigger&gt;
-                    &lt;PopoverContent className="w-auto p-0 flex flex-col sm:flex-row" align="start"&gt;
-                         &lt;div className="flex flex-col p-2 border-b sm:border-r sm:border-b-0"&gt;
-                            &lt;p className="text-xs font-semibold text-muted-foreground px-2 py-1"&gt;Presets&lt;/p&gt;
+                     </Button>
+                   </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 flex flex-col sm:flex-row" align="start">
+                         <div className="flex flex-col p-2 border-b sm:border-r sm:border-b-0">
+                            <p className="text-xs font-semibold text-muted-foreground px-2 py-1">Presets</p>
                             {presetRanges.map((preset) => (
-                                &lt;Button
+                                <Button
                                     key={preset.label}
                                     variant="ghost"
                                     size="sm"
                                     className="justify-start text-sm font-normal h-8"
                                     onClick={() => setPresetDateRange(preset.range)}
-                                &gt;
+                                >
                                     {preset.label}
-                                &lt;/Button&gt;
+                                </Button>
                             ))}
-                            &lt;Separator className="my-1" /&gt;
-                            &lt;Button
+                            <Separator className="my-1" />
+                            <Button
                                 variant="ghost"
                                 size="sm"
                                 className="justify-start text-sm font-normal h-8 text-muted-foreground"
                                 onClick={() => setPresetDateRange(undefined)} // Allow clearing the range
-                            &gt;
+                            >
                                 Clear
-                            &lt;/Button&gt;
-                        &lt;/div&gt;
-                        &lt;Calendar
+                            </Button>
+                        </div>
+                        <Calendar
                            initialFocus
                            mode="range"
                            defaultMonth={filterDateRange?.from}
                            selected={filterDateRange}
                            onSelect={setPresetDateRange} // Use the same handler
                            numberOfMonths={1}
-                           disabled={(date) => date &gt; new Date() || date &lt; new Date("2023-01-01")}
-                         /&gt;
-                    &lt;/PopoverContent&gt;
-                 &lt;/Popover&gt;
+                           disabled={(date) => date > new Date() || date < new Date("2023-01-01")}
+                         />
+                    </PopoverContent>
+                 </Popover>
                   {filterDateRange && (
-                    &lt;Button variant="link" size="sm" onClick={() => setFilterDateRange(undefined)} className="p-0 h-auto text-muted-foreground hover:text-foreground"&gt;
-                        &lt;X className="mr-1 h-3 w-3" /&gt; Reset Range
-                    &lt;/Button&gt;
+                    <Button variant="link" size="sm" onClick={() => setFilterDateRange(undefined)} className="p-0 h-auto text-muted-foreground hover:text-foreground">
+                        <X className="mr-1 h-3 w-3" /> Reset Range
+                    </Button>
                   )}
-            &lt;/CardContent&gt;
-        &lt;/Card&gt;
+            </CardContent>
+        </Card>
 
-       {&/* Summary Stats */}
-        &lt;Card&gt;
-            &lt;CardHeader&gt;
-                &lt;CardTitle className="text-lg font-semibold flex items-center gap-2"&gt;
-                    &lt;TrendingUp className="h-5 w-5" /&gt; Summary Statistics
-                &lt;/CardTitle&gt;
-                 &lt;CardDescription&gt;
+       {/* Summary Stats */}
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" /> Summary Statistics
+                </CardTitle>
+                 <CardDescription>
                      Overview for the selected period ({filterDateRange?.from ? format(filterDateRange.from, 'MMM d, y') : 'Start'} - {filterDateRange?.to ? format(filterDateRange.to, 'MMM d, y') : 'End'}).
-                 &lt;/CardDescription&gt;
-            &lt;/CardHeader&gt;
-            &lt;CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center"&gt;
-                &lt;div className="bg-muted/50 p-4 rounded-lg"&gt;
-                    &lt;p className="text-sm font-medium text-muted-foreground"&gt;Total Documents&lt;/p&gt;
-                    &lt;p className="text-2xl font-bold"&gt;{summaryStats.totalDocs}&lt;/p&gt;
-                &lt;/div&gt;
-                 &lt;div className="bg-muted/50 p-4 rounded-lg"&gt;
-                    &lt;p className="text-sm font-medium text-muted-foreground"&gt;Total Videos&lt;/p&gt;
-                    &lt;p className="text-2xl font-bold"&gt;{summaryStats.totalVideos}&lt;/p&gt;
-                &lt;/div&gt;
-                 &lt;div className="bg-muted/50 p-4 rounded-lg"&gt;
-                    &lt;p className="text-sm font-medium text-muted-foreground"&gt;Average Daily UPH&lt;/p&gt;
-                    &lt;p className="text-2xl font-bold"&gt;{summaryStats.avgUPH &gt; 0 ? summaryStats.avgUPH : '-'}&lt;/p&gt;
-                &lt;/div&gt;
-                 &lt;div className="bg-muted/50 p-4 rounded-lg"&gt;
-                    &lt;p className="text-sm font-medium text-muted-foreground"&gt;Days Logged&lt;/p&gt;
-                    &lt;p className="text-2xl font-bold"&gt;{summaryStats.daysLogged}&lt;/p&gt;
-                &lt;/div&gt;
-            &lt;/CardContent&gt;
-        &lt;/Card&gt;
+                 </CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Total Documents</p>
+                    <p className="text-2xl font-bold">{summaryStats.totalDocs}</p>
+                </div>
+                 <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Total Videos</p>
+                    <p className="text-2xl font-bold">{summaryStats.totalVideos}</p>
+                </div>
+                 <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Average Daily UPH</p>
+                    <p className="text-2xl font-bold">{summaryStats.avgUPH > 0 ? summaryStats.avgUPH : '-'}</p>
+                </div>
+                 <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Days Logged</p>
+                    <p className="text-2xl font-bold">{summaryStats.daysLogged}</p>
+                </div>
+            </CardContent>
+        </Card>
 
-      {&/* Chart Section */}
-      &lt;div className="grid grid-cols-1 lg:grid-cols-2 gap-8"&gt;
-        {&/* Daily Counts Chart */}
-        &lt;Card&gt;
-          &lt;CardHeader&gt;
-            &lt;CardTitle&gt;Daily Completed Items&lt;/CardTitle&gt;
-             &lt;CardDescription&gt;Documents and Video Sessions completed per day.&lt;/CardDescription&gt;
-          &lt;/CardHeader&gt;
-          &lt;CardContent&gt;
-            {dailyWorkChartData.length &gt; 0 ? (
-              &lt;ChartContainer config={dailyCountsChartConfig} className="h-[300px] w-full"&gt;
-                &lt;LineChart
+      {/* Chart Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Daily Counts Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Daily Completed Items</CardTitle>
+             <CardDescription>Documents and Video Sessions completed per day.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {dailyWorkChartData.length > 0 ? (
+              <ChartContainer config={dailyCountsChartConfig} className="h-[300px] w-full">
+                <LineChart
                   data={dailyWorkChartData}
                   margin={{ top: 5, right: 20, left: -10, bottom: 5 }} // Adjust margins
-                &gt;
-                  &lt;CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))"/&gt;
-                  &lt;XAxis
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))"/>
+                  <XAxis
                     dataKey="date"
                     tickLine={false}
                     axisLine={false}
@@ -355,96 +356,96 @@ export default function AnalyticsPage() {
                     // interval="preserveStartEnd" // Show more labels potentially
                     // angle={-30} // Angle labels if too crowded
                     // textAnchor="end"
-                  /&gt;
-                  &lt;YAxis
+                  />
+                  <YAxis
                     tickLine={false}
                     axisLine={false}
                     tickMargin={8}
                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                  /&gt;
-                   &lt;ChartTooltip
+                  />
+                   <ChartTooltip
                      cursor={false}
-                     content=&lt;ChartTooltipContent hideLabel indicator="line" /&gt;
-                   /&gt;
-                  &lt;Line type="monotone" dataKey="documents" stroke={CHART_COLORS.documents} strokeWidth={2} dot={false} name="Documents" /&gt;
-                  &lt;Line type="monotone" dataKey="videos" stroke={CHART_COLORS.videos} strokeWidth={2} dot={false} name="Videos" /&gt;
-                   &lt;ChartLegend content=&lt;ChartLegendContent /&gt; /&gt;
-                &lt;/LineChart&gt;
-              &lt;/ChartContainer&gt;
+                     content={<ChartTooltipContent hideLabel indicator="line" />}
+                   />
+                  <Line type="monotone" dataKey="documents" stroke={CHART_COLORS.documents} strokeWidth={2} dot={false} name="Documents" />
+                  <Line type="monotone" dataKey="videos" stroke={CHART_COLORS.videos} strokeWidth={2} dot={false} name="Videos" />
+                   <ChartLegend content={<ChartLegendContent />} />
+                </LineChart>
+              </ChartContainer>
             ) : (
-                 &lt;div className="h-[300px] flex items-center justify-center"&gt;
-                    &lt;p className="text-muted-foreground"&gt;No data available for the selected range.&lt;/p&gt;
-                 &lt;/div&gt;
+                 <div className="h-[300px] flex items-center justify-center">
+                    <p className="text-muted-foreground">No data available for the selected range.</p>
+                 </div>
             )}
-          &lt;/CardContent&gt;
-        &lt;/Card&gt;
+          </CardContent>
+        </Card>
 
-        {&/* Daily UPH Chart */}
-        &lt;Card&gt;
-          &lt;CardHeader&gt;
-            &lt;CardTitle&gt;Daily Average UPH&lt;/CardTitle&gt;
-            &lt;CardDescription&gt;
+        {/* Daily UPH Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Daily Average UPH</CardTitle>
+            <CardDescription>
                 Average Units Per Hour achieved each day compared to the target for that day's log.
                 ({activeTarget ? `Using "${activeTarget.name}" as fallback` : 'Requires an active target as fallback'})
-            &lt;/CardDescription&gt;
-          &lt;/CardHeader&gt;
-          &lt;CardContent&gt;
-            {dailyWorkChartData.length &gt; 0 ? (
-                &lt;ChartContainer config={dailyUPHChartConfig} className="h-[300px] w-full"&gt;
-                    &lt;BarChart data={dailyWorkChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}&gt;
-                        &lt;CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))"/&gt;
-                        &lt;XAxis
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {dailyWorkChartData.length > 0 ? (
+                <ChartContainer config={dailyUPHChartConfig} className="h-[300px] w-full">
+                    <BarChart data={dailyWorkChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))"/>
+                        <XAxis
                             dataKey="date"
                             tickLine={false}
                             axisLine={false}
                             tickMargin={8}
                             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                        /&gt;
-                         &lt;YAxis
+                        />
+                         <YAxis
                             tickLine={false}
                             axisLine={false}
                             tickMargin={8}
                             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                             domain={['auto', 'auto']} // Let Y-axis scale automatically
                             allowDecimals={true}
-                         /&gt;
-                        &lt;ChartTooltip
+                         />
+                        <ChartTooltip
                            cursor={false}
-                           content=&lt;ChartTooltipContent hideLabel /&gt;
-                        /&gt;
-                         {&/* Target UPH Reference Line */}
-                         {&/* We draw a bar for target UPH for comparison - could also use ReferenceLine */}
-                         &lt;Bar dataKey="targetUPH" fill={CHART_COLORS.targetUPH} radius={4} name="Target UPH" /&gt;
-                        &lt;Bar dataKey="uph" fill={CHART_COLORS.uph} radius={4} name="Actual UPH"/&gt;
-                       &lt;ChartLegend content=&lt;ChartLegendContent /&gt; /&gt;
-                    &lt;/BarChart&gt;
-                &lt;/ChartContainer&gt;
+                           content={<ChartTooltipContent hideLabel />}
+                        />
+                         {/* Target UPH Reference Line */}
+                         {/* We draw a bar for target UPH for comparison - could also use ReferenceLine */}
+                         <Bar dataKey="targetUPH" fill={CHART_COLORS.targetUPH} radius={4} name="Target UPH" />
+                        <Bar dataKey="uph" fill={CHART_COLORS.uph} radius={4} name="Actual UPH"/>
+                       <ChartLegend content={<ChartLegendContent />} />
+                    </BarChart>
+                </ChartContainer>
             ) : (
-                 &lt;div className="h-[300px] flex items-center justify-center"&gt;
-                    &lt;p className="text-muted-foreground"&gt;No data available for the selected range.&lt;/p&gt;
-                 &lt;/div&gt;
+                 <div className="h-[300px] flex items-center justify-center">
+                    <p className="text-muted-foreground">No data available for the selected range.</p>
+                 </div>
             )}
-          &lt;/CardContent&gt;
-        &lt;/Card&gt;
+          </CardContent>
+        </Card>
 
-        {&/* Hourly Activity Chart */}
-        &lt;Card className="lg:col-span-2"&gt; {&/* Span 2 columns on large screens */}
-          &lt;CardHeader&gt;
-            &lt;CardTitle className="flex items-center gap-2"&gt;
-                &lt;Clock className="h-5 w-5" /&gt; Hourly Activity
-            &lt;/CardTitle&gt;
-            &lt;CardDescription&gt;
+        {/* Hourly Activity Chart */}
+        <Card className="lg:col-span-2"> {/* Span 2 columns on large screens */}
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" /> Hourly Activity
+            </CardTitle>
+            <CardDescription>
               Number of logged activities (log creation/updates) per hour for the selected day.
               {selectedDateForHourlyChart ? ` (${format(selectedDateForHourlyChart, 'MMM d, yyyy')})` : ''}
-            &lt;/CardDescription&gt;
-          &lt;/CardHeader&gt;
-          &lt;CardContent&gt;
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             {selectedDateForHourlyChart ? (
-              hourlyActivityChartData.length &gt; 0 ? (
-                &lt;ChartContainer config={hourlyActivityChartConfig} className="h-[300px] w-full"&gt;
-                  &lt;BarChart data={hourlyActivityChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}&gt;
-                    &lt;CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" /&gt;
-                    &lt;XAxis
+              hourlyActivityChartData.length > 0 ? (
+                <ChartContainer config={hourlyActivityChartConfig} className="h-[300px] w-full">
+                  <BarChart data={hourlyActivityChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                    <XAxis
                       dataKey="hourLabel"
                       tickLine={false}
                       axisLine={false}
@@ -453,37 +454,39 @@ export default function AnalyticsPage() {
                       angle={-45} // Angle labels for better fit
                       textAnchor="end"
                       interval={1} // Show every other label
-                    /&gt;
-                    &lt;YAxis
+                    />
+                    <YAxis
                       tickLine={false}
                       axisLine={false}
                       tickMargin={8}
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                       allowDecimals={false} // Counts are integers
-                    /&gt;
-                    &lt;ChartTooltip
+                    />
+                    <ChartTooltip
                       cursor={false}
-                      content=&lt;ChartTooltipContent hideLabel /&gt;
-                    /&gt;
-                    &lt;Bar dataKey="count" fill={CHART_COLORS.hourlyActivity} radius={4} name="Activities" /&gt;
-                    {&/* No legend needed for single series */}
-                  &lt;/BarChart&gt;
-                &lt;/ChartContainer&gt;
+                      content={<ChartTooltipContent hideLabel />}
+                    />
+                    <Bar dataKey="count" fill={CHART_COLORS.hourlyActivity} radius={4} name="Activities" />
+                    {/* No legend needed for single series */}
+                  </BarChart>
+                </ChartContainer>
               ) : (
-                &lt;div className="h-[300px] flex items-center justify-center"&gt;
-                  &lt;p className="text-muted-foreground"&gt;No logged activity found for {format(selectedDateForHourlyChart, 'MMM d, yyyy')}.&lt;/p&gt;
-                &lt;/div&gt;
+                <div className="h-[300px] flex items-center justify-center">
+                  <p className="text-muted-foreground">No logged activity found for {format(selectedDateForHourlyChart, 'MMM d, yyyy')}.</p>
+                </div>
               )
             ) : (
-              &lt;div className="h-[300px] flex items-center justify-center"&gt;
-                &lt;p className="text-muted-foreground"&gt;Please select a single day in the date range filter to view hourly activity.&lt;/p&gt;
-              &lt;/div&gt;
+              <div className="h-[300px] flex items-center justify-center">
+                <p className="text-muted-foreground">Please select a single day in the date range filter to view hourly activity.</p>
+              </div>
             )}
-          &lt;/CardContent&gt;
-        &lt;/Card&gt;
+          </CardContent>
+        </Card>
 
 
-      &lt;/div&gt;
-    &lt;/div&gt;
+      </div>
+    </div>
   );
-}
+} // Added missing closing brace here
+
+    
