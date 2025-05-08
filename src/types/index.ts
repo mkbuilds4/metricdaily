@@ -36,11 +36,11 @@ export interface UPHTarget {
  */
 export type AuditLogActionType =
   | 'CREATE_WORK_LOG'
-  | 'UPDATE_WORK_LOG'
-  | 'UPDATE_WORK_LOG_QUICK_COUNT'
-  | 'UPDATE_WORK_LOG_BREAK'
-  | 'UPDATE_WORK_LOG_TRAINING'
-  | 'UPDATE_WORK_LOG_GOAL_MET' // Added action for goal met time
+  | 'UPDATE_WORK_LOG' // Generic update (e.g., from form)
+  | 'UPDATE_WORK_LOG_QUICK_COUNT' // Specific update from dashboard quick inputs
+  | 'UPDATE_WORK_LOG_BREAK' // Specific update for adding break time
+  | 'UPDATE_WORK_LOG_TRAINING' // Specific update for adding training time
+  | 'UPDATE_WORK_LOG_GOAL_MET' // Specific update for recording goal met time
   | 'DELETE_WORK_LOG'
   | 'CREATE_UPH_TARGET'
   | 'UPDATE_UPH_TARGET'
@@ -53,7 +53,7 @@ export type AuditLogActionType =
   | 'SYSTEM_EXPORT_DATA'
   | 'SYSTEM_EXPORT_DATA_FAILED'
   | 'SYSTEM_VIEW_AUDIT_LOG'
-  | 'UPDATE_SETTINGS'; // Added action type for updating settings
+  | 'UPDATE_SETTINGS';
 
 
 /**

@@ -20,6 +20,7 @@ import {
   getDefaultSettings,
   isSampleDataLoaded, // Import check for sample data
   setActiveUPHTarget, // Import setActiveUPHTarget
+  addAuditLog, // Import addAuditLog
 } from '@/lib/actions'; // Using client-side actions
 import type { DailyWorkLog, UPHTarget, UserSettings } from '@/types';
 import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
@@ -121,7 +122,7 @@ export default function Home() {
   const handleSaveWorkLog = useCallback((logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked?: number; goalMetTimes?: Record<string, string> }) => {
     if (!isClient) return {} as DailyWorkLog;
     try {
-        // The saveWorkLog itself will now handle detailed audit logging
+        // The saveWorkLog itself will now handle generic update/create audit logging
         const savedLog = saveWorkLog(logData);
         // Update local state immediately with the returned saved log
         setWorkLogs(prevLogs => {
@@ -185,6 +186,8 @@ export default function Home() {
           return;
       }
 
+      const originalLogState = { ...todayLog }; // Capture state before update for audit log
+
       let newValue: number;
       // Preserve the other field's value
       const currentDocValue = todayLog.documentsCompleted || 0;
@@ -245,9 +248,20 @@ export default function Home() {
 
       try {
            // Pass the complete object required by saveWorkLog
-           handleSaveWorkLog(updatedLogPartial as any); // Type assertion might be needed if TS struggles with the dynamic field
+           const savedLog = handleSaveWorkLog(updatedLogPartial as any); // Type assertion might be needed if TS struggles with the dynamic field
            // Inputs will update via the useEffect watching workLogs
            toast({ title: "Count Updated", description: `Today's ${field === 'documentsCompleted' ? 'document' : 'video'} count set to ${newValue}.` });
+
+           // Add specific audit log entry for quick count update
+            addAuditLog(
+                'UPDATE_WORK_LOG_QUICK_COUNT',
+                'WorkLog',
+                `Quick updated ${field === 'documentsCompleted' ? 'document' : 'video'} count to ${newValue} for log ${savedLog.date}.`,
+                savedLog.id,
+                originalLogState, // Previous state
+                savedLog // New state
+            );
+
       } catch(error) {
            // Revert input on error if it was direct text entry
            if (typeof value === 'string') {
@@ -466,6 +480,7 @@ export default function Home() {
       });
       return;
     }
+    const originalLogState = { ...todayLog }; // Capture state before update
     try {
       const updatedLog = addBreakTimeToLog(todayLog.id, breakMinutes);
       // Update local state immediately
@@ -482,6 +497,15 @@ export default function Home() {
         title: "Break Added",
         description: `${breakMinutes} minutes added to your break time. Total break: ${formatDurationFromMinutes(updatedLog.breakDurationMinutes * 60)}.`,
       });
+      // Add specific audit log for break update
+       addAuditLog(
+            'UPDATE_WORK_LOG_BREAK',
+            'WorkLog',
+            `Added ${breakMinutes}m break to log for ${updatedLog.date}. Total break: ${updatedLog.breakDurationMinutes}m.`,
+            updatedLog.id,
+            { breakDurationMinutes: originalLogState.breakDurationMinutes, hoursWorked: originalLogState.hoursWorked },
+            { breakDurationMinutes: updatedLog.breakDurationMinutes, hoursWorked: updatedLog.hoursWorked }
+        );
     } catch (error) {
       console.error('[Home] Error adding break:', error);
       toast({
@@ -503,6 +527,7 @@ export default function Home() {
       });
       return;
     }
+     const originalLogState = { ...todayLog }; // Capture state before update
     try {
       const updatedLog = addTrainingTimeToLog(todayLog.id, trainingMinutes);
       // Update local state immediately
@@ -519,6 +544,15 @@ export default function Home() {
         title: "Training Time Added",
         description: `${trainingMinutes} minutes added to your training time. Total training: ${formatDurationFromMinutes((updatedLog.trainingDurationMinutes || 0) * 60)}.`,
       });
+      // Add specific audit log for training update
+        addAuditLog(
+            'UPDATE_WORK_LOG_TRAINING',
+            'WorkLog',
+            `Added ${trainingMinutes}m training to log for ${updatedLog.date}. Total training: ${updatedLog.trainingDurationMinutes}m.`,
+            updatedLog.id,
+            { trainingDurationMinutes: originalLogState.trainingDurationMinutes || 0, hoursWorked: originalLogState.hoursWorked },
+            { trainingDurationMinutes: updatedLog.trainingDurationMinutes, hoursWorked: updatedLog.hoursWorked }
+        );
     } catch (error) {
       console.error('[Home] Error adding training:', error);
       toast({
@@ -571,6 +605,7 @@ export default function Home() {
 
                 try {
                     // Call saveWorkLog synchronously (localStorage is sync)
+                    // saveWorkLog will handle the UPDATE_WORK_LOG_GOAL_MET audit log
                     const savedLog = saveWorkLog(payloadToSave);
 
                     // Update the log within the current state array
@@ -592,7 +627,7 @@ export default function Home() {
         }
     });
   // Removed handleSaveWorkLog from dependencies as it caused issues, relies on closure now
-  }, [isClient, toast]); // Removed handleSaveWorkLog, added toast
+  }, [isClient]); // Removed handleSaveWorkLog, added toast
 
 
   // --- Set Active Target Handler ---
@@ -830,4 +865,3 @@ export default function Home() {
     </div>
   );
 }
-
