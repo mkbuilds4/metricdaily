@@ -1,3 +1,4 @@
+
 // src/lib/actions.ts
 // Using localStorage for simplicity. Replace with database/API calls for persistence.
 import type { DailyWorkLog, UPHTarget, AuditLogEntry, AuditLogActionType, UserSettings } from '@/types';
@@ -96,18 +97,17 @@ export function getWorkLogs(): DailyWorkLog[] {
 /**
  * Saves or updates a work log in local storage.
  * **Does NOT perform audit logging.** Audit logs should be handled by the calling function.
+ * Preserves the `isFinalized` flag if the log already exists.
  */
 export function saveWorkLog(
-  logData: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { id?: string; hoursWorked?: number; }
+  logData: Partial<Omit<DailyWorkLog, 'id' | 'hoursWorked'>> & { id?: string; hoursWorked?: number; date: string; startTime: string; endTime: string; }
 ): DailyWorkLog {
-  const totalNonWorkMinutes = (logData.breakDurationMinutes || 0) + (logData.trainingDurationMinutes || 0);
+  const totalNonWorkMinutes = (logData.breakDurationMinutes ?? 0) + (logData.trainingDurationMinutes ?? 0);
   let finalHoursWorked: number;
 
-  // Calculate hours worked if possible
   if (logData.date && logData.startTime && logData.endTime && totalNonWorkMinutes !== undefined && totalNonWorkMinutes !== null) {
       finalHoursWorked = calculateHoursWorked(logData.date, logData.startTime, logData.endTime, totalNonWorkMinutes);
   } else if (logData.hoursWorked !== undefined && logData.hoursWorked !== null) {
-      // Allow passing pre-calculated hours (e.g., from quick updates where times don't change)
       finalHoursWorked = logData.hoursWorked;
   } else {
        throw new Error('Could not determine hours worked. Need either start/end times and durations, or explicit hoursWorked.');
@@ -115,9 +115,8 @@ export function saveWorkLog(
 
   if (finalHoursWorked < 0) throw new Error('Calculated hours worked cannot be negative.');
 
-  // Validate and sanitize document/video counts
-  const documentsCompleted = Number.isFinite(logData.documentsCompleted) && logData.documentsCompleted >= 0 ? logData.documentsCompleted : 0;
-  const videoSessionsCompleted = Number.isFinite(logData.videoSessionsCompleted) && logData.videoSessionsCompleted >= 0 ? logData.videoSessionsCompleted : 0;
+  const documentsCompleted = Number.isFinite(logData.documentsCompleted) && logData.documentsCompleted! >= 0 ? logData.documentsCompleted! : 0;
+  const videoSessionsCompleted = Number.isFinite(logData.videoSessionsCompleted) && logData.videoSessionsCompleted! >= 0 ? logData.videoSessionsCompleted! : 0;
 
   if (!logData.date || !/^\d{4}-\d{2}-\d{2}$/.test(logData.date)) throw new Error('Date must be in YYYY-MM-DD format.');
 
@@ -125,58 +124,66 @@ export function saveWorkLog(
        const targets = getUPHTargets();
        if (!targets.some(t => t.id === logData.targetId)) {
            console.warn(`[Client Action] Target ID "${logData.targetId}" provided for log does not exist. Saving log without association.`);
+           // Keep the targetId anyway, maybe it will be created later
        }
   }
 
-  const logs = getWorkLogs(); // Retrieve all logs
+  const logs = getWorkLogs();
   let savedLog: DailyWorkLog;
 
-  // Base data for the log, excluding ID, using sanitized counts
-  const completeLogData: Omit<DailyWorkLog, 'id'> = {
+  const baseLogData = {
       date: logData.date,
       startTime: logData.startTime,
       endTime: logData.endTime,
       breakDurationMinutes: logData.breakDurationMinutes ?? 0,
       trainingDurationMinutes: logData.trainingDurationMinutes ?? 0,
       hoursWorked: finalHoursWorked,
-      documentsCompleted: documentsCompleted, // Use sanitized value
-      videoSessionsCompleted: videoSessionsCompleted, // Use sanitized value
+      documentsCompleted: documentsCompleted,
+      videoSessionsCompleted: videoSessionsCompleted,
       targetId: logData.targetId,
       notes: logData.notes,
       goalMetTimes: logData.goalMetTimes ?? {},
   };
 
-  // Determine if it's an update or create
   if (logData.id) {
     const index = logs.findIndex((log) => log.id === logData.id);
     if (index > -1) {
       // --- Update Existing Log ---
-      savedLog = { ...logs[index], ...completeLogData };
+      // Preserve the existing isFinalized flag unless explicitly provided in logData
+      const existingLog = logs[index];
+      savedLog = {
+          ...existingLog, // Start with existing log data (including isFinalized)
+          ...baseLogData, // Overwrite with new base data
+          isFinalized: logData.isFinalized !== undefined ? logData.isFinalized : existingLog.isFinalized, // Preserve or update isFinalized
+      };
       logs[index] = savedLog;
     } else {
-      // --- Create New Log (ID provided but not found) ---
-      savedLog = { ...completeLogData, id: generateLocalId() };
+      // --- Create New Log (ID provided but not found - treat as new) ---
+      savedLog = { ...baseLogData, id: generateLocalId(), isFinalized: logData.isFinalized ?? false };
       logs.push(savedLog);
     }
   } else {
      // --- No ID provided ---
-     const existingLogIndex = logs.findIndex(log => log.date === logData.date);
+     const existingLogIndex = logs.findIndex(log => log.date === logData.date && !log.isFinalized); // Find non-finalized log for today
      if (existingLogIndex > -1) {
-        // --- Update Existing Log (found by date) ---
-        savedLog = { ...logs[existingLogIndex], ...completeLogData };
-        logs[existingLogIndex] = savedLog;
+        // --- Update Existing Log (found by date, not finalized) ---
+         const existingLog = logs[existingLogIndex];
+         savedLog = {
+             ...existingLog,
+             ...baseLogData,
+             isFinalized: logData.isFinalized !== undefined ? logData.isFinalized : existingLog.isFinalized,
+         };
+         logs[existingLogIndex] = savedLog;
      } else {
         // --- Create New Log ---
-        savedLog = { ...completeLogData, id: generateLocalId() };
+        savedLog = { ...baseLogData, id: generateLocalId(), isFinalized: logData.isFinalized ?? false };
         logs.push(savedLog);
      }
   }
 
-  logs.sort((a, b) => b.date.localeCompare(a.date)); // Keep sorted
+  logs.sort((a, b) => b.date.localeCompare(a.date));
   saveToLocalStorage(WORK_LOGS_KEY, logs);
   saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false);
-
-  // REMOVED Audit Log call from this function
 
   return savedLog;
 }
@@ -193,7 +200,7 @@ export function deleteWorkLog(id: string): void {
         addAuditLog(
           'DELETE_WORK_LOG',
           'WorkLog',
-          `Deleted work log for ${logToDelete.date} (ID: ${id}). Docs: ${logToDelete.documentsCompleted}, Videos: ${logToDelete.videoSessionsCompleted}.`,
+          `Deleted work log for ${logToDelete.date} (ID: ${id}). Docs: ${logToDelete.documentsCompleted}, Videos: ${logToDelete.videoSessionsCompleted}. Finalized: ${!!logToDelete.isFinalized}`,
           id,
           logToDelete,
           null
@@ -485,6 +492,7 @@ export function loadSampleData(): boolean {
             breakDurationMinutes: log.breakDurationMinutes ?? 0, // Default break if missing
             trainingDurationMinutes: log.trainingDurationMinutes ?? 0, // Default training if missing
             goalMetTimes: {}, // Initialize empty goalMetTimes
+            isFinalized: false, // Ensure sample logs are not finalized
         }));
 
         saveToLocalStorage(WORK_LOGS_KEY, processedLogs);
@@ -524,39 +532,39 @@ export function clearAllData(): void {
 }
 
 /**
- * Archives today's log by removing it from the main work log list.
- * This effectively moves it to "previous logs" implicitly.
+ * Marks today's log as finalized by setting the `isFinalized` flag to true.
+ * The log remains in the main work log list.
+ *
+ * @returns The finalized log entry, or null if no log was found for today.
  */
 export function archiveTodayLog(): DailyWorkLog | null {
     if (typeof window === 'undefined') return null;
 
     const todayDateStr = formatDateISO(new Date());
-    let allLogs = getWorkLogs(); // Get all logs
-    const todayLogIndex = allLogs.findIndex(log => log.date === todayDateStr);
+    let allLogs = getWorkLogs();
+    const todayLogIndex = allLogs.findIndex(log => log.date === todayDateStr && !log.isFinalized);
 
     if (todayLogIndex > -1) {
-        const logToArchive = { ...allLogs[todayLogIndex] }; // Copy the log before removing
+        const originalLog = { ...allLogs[todayLogIndex] };
+        const finalizedLog = { ...originalLog, isFinalized: true };
 
-        // Remove the log from the array
-        // NOTE: We are NOT actually removing it anymore. We keep it in the list.
-        // The UI logic in page.tsx and previous-logs/page.tsx will filter it.
-        // This function now primarily serves to log the "End Day" action.
-        // saveToLocalStorage(WORK_LOGS_KEY, allLogs); // No longer saving the filtered list here
-
+        // Update the log in the array
+        allLogs[todayLogIndex] = finalizedLog;
+        saveToLocalStorage(WORK_LOGS_KEY, allLogs); // Save the updated list
         saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Indicate real data might still exist
 
         addAuditLog(
-            'SYSTEM_ARCHIVE_TODAY_LOG', // Keep this action type to signify intent
+            'SYSTEM_ARCHIVE_TODAY_LOG',
             'WorkLog',
-            `Finalized log for ${logToArchive.date} (End Day clicked). Log remains visible but is considered finalized.`,
-            logToArchive.id,
-            logToArchive, // Log the full archived log as previous state
-            logToArchive // Log the same log as new state, since it wasn't removed
+            `Finalized log for ${finalizedLog.date} (End Day clicked).`,
+            finalizedLog.id,
+            { isFinalized: originalLog.isFinalized }, // Log the change in finalization status
+            { isFinalized: finalizedLog.isFinalized }
         );
-        return logToArchive; // Return the log that was "archived"
+        return finalizedLog; // Return the finalized log
     } else {
-        addAuditLog('SYSTEM_ARCHIVE_TODAY_LOG', 'System', `Attempted to finalize today's log, but no log found for ${todayDateStr}.`);
-        return null; // No log found for today
+        addAuditLog('SYSTEM_ARCHIVE_TODAY_LOG', 'System', `Attempted to finalize today's log, but no active log found for ${todayDateStr}.`);
+        return null; // No active log found for today
     }
 }
 

@@ -1,5 +1,4 @@
 
-
 /**
  * Represents a single day's work log entry.
  */
@@ -16,6 +15,7 @@ export interface DailyWorkLog {
   targetId?: string; // Optional: Link to the UPHTarget active when logging
   notes?: string; // Optional notes for the day
   goalMetTimes?: Record<string, string>; // Optional: Stores ISO timestamp when target goals were met { [targetId]: ISOTimestamp }
+  isFinalized?: boolean; // Optional: Flag indicating the log is finalized for the day
 }
 
 /**
@@ -49,7 +49,7 @@ export type AuditLogActionType =
   | 'SET_ACTIVE_UPH_TARGET'
   | 'SYSTEM_LOAD_SAMPLE_DATA'
   | 'SYSTEM_CLEAR_ALL_DATA'
-  | 'SYSTEM_ARCHIVE_TODAY_LOG'
+  | 'SYSTEM_ARCHIVE_TODAY_LOG' // Renamed from SYSTEM_FINALIZE_TODAY_LOG
   | 'SYSTEM_EXPORT_DATA'
   | 'SYSTEM_EXPORT_DATA_FAILED'
   | 'SYSTEM_VIEW_AUDIT_LOG'

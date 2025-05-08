@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -15,7 +16,7 @@ import {
   clearAllData,
   addBreakTimeToLog, // Still logs its specific action
   addTrainingTimeToLog, // Still logs its specific action
-  archiveTodayLog,
+  archiveTodayLog, // Updated action
   getDefaultSettings,
   isSampleDataLoaded, // Import check for sample data
   setActiveUPHTarget, // Import setActiveUPHTarget
@@ -80,9 +81,11 @@ export default function Home() {
       setHasInitialData(loadedLogs.length > 0 || loadedTargets.length > 0);
       setSampleDataActive(isSampleLoaded); // Update sample data state
 
-      const today = loadedLogs.find(log => log.date === formatDateISO(new Date()));
-      setDocInputValue(today?.documentsCompleted?.toString() ?? '');
-      setVideoInputValue(today?.videoSessionsCompleted?.toString() ?? '');
+      // Update input values based on the NON-FINALIZED log for today
+      const todayDateStr = formatDateISO(new Date());
+      const currentTodayLog = loadedLogs.find(log => log.date === todayDateStr && !log.isFinalized);
+      setDocInputValue(currentTodayLog?.documentsCompleted?.toString() ?? '');
+      setVideoInputValue(currentTodayLog?.videoSessionsCompleted?.toString() ?? '');
       console.log('[Home Page] Data loaded. Active target:', loadedActiveTarget?.name, 'Sample Data Loaded:', isSampleLoaded);
 
     } catch (error) {
@@ -112,20 +115,22 @@ export default function Home() {
    // Effect to update input values when workLogs change (e.g., after saving)
    useEffect(() => {
     if (!isClient) return; // Only run on client
-    const today = workLogs.find(log => log.date === formatDateISO(new Date()));
-    setDocInputValue(today?.documentsCompleted?.toString() ?? '');
-    setVideoInputValue(today?.videoSessionsCompleted?.toString() ?? '');
+    const todayDateStr = formatDateISO(new Date());
+    // Find the log for today that is NOT finalized
+    const currentTodayLog = workLogs.find(log => log.date === todayDateStr && !log.isFinalized);
+    setDocInputValue(currentTodayLog?.documentsCompleted?.toString() ?? '');
+    setVideoInputValue(currentTodayLog?.videoSessionsCompleted?.toString() ?? '');
   }, [workLogs, isClient]);
 
   // --- Action Handlers ---
   const handleSaveWorkLog = useCallback((
-      logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked?: number; goalMetTimes?: Record<string, string> },
+      logData: Partial<Omit<DailyWorkLog, 'id' | 'hoursWorked'>> & { id?: string; hoursWorked?: number; date: string; startTime: string; endTime: string; goalMetTimes?: Record<string, string> },
       auditActionType?: AuditLogActionType // Optional parameter for specific audit logging
       ) => {
     if (!isClient) return {} as DailyWorkLog;
 
     const existingLog = workLogs.find(l => l.id === logData.id); // Get previous state before saving
-    const isCreating = !logData.id && !workLogs.find(l => l.date === logData.date);
+    const isCreating = !logData.id && !workLogs.find(l => l.date === logData.date && !l.isFinalized);
 
     try {
         // saveWorkLog now ONLY saves data, no audit logging within it
@@ -151,10 +156,11 @@ export default function Home() {
         // --- Audit Logging handled here in the page component ---
         const actionToLog = auditActionType || (isCreating ? 'CREATE_WORK_LOG' : 'UPDATE_WORK_LOG');
         let details = '';
+        const logDetails = `Docs: ${savedLog.documentsCompleted}, Videos: ${savedLog.videoSessionsCompleted}, Hours: ${savedLog.hoursWorked.toFixed(2)}.`;
 
         switch (actionToLog) {
              case 'CREATE_WORK_LOG':
-                 details = `Created work log for ${savedLog.date}. Docs: ${savedLog.documentsCompleted}, Videos: ${savedLog.videoSessionsCompleted}, Hours: ${savedLog.hoursWorked.toFixed(2)}.`;
+                 details = `Created work log for ${savedLog.date}. ${logDetails}`;
                  break;
              case 'UPDATE_WORK_LOG_QUICK_COUNT':
                  const fieldUpdated = existingLog?.documentsCompleted !== savedLog.documentsCompleted ? 'document' : 'video';
@@ -180,6 +186,8 @@ export default function Home() {
                     if (existingLog.notes !== savedLog.notes) changes.push(`Notes updated.`);
                     if (existingLog.targetId !== savedLog.targetId) changes.push(`Target ID updated.`);
                     details += changes.join(', ') || 'No specific field changes detected.';
+                 } else {
+                     details += logDetails; // Add details if it's an update but no existing log was found (edge case)
                  }
                  break;
         }
@@ -221,24 +229,25 @@ export default function Home() {
    const handleQuickUpdate = (field: 'documentsCompleted' | 'videoSessionsCompleted', value: number | string) => {
       if (!isClient) return;
       const todayDateStr = formatDateISO(new Date());
-      const todayLog = workLogs.find(log => log.date === todayDateStr);
+       // Find the non-finalized log for today
+      const currentTodayLog = workLogs.find(log => log.date === todayDateStr && !log.isFinalized);
 
-      if (!todayLog) {
-          console.warn("[Home] Quick Update: No log found for today to update.");
+      if (!currentTodayLog) {
+          console.warn("[Home] Quick Update: No active log found for today to update.");
           toast({
               variant: "destructive",
               title: "Quick Update Failed",
-              description: "No work log found for today. Add one on the 'Log / Targets' page or click 'Start New Day'.",
+              description: "No active work log found for today. Add one on the 'Log / Targets' page or click 'Start New Day'.",
           });
           return;
       }
 
-      const originalLogState = { ...todayLog }; // Capture state before update for audit log
+      const originalLogState = { ...currentTodayLog }; // Capture state before update for audit log
 
       let newValue: number;
       // Preserve the other field's value
-      const currentDocValue = todayLog.documentsCompleted || 0;
-      const currentVideoValue = todayLog.videoSessionsCompleted || 0;
+      const currentDocValue = currentTodayLog.documentsCompleted || 0;
+      const currentVideoValue = currentTodayLog.videoSessionsCompleted || 0;
       const currentValue = field === 'documentsCompleted' ? currentDocValue : currentVideoValue;
 
       if (typeof value === 'string') {
@@ -275,21 +284,22 @@ export default function Home() {
 
       // Construct partial log ensuring all necessary fields are present for saveWorkLog
       // *** Include BOTH fields in the partial update ***
-      const updatedLogPartial: Partial<DailyWorkLog> & { id: string; date: string; startTime: string; endTime: string; hoursWorked: number; goalMetTimes?: Record<string, string> } = {
-          id: todayLog.id,
-          date: todayLog.date,
-          startTime: todayLog.startTime,
-          endTime: todayLog.endTime,
-          hoursWorked: todayLog.hoursWorked, // Pass existing hoursWorked
+       const updatedLogPartial: Partial<DailyWorkLog> & { id: string; date: string; startTime: string; endTime: string; hoursWorked: number; goalMetTimes?: Record<string, string> } = {
+          id: currentTodayLog.id,
+          date: currentTodayLog.date,
+          startTime: currentTodayLog.startTime,
+          endTime: currentTodayLog.endTime,
+          hoursWorked: currentTodayLog.hoursWorked, // Pass existing hoursWorked
           // Set the updated field and preserve the other field's value
           documentsCompleted: field === 'documentsCompleted' ? newValue : currentDocValue,
           videoSessionsCompleted: field === 'videoSessionsCompleted' ? newValue : currentVideoValue,
           // Include other essential fields
-          breakDurationMinutes: todayLog.breakDurationMinutes,
-          trainingDurationMinutes: todayLog.trainingDurationMinutes,
-          targetId: todayLog.targetId,
-          notes: todayLog.notes,
-          goalMetTimes: todayLog.goalMetTimes || {}, // Ensure goalMetTimes is preserved
+          breakDurationMinutes: currentTodayLog.breakDurationMinutes,
+          trainingDurationMinutes: currentTodayLog.trainingDurationMinutes,
+          targetId: currentTodayLog.targetId,
+          notes: currentTodayLog.notes,
+          goalMetTimes: currentTodayLog.goalMetTimes || {}, // Ensure goalMetTimes is preserved
+          isFinalized: currentTodayLog.isFinalized, // Preserve finalized status
       };
 
 
@@ -390,6 +400,17 @@ export default function Home() {
     }
 
     const todayDateStr = formatDateISO(new Date());
+    // Check if an active (non-finalized) log already exists for today
+    const existingActiveLog = workLogs.find(log => log.date === todayDateStr && !log.isFinalized);
+    if (existingActiveLog) {
+        toast({
+            title: "Day Already Started",
+            description: "An active work log already exists for today.",
+        });
+        return;
+    }
+
+
     // Get user-defined defaults or fallback defaults
     const userSettings = getDefaultSettings();
     const defaultStartTime = userSettings.defaultStartTime || '14:00';
@@ -402,7 +423,7 @@ export default function Home() {
     // Calculate hours based on fetched or fallback defaults
     const defaultHoursWorked = calculateHoursWorked(todayDateStr, defaultStartTime, defaultEndTime, totalNonWorkMinutes);
 
-    const newLog: Omit<DailyWorkLog, 'id'> & { hoursWorked: number; goalMetTimes?: Record<string, string> } = {
+    const newLog: Omit<DailyWorkLog, 'id'> & { hoursWorked: number; goalMetTimes?: Record<string, string>; isFinalized?: boolean } = {
       date: todayDateStr,
       startTime: defaultStartTime,
       endTime: defaultEndTime,
@@ -414,43 +435,51 @@ export default function Home() {
       targetId: activeTargetCheck.id, // Use the fetched active target ID
       notes: 'New day started from dashboard.',
       goalMetTimes: {}, // Initialize empty goal met times
+      isFinalized: false, // Explicitly set as not finalized
     };
 
     try {
       // Pass 'CREATE_WORK_LOG' as the audit action type
-      handleSaveWorkLog(newLog, 'CREATE_WORK_LOG');
+      handleSaveWorkLog(newLog as any, 'CREATE_WORK_LOG'); // Need type assertion here
       toast({
         title: "New Day Started",
         description: `Work log for ${todayDateStr} created with default times.`,
       });
+      // Input fields will update via useEffect watching workLogs
     } catch (error) {
       // Error handling is within handleSaveWorkLog
     }
-  }, [handleSaveWorkLog, toast, isClient]); // Added handleSaveWorkLog dependency
+  }, [handleSaveWorkLog, toast, isClient, workLogs]); // Added workLogs
 
   const handleEndDay = useCallback(() => {
      if (!isClient) return;
-    const todayLogToEnd = workLogs.find(log => log.date === formatDateISO(new Date()));
+    const todayLogToEnd = workLogs.find(log => log.date === formatDateISO(new Date()) && !log.isFinalized);
     if (!todayLogToEnd) {
       toast({
         variant: "destructive",
-        title: "No Log to End",
-        description: "No work log found for today to mark as ended.",
+        title: "No Active Log to End",
+        description: "No active work log found for today to mark as finalized.",
       });
       return;
     }
 
-    const archivedLog = archiveTodayLog(); // This function is in actions.ts
-    if (archivedLog) {
+     // Confirmation dialog
+    if (!window.confirm("Are you sure you want to finalize today's log? You won't be able to make further quick updates or add break/training time from the dashboard.")) {
+        return;
+    }
+
+
+    const finalizedLog = archiveTodayLog(); // This function is in actions.ts
+    if (finalizedLog) {
         toast({
-            title: "Day Ended",
-            description: `Log for ${archivedLog.date} has been finalized. You can view it in 'Previous Logs'.`,
+            title: "Day Finalized",
+            description: `Log for ${finalizedLog.date} has been finalized. View in 'Previous Logs'.`,
         });
-        loadData(false); // Reload data to reflect the change
+        loadData(false); // Reload data to reflect the change (todayLog should become null)
     } else {
          toast({
             variant: "destructive",
-            title: "End Day Failed",
+            title: "Finalize Day Failed",
             description: "Could not finalize today's log. It might have already been processed or an error occurred.",
          });
     }
@@ -475,7 +504,7 @@ export default function Home() {
    // Handle saving when input loses focus (onBlur)
   const handleDocInputBlur = () => {
        if (!isClient) return;
-       const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
+       const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()) && !log.isFinalized);
        const currentValStr = todayLog?.documentsCompleted?.toString() ?? '0';
        // Treat empty input as 0 for comparison and saving
        const inputValStr = docInputValue.trim() === '' ? '0' : docInputValue.trim();
@@ -494,7 +523,7 @@ export default function Home() {
    };
   const handleVideoInputBlur = () => {
         if (!isClient) return;
-       const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
+       const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()) && !log.isFinalized);
        const currentValStr = todayLog?.videoSessionsCompleted?.toString() ?? '0';
        const inputValStr = videoInputValue.trim() === '' ? '0' : videoInputValue.trim();
 
@@ -512,12 +541,12 @@ export default function Home() {
   // --- Break/Training Handlers ---
   const handleAddBreak = useCallback((breakMinutes: number) => {
     if (!isClient) return;
-    const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
+    const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()) && !log.isFinalized);
     if (!todayLog) {
       toast({
         variant: "destructive",
         title: "Cannot Add Break",
-        description: "No work log found for today. Start a new day first.",
+        description: "No active work log found for today. Start a new day first.",
       });
       return;
     }
@@ -552,12 +581,12 @@ export default function Home() {
 
   const handleAddTraining = useCallback((trainingMinutes: number) => {
     if (!isClient) return;
-    const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()));
+    const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()) && !log.isFinalized);
     if (!todayLog) {
       toast({
         variant: "destructive",
         title: "Cannot Add Training",
-        description: "No work log found for today. Start a new day first.",
+        description: "No active work log found for today. Start a new day first.",
       });
       return;
     }
@@ -595,7 +624,8 @@ export default function Home() {
      console.log(`[Home] Received goal met notification for target ${targetId} at ${metAt.toISOString()}`);
      // Use a functional update for setWorkLogs to ensure we're working with the latest state
     setWorkLogs(prevLogs => {
-        const todayLogIndex = prevLogs.findIndex(log => log.date === formatDateISO(new Date()));
+        // Find the non-finalized log for today
+        const todayLogIndex = prevLogs.findIndex(log => log.date === formatDateISO(new Date()) && !log.isFinalized);
 
         if (todayLogIndex > -1) {
             const todayLog = prevLogs[todayLogIndex];
@@ -613,7 +643,7 @@ export default function Home() {
 
                 // Construct the payload for saving
                 // Important: ensure all required fields for saveWorkLog are included
-                 const payloadToSave: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked: number; goalMetTimes?: Record<string, string> } = {
+                 const payloadToSave: Partial<DailyWorkLog> & { id: string; date: string; startTime: string; endTime: string; hoursWorked: number; goalMetTimes?: Record<string, string> } = {
                     id: todayLog.id, // Pass the ID for update
                     date: todayLog.date,
                     startTime: todayLog.startTime,
@@ -626,6 +656,7 @@ export default function Home() {
                     targetId: todayLog.targetId,
                     notes: todayLog.notes,
                     goalMetTimes: newGoalMetTimes, // The updated goalMetTimes
+                    isFinalized: todayLog.isFinalized, // Preserve finalized status
                  };
 
 
@@ -647,7 +678,7 @@ export default function Home() {
                  return prevLogs; // Return previous state if no update needed
             }
         } else {
-            console.warn("[Home] Goal met handler called, but no log found for today.");
+            console.warn("[Home] Goal met handler called, but no active log found for today.");
             return prevLogs; // No log for today, return previous state
         }
     });
@@ -675,7 +706,12 @@ export default function Home() {
     }
   }, [toast, isClient, activeTarget]); // Add activeTarget dependency
 
-  const todayLog = workLogs.find(log => log.date === formatDateISO(new Date())) || null;
+  // Determine the log to display for today (must not be finalized)
+  const todayLog = useMemo(() => {
+     const todayDateStr = formatDateISO(new Date());
+     return workLogs.find(log => log.date === todayDateStr && !log.isFinalized) || null;
+  }, [workLogs]);
+
 
   // --- Render Logic ---
   if (!isClient || isLoading) {
@@ -749,10 +785,10 @@ export default function Home() {
                     </AlertDialogContent>
                  </AlertDialog>
              )}
-             {/* Keep the end day button if today's log exists */}
-            {todayLog && !sampleDataActive && ( // Only show End Day if not in sample mode
+             {/* Keep the end day button if today's ACTIVE log exists */}
+            {todayLog && !sampleDataActive && ( // Only show End Day if not in sample mode AND active log exists
                     <Button onClick={handleEndDay} variant="outline" size="sm" disabled={isLoading}>
-                        <Archive className="mr-2 h-4 w-4" /> End Today&apos;s Log
+                        <Archive className="mr-2 h-4 w-4" /> Finalize Today&apos;s Log
                     </Button>
              )}
         </div>
@@ -764,11 +800,11 @@ export default function Home() {
                     <CardTitle>Quick Update Today&apos;s Counts</CardTitle>
                     {todayLog ? (
                         <CardDescription>
-                            Log Date: {formatDateISO(new Date())}
+                            Log Date: {formatDateISO(new Date())} (Active Log)
                         </CardDescription>
                      ) : (
                          <CardDescription className="text-muted-foreground">
-                             No log started for today.
+                             No active log started for today.
                          </CardDescription>
                      )}
                 </CardHeader>
@@ -851,7 +887,7 @@ export default function Home() {
                      <CardContent className="flex flex-col items-center justify-center min-h-[150px] py-6 text-muted-foreground gap-4"> {/* Adjusted height */}
                          <Info className="h-8 w-8" />
                          <p className="text-center max-w-xs">
-                             No work log found for today ({formatDateISO(new Date())}).
+                             No active work log found for today ({formatDateISO(new Date())}).
                          </p>
                          <Button onClick={handleStartNewDay} disabled={isLoading || !activeTarget}>
                             <PlayCircle className="mr-2 h-5 w-5" /> Start New Day
@@ -862,7 +898,7 @@ export default function Home() {
              )}
         </div>
 
-         {/* Daily Progress Indicator - Only show if todayLog exists */}
+         {/* Daily Progress Indicator - Only show if todayLog (active one) exists */}
          {todayLog && activeTarget && (
              <DailyProgressIndicator
                  todayLog={todayLog}
@@ -870,10 +906,10 @@ export default function Home() {
              />
          )}
 
-        {/* Productivity Dashboard (Today's Metrics Breakdown) - Only show if todayLog exists */}
+        {/* Productivity Dashboard (Today's Metrics Breakdown) - Only show if todayLog (active one) exists */}
         {todayLog && (
             <ProductivityDashboard
-                initialWorkLogs={todayLog ? [todayLog] : []} // Pass only today's log
+                initialWorkLogs={todayLog ? [todayLog] : []} // Pass only today's ACTIVE log
                 initialUphTargets={uphTargets}
                 initialActiveTarget={activeTarget} // Pass active target for context
                 deleteWorkLogAction={handleDeleteWorkLog} // Pass delete action

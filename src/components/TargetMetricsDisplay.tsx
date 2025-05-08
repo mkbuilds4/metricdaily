@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -5,7 +6,7 @@ import type { DailyWorkLog, UPHTarget } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Trash2, BookOpen, Video, Clock, AlertCircle, Target as TargetIcon, CheckCircle } from 'lucide-react'; // Import icons
 import { useToast } from "@/hooks/use-toast";
-import { parse, isValid, format, addMinutes, addDays, addSeconds } from 'date-fns'; // Added addSeconds
+import { parse, isValid, format, addMinutes, addDays, addSeconds, parseISO, isBefore, startOfDay } from 'date-fns'; // Added addSeconds, parseISO, isBefore, startOfDay
 import {
     Accordion,
     AccordionContent,
@@ -21,14 +22,6 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
     calculateDailyUnits,
     calculateDailyUPH,
     calculateRequiredUnitsForTarget,
@@ -38,7 +31,6 @@ import {
     formatTimeAheadBehind,
     formatDurationFromMinutes,
     calculateCurrentMetrics,
-    calculateProjectedGoalHitTime,
 } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import PreviousLogTriggerSummary from './PreviousLogTriggerSummary'; // Import the component for previous log triggers
@@ -46,7 +38,7 @@ import { cn } from '@/lib/utils';
 
 
 interface TargetMetricsDisplayProps {
-  allWorkLogs: DailyWorkLog[]; // Receives filtered and sorted logs from parent
+  allWorkLogs: DailyWorkLog[]; // Receives filtered and sorted logs from parent (or all logs from Home)
   targets: UPHTarget[];
   deleteWorkLogAction: (id: string) => void;
   setActiveUPHTargetAction?: (id: string) => void; // Optional: Action to set active target
@@ -56,12 +48,12 @@ interface TargetMetricsDisplayProps {
 
 
 const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
-  allWorkLogs = [], // Receives pre-filtered and pre-sorted logs
+  allWorkLogs = [], // Receives pre-filtered and pre-sorted logs (from PreviousLogs) OR all logs (from Home)
   targets = [],
   deleteWorkLogAction,
   setActiveUPHTargetAction, // Receive the action
   onGoalMet, // Use the new prop
-  showTodaySection = true,
+  showTodaySection = true, // Defaults to true (for Home page)
 }) => {
   const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
@@ -71,22 +63,27 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     setIsClient(true);
   }, []);
 
-  // Derived state based on props
+  // Derived state based on props and whether to show today's section
   const { todayLog, previousLogsByDate } = useMemo(() => {
     const todayDateStr = formatDateISO(new Date());
+    const todayStart = startOfDay(new Date());
     let foundTodayLog: DailyWorkLog | null = null;
     const prevLogsMap: Record<string, DailyWorkLog> = {}; // Store only one log per date
 
     allWorkLogs.forEach(log => {
-      if (showTodaySection && log.date === todayDateStr && !foundTodayLog) {
-        foundTodayLog = log;
-      } else if (log.date !== todayDateStr) {
-         // Only store the first log found for a given previous date
-         // (assuming parent component provides sorted data if needed)
-         if (!prevLogsMap[log.date]) {
-             prevLogsMap[log.date] = log;
-         }
-      }
+        const logDateObj = parseISO(log.date + 'T00:00:00');
+        if (!isValid(logDateObj)) return; // Skip invalid dates
+
+        // Check if it's today and should be shown in today section (and is not finalized)
+        if (showTodaySection && log.date === todayDateStr && !log.isFinalized && !foundTodayLog) {
+            foundTodayLog = log;
+        }
+        // Check if it's a previous day OR today but finalized (belongs in previous logs)
+        else if (isBefore(logDateObj, todayStart) || (log.date === todayDateStr && log.isFinalized)) {
+             if (!prevLogsMap[log.date]) { // Only add if not already added for that date
+                prevLogsMap[log.date] = log;
+            }
+        }
     });
 
      // Convert map to array of { date, log } for easier mapping
@@ -94,8 +91,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 .map(([date, log]) => ({ date, log })) // Take the single log per date
                                 .sort((a, b) => b.date.localeCompare(a.date)); // Sort dates descending
 
-
-    return { todayLog: showTodaySection ? foundTodayLog : null, previousLogsByDate: prevLogsGrouped };
+    return { todayLog: foundTodayLog, previousLogsByDate: prevLogsGrouped };
   }, [allWorkLogs, showTodaySection]);
 
 
@@ -176,7 +172,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
         // Check persisted goal met time first
         const goalMetTimeISO = log.goalMetTimes?.[target.id];
-        const goalMetTime = goalMetTimeISO ? parse(goalMetTimeISO, "yyyy-MM-dd'T'HH:mm:ss.SSSxxx", new Date()) : null;
+        const goalMetTime = goalMetTimeISO ? parseISO(goalMetTimeISO) : null; // Use parseISO
         const isGoalMet = goalMetTime && isValid(goalMetTime); // Check if valid date
 
         if (isGoalMet) {
@@ -190,7 +186,27 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
             currentMetrics = calculateCurrentMetrics(log, target, currentTime);
             unitsToGoal = totalRequiredUnits - currentMetrics.currentUnits;
             timeAheadBehindSeconds = calculateTimeAheadBehindSchedule(log, target, currentTime);
-            projectedHitTimeFormatted = calculateProjectedGoalHitTime(log, target, timeAheadBehindSeconds); // Removed currentTime
+            // Calculate projected time based on SCHEDULED end time adjusted by time diff
+             const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+             if(timeRegex.test(log.endTime) && timeAheadBehindSeconds !== null) {
+                let shiftEndDate = parse(`${log.date} ${log.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+                const shiftStartDate = parse(`${log.date} ${log.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+                 if(isValid(shiftEndDate) && isValid(shiftStartDate)) {
+                     if (shiftEndDate < shiftStartDate) {
+                        shiftEndDate = addDays(shiftEndDate, 1);
+                    }
+                    const projectedTime = addSeconds(shiftEndDate, -timeAheadBehindSeconds);
+                    if (isValid(projectedTime)) {
+                         projectedHitTimeFormatted = format(projectedTime, 'h:mm:ss a');
+                    } else {
+                         projectedHitTimeFormatted = '-';
+                    }
+                 } else {
+                     projectedHitTimeFormatted = '-';
+                 }
+             } else {
+                projectedHitTimeFormatted = '-';
+             }
 
         } else if (!isToday) {
              // Previous log, calculate final status
@@ -202,9 +218,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
 
         const scheduleStatusText = isGoalMet ? (
-            <> <CheckCircle className="inline-block h-4 w-4 mr-1"/> Met </>
+            <> <CheckCircle className="inline-block h-4 w-4 mr-1"/> </> // Only show checkmark if met
         ) : timeAheadBehindSeconds !== null ? (
-             formatTimeAheadBehind(timeAheadBehindSeconds) // Includes seconds
+             formatTimeAheadBehind(timeAheadBehindSeconds) // Includes seconds if not met
         ) : '-'; // Fallback if calculation not possible
 
         const scheduleStatusColor = isGoalMet ? "text-green-600 dark:text-green-500" :
@@ -290,7 +306,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                     {isGoalMet && goalMetTime ? ` at ${format(goalMetTime, 'h:mm:ss a')}` : ''}
                                 </p>
                             </div>
-                             {/* Conditionally show Avg Daily UPH only if not today */}
                               <div>
                                 <p className="text-muted-foreground">Avg Daily UPH</p>
                                 <p className="font-medium tabular-nums">{dailyUPHForTarget.toFixed(2)}</p>
@@ -331,7 +346,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         const summaryTargetName = targetForSummaryCalc ? targetForSummaryCalc.name : 'N/A';
         const logDate = parse(log.date, 'yyyy-MM-dd', new Date());
         const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date; // Fallback to raw string if invalid
-
         const totalUnits = targetForSummaryCalc ? calculateDailyUnits(log, targetForSummaryCalc) : 0;
         const breakTimeFormatted = formatDurationFromMinutes(log.breakDurationMinutes * 60);
         const trainingTimeFormatted = log.trainingDurationMinutes && log.trainingDurationMinutes > 0 ? formatDurationFromMinutes(log.trainingDurationMinutes * 60) : null;
@@ -355,6 +369,24 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 {!targetForSummaryCalc && targets.length === 0 && <span className="text-muted-foreground ml-2">(No targets defined)</span>}
                             </CardDescription>
                          </div>
+                          {/* Delete Button for Previous Logs */}
+                          {!isToday && (
+                                <div onClick={(e) => e.stopPropagation()}>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-destructive hover:text-destructive h-7 w-7" // Adjusted size
+                                    onClick={(e) => {
+                                        e.stopPropagation(); // Prevent accordion toggle
+                                        handleDeleteLog(log.id, log.date);
+                                    }}
+                                    title="Delete This Log"
+                                    aria-label="Delete This Log"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                                </div>
+                          )}
                     </div>
                 </CardHeader>
                  <CardContent className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -428,14 +460,11 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
        {/* Render Previous Logs using Accordion */}
        {previousLogsByDate.length > 0 && (
          <div>
-            {/* No need for title if this component is only for previous logs on that page */}
              <Accordion type="multiple" className="w-full space-y-1">
                 {previousLogsByDate.map(({ date, log }) => ( // Destructure date and log
                     <AccordionItem value={log.id} key={log.id} className="border-none bg-card rounded-md overflow-hidden shadow-sm">
                          <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group data-[state=open]:bg-muted/50" hideChevron={false}>
-                            {/* Pass all targets for calculation flexibility within summary */}
-                             {/* Ensure content within AccordionTrigger is not a button itself */}
-                            <PreviousLogTriggerSummary log={log} allTargets={targets} onDelete={() => handleDeleteLog(log.id, log.date)} />
+                             <PreviousLogTriggerSummary log={log} allTargets={targets} onDelete={() => handleDeleteLog(log.id, log.date)} />
                         </AccordionTrigger>
                         <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-md">
                             {/* Display the main summary card first */}

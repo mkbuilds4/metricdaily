@@ -18,7 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { FileSpreadsheet, Filter, X, Calendar as CalendarIcon, ArrowUpDown, BookOpen, Clock, Video, Target as TargetIcon } from 'lucide-react'; // Added TargetIcon
-import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
+import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, isBefore } from 'date-fns'; // Added isBefore
 import { DateRange } from 'react-day-picker';
 import { Separator } from '@/components/ui/separator';
 
@@ -102,13 +102,22 @@ export default function PreviousLogsPage() {
 
   // Filtering Logic
   const filteredLogs = useMemo(() => {
-    const todayDateStr = formatDateISO(new Date()); // Get today's date string
+    const todayStart = startOfDay(new Date()); // Get start of today
+
     return allLogs.filter(log => {
-        // Filter out today's log explicitly
-        if (log.date === todayDateStr) return false;
+        // Filter out NON-FINALIZED logs for today
+        const logDateObj = parseISO(log.date + 'T00:00:00');
+        if (!isValid(logDateObj)) return false; // Skip invalid dates
+
+        const isPreviousDay = isBefore(logDateObj, todayStart);
+        const isFinalizedToday = log.date === formatDateISO(today) && log.isFinalized;
+
+        // Include if it's a previous day OR if it's today AND finalized
+        if (!isPreviousDay && !isFinalizedToday) {
+             return false;
+        }
 
         const searchTerm = filterTerm.toLowerCase();
-        const logTimestamp = parseISO(log.date + 'T00:00:00'); // Ensure time for correct comparison
         const logTarget = uphTargets.find(t => t.id === log.targetId) ?? activeTarget; // Target for UPH search
 
         const matchesSearch = (
@@ -119,16 +128,16 @@ export default function PreviousLogsPage() {
             log.documentsCompleted.toString().includes(searchTerm) ||
             log.videoSessionsCompleted.toString().includes(searchTerm) ||
             (log.notes && log.notes.toLowerCase().includes(searchTerm)) ||
-            (isValid(logTimestamp) ? format(logTimestamp, 'PPP').toLowerCase().includes(searchTerm) : false) ||
+            format(logDateObj, 'PPP').toLowerCase().includes(searchTerm) ||
             (logTarget && calculateDailyUPH(log, logTarget).toFixed(2).includes(searchTerm)) // Search UPH based on target
         );
 
         let matchesDateRange = true;
-        if (filterDateRange?.from && isValid(logTimestamp)) {
-            matchesDateRange = logTimestamp >= startOfDay(filterDateRange.from);
+        if (filterDateRange?.from && isValid(logDateObj)) {
+            matchesDateRange = logDateObj >= startOfDay(filterDateRange.from);
         }
-        if (filterDateRange?.to && isValid(logTimestamp)) {
-            matchesDateRange = matchesDateRange && logTimestamp <= endOfDay(filterDateRange.to);
+        if (filterDateRange?.to && isValid(logDateObj)) {
+            matchesDateRange = matchesDateRange && logDateObj <= endOfDay(filterDateRange.to);
         }
 
         return matchesSearch && matchesDateRange;
@@ -162,8 +171,8 @@ export default function PreviousLogsPage() {
       else if (typeof valA === 'string' && typeof valB === 'string') {
         if (sortColumn === 'date') {
           try {
-            const dateA = parseISO(valA);
-            const dateB = parseISO(valB);
+            const dateA = parseISO(valA + 'T00:00:00'); // Add time for proper comparison
+            const dateB = parseISO(valB + 'T00:00:00');
             comparison = dateA.getTime() - dateB.getTime();
           } catch (e) {
             comparison = valA.localeCompare(valB);
@@ -276,7 +285,7 @@ export default function PreviousLogsPage() {
   const generateCSVContent = useCallback((logs: DailyWorkLog[], targets: UPHTarget[]): string => {
     const headers = [
       'Date', 'Start Time', 'End Time', 'Break Duration (min)', 'Training Duration (min)', 'Net Hours Worked',
-      'Documents Completed', 'Video Sessions Completed', 'Notes',
+      'Documents Completed', 'Video Sessions Completed', 'Notes', 'Finalized',
       'Logged Target ID', 'Logged Target Name', 'Logged Target UPH (Goal)', 'Logged Target Docs/Unit', 'Logged Target Videos/Unit'
     ];
 
@@ -297,6 +306,7 @@ export default function PreviousLogsPage() {
         escapeCSVField(log.documentsCompleted),
         escapeCSVField(log.videoSessionsCompleted),
         escapeCSVField(log.notes || ''),
+        escapeCSVField(log.isFinalized ? 'Yes' : 'No'), // Add finalized status
         escapeCSVField(log.targetId || 'N/A'),
         escapeCSVField(loggedTarget?.name || 'N/A'),
         escapeCSVField(loggedTarget?.targetUPH?.toFixed(2) || 'N/A'),
@@ -572,7 +582,7 @@ export default function PreviousLogsPage() {
 
        {sortedLogs.length === 0 && !isLoading && (
           <p className="text-center text-muted-foreground py-10">
-            {allLogs.filter(l => l.date !== formatDateISO(new Date())).length === 0
+            {allLogs.filter(l => l.isFinalized || isBefore(parseISO(l.date + 'T00:00:00'), startOfDay(new Date()))).length === 0
               ? "No previous work logs found."
               : "No logs match your filters."}
             </p>
@@ -581,4 +591,3 @@ export default function PreviousLogsPage() {
   );
 }
 
-    

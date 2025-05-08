@@ -57,10 +57,11 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     breakDurationMinutes: 65,
     trainingDurationMinutes: 5, // Sample training
     hoursWorked: 7.17, // Example calculation (8.5h - 65m break - 5m train)
-    documentsCompleted: 62, 
-    videoSessionsCompleted: 85, 
-    targetId: sampleUPHTargets[0].id, 
+    documentsCompleted: 62,
+    videoSessionsCompleted: 85,
+    targetId: sampleUPHTargets[0].id,
     notes: 'Started a bit late, focused on docs.',
+    isFinalized: false, // Today's log is not finalized initially
   },
   // Yesterday's Log
   {
@@ -72,9 +73,10 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     trainingDurationMinutes: 0,
     hoursWorked: 7.5,
     documentsCompleted: 78,
-    videoSessionsCompleted: 105, 
+    videoSessionsCompleted: 105,
     targetId: sampleUPHTargets[0].id,
     notes: 'Good pace yesterday.',
+    isFinalized: true, // Mark previous days as finalized
   },
   // Log from Two Days Ago
   {
@@ -86,9 +88,10 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     trainingDurationMinutes: 10,
     hoursWorked: 7.0, // Example calculation for 8h 30m - 70m break - 10m train
     documentsCompleted: 55,
-    videoSessionsCompleted: 72, 
+    videoSessionsCompleted: 72,
     targetId: sampleUPHTargets[0].id,
     notes: 'More video calls this day.',
+    isFinalized: true, // Mark previous days as finalized
   },
    // Log from 3 days ago
   {
@@ -103,6 +106,7 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     videoSessionsCompleted: 90,
     targetId: sampleUPHTargets[0].id,
     notes: 'Standard day.',
+    isFinalized: true, // Mark previous days as finalized
   },
    // Log from 4 days ago
   {
@@ -114,9 +118,10 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     trainingDurationMinutes: 0,
     hoursWorked: 7.25,
     documentsCompleted: 70,
-    videoSessionsCompleted: 95, 
+    videoSessionsCompleted: 95,
     targetId: sampleUPHTargets[0].id,
     notes: 'Average day.',
+    isFinalized: true, // Mark previous days as finalized
   },
   // Log from 5 days ago
   {
@@ -131,6 +136,7 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     videoSessionsCompleted: 110,
     targetId: sampleUPHTargets[0].id,
     notes: 'Worked a full 8 hours.',
+    isFinalized: true, // Mark previous days as finalized
   },
   // Log from 6 days ago
   {
@@ -145,6 +151,7 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     videoSessionsCompleted: 88,
     targetId: sampleUPHTargets[0].id,
     notes: 'Shorter break.',
+    isFinalized: true, // Mark previous days as finalized
   },
    // Log from 7 days ago
   {
@@ -159,6 +166,7 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     videoSessionsCompleted: 100,
     targetId: sampleUPHTargets[0].id,
     notes: 'End of the previous week.',
+    isFinalized: true, // Mark previous days as finalized
   },
 ];
 
