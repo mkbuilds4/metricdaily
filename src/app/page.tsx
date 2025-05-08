@@ -252,15 +252,15 @@ export default function Home() {
            // Inputs will update via the useEffect watching workLogs
            toast({ title: "Count Updated", description: `Today's ${field === 'documentsCompleted' ? 'document' : 'video'} count set to ${newValue}.` });
 
-           // Add specific audit log entry for quick count update
-            addAuditLog(
-                'UPDATE_WORK_LOG_QUICK_COUNT',
-                'WorkLog',
-                `Quick updated ${field === 'documentsCompleted' ? 'document' : 'video'} count to ${newValue} for log ${savedLog.date}.`,
-                savedLog.id,
-                originalLogState, // Previous state
-                savedLog // New state
-            );
+           // **REMOVED**: Explicit audit log for quick count update. Relying on generic UPDATE_WORK_LOG from saveWorkLog.
+           // addAuditLog(
+           //     'UPDATE_WORK_LOG_QUICK_COUNT',
+           //     'WorkLog',
+           //     `Quick updated ${field === 'documentsCompleted' ? 'document' : 'video'} count to ${newValue} for log ${savedLog.date}.`,
+           //     savedLog.id,
+           //     originalLogState, // Previous state
+           //     savedLog // New state
+           // );
 
       } catch(error) {
            // Revert input on error if it was direct text entry
@@ -627,12 +627,12 @@ export default function Home() {
         }
     });
   // Removed handleSaveWorkLog from dependencies as it caused issues, relies on closure now
-  }, [isClient]); // Removed handleSaveWorkLog, added toast
+  }, [isClient, saveWorkLog]); // Added saveWorkLog back as dependency
 
 
   // --- Set Active Target Handler ---
   const handleSetActiveTarget = useCallback((id: string) => {
-     if (!isClient) return {} as UPHTarget;
+     if (!isClient || activeTarget?.id === id) return {} as UPHTarget; // Prevent update if already active
     try {
       const newActiveTarget = setActiveUPHTarget(id);
       setUphTargets(prev => prev.map(t => ({...t, isActive: t.id === newActiveTarget.id})));
@@ -648,7 +648,7 @@ export default function Home() {
        });
       throw error;
     }
-  }, [toast, isClient]);
+  }, [toast, isClient, activeTarget]); // Add activeTarget dependency
 
   const todayLog = workLogs.find(log => log.date === formatDateISO(new Date())) || null;
 
@@ -865,3 +865,4 @@ export default function Home() {
     </div>
   );
 }
+
