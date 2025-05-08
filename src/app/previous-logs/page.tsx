@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -118,7 +117,7 @@ export default function PreviousLogsPage() {
       ];
 
       targets.forEach(target => {
-        const units = calculateDailyUnits(log, target);
+        const units = calculateDailyUnits(log, target, target);
         const uph = calculateDailyUPH(log, target);
         row.push(escapeCSVField(units.toFixed(2)));
         row.push(escapeCSVField(uph.toFixed(2)));
@@ -214,4 +213,3 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
-
