@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Combobox, ComboboxOption } from '@/components/ui/combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { format, parseISO, startOfDay, endOfDay, isValid, subDays, startOfWeek, endOfWeek } from 'date-fns';
+import { format, parseISO, startOfDay, endOfDay, isValid, subDays, startOfWeek, endOfWeek, subWeeks } from 'date-fns'; // Added subWeeks
 import { RefreshCw, Download, Filter, X, Calendar as CalendarIcon, Activity, Database, Settings as SettingsIcon, Server, Shield } from 'lucide-react'; // Changed System to Server
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'; // Import Cell from recharts
 import { useToast } from '@/hooks/use-toast';
@@ -261,6 +261,7 @@ export default function AuditLogPage() {
     { label: "Today", range: { from: startOfDay(today), to: endOfDay(today) } },
     { label: "Yesterday", range: { from: startOfDay(subDays(today, 1)), to: endOfDay(subDays(today, 1)) } },
     { label: "This Week", range: { from: startOfWeek(today, { weekStartsOn: 1 }), to: endOfWeek(today, { weekStartsOn: 1 }) } },
+    { label: "Last Week", range: { from: startOfWeek(subWeeks(today, 1), { weekStartsOn: 1 }), to: endOfWeek(subWeeks(today, 1), { weekStartsOn: 1 }) } }, // Added Last Week
     { label: "Last 7 Days", range: { from: startOfDay(subDays(today, 6)), to: endOfDay(today) } },
   ];
 
@@ -538,5 +539,3 @@ export default function AuditLogPage() {
     </div>
   );
 }
-
-    
