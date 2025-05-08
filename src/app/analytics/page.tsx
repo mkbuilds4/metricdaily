@@ -266,10 +266,10 @@ export default function AnalyticsPage() {
      targetUPH: { label: "Target UPH", color: CHART_COLORS.targetUPH },
   };
 
-   // Updated config for hourly chart
+   // Updated config for hourly chart legend labels
    const hourlyActivityChartConfig = {
-     documents: { label: "Docs/Hr", color: CHART_COLORS.hourlyDocuments }, // Shortened label
-     videos: { label: "Videos/Hr", color: CHART_COLORS.hourlyVideos }, // Shortened label
+     documents: { label: "Docs", color: CHART_COLORS.hourlyDocuments }, // Changed label
+     videos: { label: "Videos", color: CHART_COLORS.hourlyVideos }, // Changed label
    };
 
   // Preset Date Range Handlers
