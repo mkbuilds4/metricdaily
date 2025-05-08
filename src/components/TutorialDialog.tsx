@@ -11,7 +11,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { HelpCircle, ChevronLeft, ChevronRight, History, Settings, LayoutDashboard, List, BarChart, Trash2 } from 'lucide-react'; // Added Trash2 import
+import { HelpCircle, ChevronLeft, ChevronRight, History, Settings, LayoutDashboard, List, BarChart, Trash2, Archive } from 'lucide-react'; // Added Archive icon
 
 const tutorialPages = [
  {
@@ -30,7 +30,7 @@ const tutorialPages = [
         <ol className="list-decimal pl-5 space-y-3 mb-4">
           <li>
             <strong className="block mb-1">Load Sample Data:</strong>
-            <p>Click the &quot;Load Sample Data&quot; button on the dashboard. This will populate the app with example work logs and UPH targets, allowing you to explore all features immediately. You can easily clear this sample data later from the dashboard using the &quot;Clear All My Data&quot; button when you&apos;re ready to input your own information.</p>
+            <p>Click the &quot;Load Sample Data&quot; button on the dashboard. This will populate the app with example work logs and UPH targets, allowing you to explore all features immediately. You can easily clear this sample data later from the dashboard using the &quot;Clear Sample Data &amp; Start Fresh&quot; button (<Trash2 className="inline-block h-3.5 w-3.5 align-text-bottom" /> icon) when you&apos;re ready to input your own information.</p>
           </li>
           <li>
             <strong className="block mb-1">Set Up & Start Tracking Manually:</strong>
@@ -95,16 +95,16 @@ const tutorialPages = [
             </ul>
           </li>
           <li>
-            <strong>Today's Metrics:</strong> A summary of your performance against all defined UPH targets for the current day, offering a comprehensive view of your productivity in individual cards per target.
+            <strong>Today's Metrics:</strong> A summary of your performance against all defined UPH targets for the current day, offering a comprehensive view of your productivity in individual cards per target. You can click a target's card to make it the active target for dashboard calculations.
           </li>
         </ul>
         <h4 className="font-medium text-md mt-4 mb-1">Data Management:</h4>
          <ul className="list-disc pl-5 space-y-1">
            <li>
-            <strong>Clear All Data:</strong> A button to reset all application data, including logs and targets. Use this with caution as it&apos;s irreversible.
+            <strong>Clear Sample Data:</strong> If you loaded sample data, a button appears here to remove it and start fresh.
           </li>
            <li>
-            <strong>End Today's Log:</strong> Finalizes the log for the current day, making it appear under 'Previous Logs'. This is useful at the end of your workday.
+            <strong>End Today's Log:</strong> Click the <Archive className="inline-block h-4 w-4 align-text-bottom" /> icon button to finalize the log for the current day. This marks the log as complete (useful for accurate record-keeping) and it will appear under 'Previous Logs' starting the next calendar day.
           </li>
         </ul>
       </>
@@ -165,20 +165,23 @@ const tutorialPages = [
       <>
         <h3 className="font-semibold text-lg mb-3">4. Previous Logs Page (<History className="inline-block h-4 w-4 align-text-bottom" />)</h3>
         <p className="mb-3">
-          Review your past performance and detailed metrics for previous workdays.
+          Review your past performance and detailed metrics for previous workdays. Only logs from dates before the current day are shown here.
         </p>
         <ul className="list-disc pl-5 space-y-2 mb-4">
+           <li>
+             <strong>Filtering & Sorting:</strong> Use the controls at the top to search logs, filter by date range, and sort the log list by various criteria (Date, Hours, Counts, Avg UPH).
+           </li>
           <li>
-            <strong>Log Summary:</strong> Each past day&apos;s log is displayed in a collapsible summary showing the date, hours worked, target context, key counts, and the average UPH achieved based on the log's associated target. Click the summary to expand it.
+            <strong>Log Summary (Trigger):</strong> Each past day&apos;s log is displayed in a compact summary trigger. This shows the date, hours worked, target context, key counts, and the average UPH achieved based on the log's associated target (or the active target if the log's original target is missing).
+          </li>
+           <li>
+             <strong>Detailed Metrics (Expanded View):</strong> Click the summary trigger to expand it. You'll see a detailed summary card for that day, followed by individual cards showing your performance against *all* your defined UPH targets for that specific day. This includes units completed vs. goal and the average UPH achieved relative to *each* target definition.
+           </li>
+          <li>
+            <strong>Delete Logs:</strong> You can remove individual past log entries using the trash icon (<Trash2 className="inline-block h-3.5 w-3.5 align-text-bottom text-destructive" />) located on the right side of each log summary trigger.
           </li>
           <li>
-            <strong>Detailed Metrics (Expanded View):</strong> When a log entry is expanded, you&apos;ll see a detailed summary card for that day and then individual cards showing your performance against *all* your defined UPH targets for that specific day. This includes units completed vs. goal and the average UPH achieved relative to *each* target definition.
-          </li>
-          <li>
-            <strong>Delete Logs:</strong> You can remove individual past log entries using the trash icon (<Trash2 className="inline-block h-3.5 w-3.5 align-text-bottom text-destructive" />) associated with each log summary in the collapsed view.
-          </li>
-          <li>
-            <strong>Export Data:</strong> Use the &quot;Export All to CSV&quot; button to download all previous logs and their associated metrics.
+            <strong>Export Data:</strong> Use the &quot;Export Filtered&quot; button to download the currently filtered and sorted list of previous logs and their associated metrics to a CSV file.
           </li>
         </ul>
 
@@ -196,24 +199,30 @@ const tutorialPages = [
           <li>
             <strong>Usage:</strong> These defaults are used when you click "Start New Day" on the dashboard or "Reset to Today's Defaults" on the Log Input page.
           </li>
+           <li>
+             <strong>Clear All Application Data:</strong> A button to permanently delete all stored work logs, UPH targets, and saved settings. Use with caution!
+           </li>
         </ul>
 
          <h3 className="font-semibold text-lg mt-6 mb-3">6. Audit Log Page (<History className="inline-block h-4 w-4 align-text-bottom" />)</h3>
         <p className="mb-2">
-          The Audit Log tracks all significant changes made within the application.
+          The Audit Log tracks all significant changes made within the application for transparency and troubleshooting.
         </p>
         <ul className="list-disc pl-5 space-y-1 mb-3">
           <li>
             <strong>Access:</strong> Directly accessible from the sidebar.
           </li>
+           <li>
+             <strong>Analytics Overview:</strong> At the top, see a quick summary of log entries by type (WorkLog, UPHTarget, etc.) and a chart showing the most frequent actions performed.
+           </li>
           <li>
             <strong>Information Logged:</strong> Includes creation, updates, and deletion of work logs and UPH targets, changes to settings, as well as system events like loading sample data, clearing all data, and data exports.
           </li>
           <li>
-            <strong>Details:</strong> Each entry shows the timestamp, action performed, entity affected, and a description of the change, including previous and new states for updates where applicable.
+            <strong>Details:</strong> Each entry shows the timestamp (with seconds), action performed, entity affected, and a description of the change, including previous and new states for updates where applicable.
           </li>
            <li>
-            <strong>Filtering & Export:</strong> You can filter the logs by keywords and export the currently filtered view to a CSV file.
+            <strong>Filtering & Export:</strong> You can filter the logs by keywords, action type, entity type, and date range. Export the currently filtered view to a CSV file.
           </li>
         </ul>
 
@@ -321,3 +330,5 @@ const TutorialDialog: React.FC<TutorialDialogProps> = ({ contextualTriggerText }
 };
 
 export default TutorialDialog;
+
+    

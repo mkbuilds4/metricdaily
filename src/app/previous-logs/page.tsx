@@ -102,9 +102,10 @@ export default function PreviousLogsPage() {
 
   // Filtering Logic
   const filteredLogs = useMemo(() => {
-    // Remove the explicit filtering of today's date
+    const todayDateStr = formatDateISO(new Date()); // Get today's date string
     return allLogs.filter(log => {
-        // Removed: if (log.date === todayDateStr) return false;
+        // Filter out today's log explicitly
+        if (log.date === todayDateStr) return false;
 
         const searchTerm = filterTerm.toLowerCase();
         const logTimestamp = parseISO(log.date + 'T00:00:00'); // Ensure time for correct comparison
@@ -202,18 +203,18 @@ export default function PreviousLogsPage() {
         }
         // If current direction is 'desc' or 'none', clear the sort (set back to default)
         // For third click clear:
-        // if (prevDirection === 'desc') {
-        //     return 'none';
-        // }
+        if (prevDirection === 'desc') {
+             return 'none';
+        }
         // If we want third click to clear, uncomment above and remove below 'asc'
         return 'asc'; // Cycle back to ascending
     });
     setSortColumn(column);
     // If the direction becomes 'none', reset column to default as well (optional, but logical)
-    // if (sortColumn === column && sortDirection === 'desc') {
-    //     setSortColumn(DEFAULT_SORT_COLUMN);
-    //     setSortDirection(DEFAULT_SORT_DIRECTION);
-    // }
+    if (sortColumn === column && sortDirection === 'desc') {
+         setSortColumn(DEFAULT_SORT_COLUMN);
+         setSortDirection(DEFAULT_SORT_DIRECTION);
+    }
     setCurrentPage(1); // Reset to first page on sort change
   }, [sortColumn, sortDirection]); // Include sortDirection in dependency
 
@@ -541,6 +542,7 @@ export default function PreviousLogsPage() {
         targets={uphTargets}
         deleteWorkLogAction={handleDeleteWorkLog}
         showTodaySection={false} // Ensure today's section is not shown here
+        // Removed onGoalMet as it's not relevant for previous logs
        />
 
       {/* Pagination Controls */}
@@ -578,7 +580,5 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
-
-    
 
     
