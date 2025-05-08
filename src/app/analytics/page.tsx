@@ -22,6 +22,7 @@ const CHART_COLORS = {
   videos: 'hsl(var(--chart-2))',
   uph: 'hsl(var(--chart-3))',
   targetUPH: 'hsl(var(--chart-4))',
+  hoursWorked: 'hsl(var(--chart-5))', // Added color for hours worked
   // Colors for the hourly chart - using documents/videos colors again
   hourlyDocuments: 'hsl(var(--chart-1))',
   hourlyVideos: 'hsl(var(--chart-2))',
@@ -122,7 +123,7 @@ export default function AnalyticsPage() {
         fullDate: log.date,
         documents: log.documentsCompleted,
         videos: log.videoSessionsCompleted,
-        hoursWorked: log.hoursWorked, // Add hoursWorked here
+        hoursWorked: log.hoursWorked, // Keep hoursWorked here
         uph: uph !== null && isFinite(uph) ? uph : 0,
         targetUPH: targetForLog?.targetUPH ?? null,
       };
@@ -256,7 +257,7 @@ export default function AnalyticsPage() {
   const dailyCountsChartConfig = {
     documents: { label: "Documents", color: CHART_COLORS.documents },
     videos: { label: "Videos", color: CHART_COLORS.videos },
-    hoursWorked: { label: "Hours", color: 'hsl(var(--muted-foreground))' }, // Use a muted color for hours
+    hoursWorked: { label: "Hours Worked", color: CHART_COLORS.hoursWorked }, // Updated config for hours line
   };
 
 
@@ -428,8 +429,8 @@ export default function AnalyticsPage() {
         {/* Daily Counts Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Daily Completed Items</CardTitle>
-             <CardDescription>Documents and Video Sessions completed per day. Hover for hours worked.</CardDescription>
+            <CardTitle>Daily Completed Items & Hours</CardTitle>
+             <CardDescription>Documents, Videos, and Hours Worked per day.</CardDescription>
           </CardHeader>
           <CardContent>
             {dailyWorkChartData.length > 0 ? (
@@ -446,27 +447,51 @@ export default function AnalyticsPage() {
                     tickMargin={8}
                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                   />
+                  {/* Left Y-axis for Counts */}
                   <YAxis
+                    yAxisId="left"
                     tickLine={false}
                     axisLine={false}
                     tickMargin={8}
                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                     domain={['auto', 'auto']} // Adjust Y-axis domain automatically
-                     allowDecimals={false} // No decimals for counts
+                     domain={['auto', 'auto']}
+                     allowDecimals={false}
+                  />
+                   {/* Right Y-axis for Hours */}
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                    domain={['auto', 'auto']}
+                    allowDecimals={true}
+                    tickFormatter={(value) => value.toFixed(1)} // Format hours tick
                   />
                    <ChartTooltip
                      cursor={false}
-                     // Update tooltip content to include hoursWorked
                      content={<ChartTooltipContent
                                 hideLabel
                                 indicator="line"
                                 formatter={(value, name, props) => {
-                                    if (props.payload && props.payload.hoursWorked !== undefined) {
+                                    // Custom formatter to show all three values in one tooltip box
+                                    if (props.payload) {
                                         return (
-                                            <div className="flex flex-col">
-                                                <span>{props.payload.documents} Documents</span>
-                                                <span>{props.payload.videos} Videos</span>
-                                                 <span className="text-muted-foreground text-xs">({props.payload.hoursWorked.toFixed(2)} hrs)</span>
+                                            <div className="grid gap-1">
+                                                <div className="font-medium">{props.payload.date}</div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.documents }} />
+                                                    <span>Docs: {props.payload.documents}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.videos }} />
+                                                    <span>Videos: {props.payload.videos}</span>
+                                                </div>
+                                                 <div className="flex items-center gap-2">
+                                                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.hoursWorked }} />
+                                                    <span>Hours: {props.payload.hoursWorked.toFixed(2)}</span>
+                                                </div>
                                             </div>
                                         );
                                     }
@@ -474,9 +499,10 @@ export default function AnalyticsPage() {
                                 }}
                             />}
                    />
-                  <Line type="monotone" dataKey="documents" stroke={CHART_COLORS.documents} strokeWidth={2} dot={false} name="Documents" />
-                  <Line type="monotone" dataKey="videos" stroke={CHART_COLORS.videos} strokeWidth={2} dot={false} name="Videos" />
-                  {/* hoursWorked is now included in the tooltip */}
+                  <Line yAxisId="left" type="monotone" dataKey="documents" stroke={CHART_COLORS.documents} strokeWidth={2} dot={false} name="Documents" />
+                  <Line yAxisId="left" type="monotone" dataKey="videos" stroke={CHART_COLORS.videos} strokeWidth={2} dot={false} name="Videos" />
+                  {/* Hours Worked Line associated with the right axis */}
+                   <Line yAxisId="right" type="monotone" dataKey="hoursWorked" stroke={CHART_COLORS.hoursWorked} strokeWidth={2} strokeDasharray="5 5" dot={false} name="Hours Worked" />
                    <ChartLegend content={<ChartLegendContent />} />
                 </LineChart>
               </ChartContainer>
