@@ -1,18 +1,23 @@
-
 'use client';
 
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'; // Import icons
+import { ChevronLeft, ChevronRight, AlertCircle, TrendingUp, CalendarDays } from 'lucide-react'; // Added icons
 import { startOfWeek, endOfWeek, parseISO, isValid, isWithinInterval, format, subDays, startOfDay, endOfDay } from 'date-fns';
 import type { DailyWorkLog, UPHTarget } from '@/types';
-import { calculateDailyUPH } from '@/lib/utils';
+import { calculateDailyUPH, formatFriendlyDate } from '@/lib/utils'; // Import formatFriendlyDate
 
 interface WeeklyAveragesProps {
   allWorkLogs: DailyWorkLog[];
   targets: UPHTarget[]; // Still needed to find the active one
   activeTarget: UPHTarget | null; // Now used directly
+}
+
+interface DailyUPHEntry {
+    date: string; // YYYY-MM-DD
+    uph: number;
+    formattedDate: string; // e.g., 'Mon', 'Tue'
 }
 
 const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
@@ -27,9 +32,9 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
     setClientNow(new Date());
   }, []);
 
-  const weeklyAverageUPH = useMemo(() => {
+  const weeklyData = useMemo(() => {
     if (!activeTarget || allWorkLogs.length === 0 || !clientNow) {
-      return null; // No active target, no logs, or clientNow not ready
+      return { averageUPH: null, dailyBreakdown: [] }; // No active target, no logs, or clientNow not ready
     }
 
     // Calculate the start and end of the *current* week (Monday to Sunday)
@@ -49,11 +54,12 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
     });
 
     if (logsThisWeekSoFar.length === 0) {
-      return 0; // No logs this week so far to average
+      return { averageUPH: 0, dailyBreakdown: [] }; // No logs this week so far to average
     }
 
     let totalUPHSum = 0;
     let daysWithValidUPH = 0;
+    const dailyBreakdown: DailyUPHEntry[] = [];
 
     logsThisWeekSoFar.forEach(log => {
       // Use the target associated with the log, fallback to active target if missing
@@ -63,11 +69,28 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
         if (dailyUPH > 0 && Number.isFinite(dailyUPH)) { // Only include days where UPH could be calculated and is finite
             totalUPHSum += dailyUPH;
             daysWithValidUPH++;
+            try {
+                 const logDateObj = parseISO(log.date + 'T00:00:00');
+                 if (isValid(logDateObj)) {
+                     dailyBreakdown.push({
+                        date: log.date,
+                        uph: parseFloat(dailyUPH.toFixed(2)),
+                        formattedDate: format(logDateObj, 'EEE') // Format as 'Mon', 'Tue' etc.
+                     });
+                 }
+            } catch (e) {
+                 console.warn(`Could not parse date for daily breakdown: ${log.date}`);
+            }
         }
       }
     });
 
-    return daysWithValidUPH > 0 ? parseFloat((totalUPHSum / daysWithValidUPH).toFixed(2)) : 0;
+    // Sort daily breakdown by date ascending (Mon -> Sun)
+    dailyBreakdown.sort((a, b) => a.date.localeCompare(b.date));
+
+    const averageUPH = daysWithValidUPH > 0 ? parseFloat((totalUPHSum / daysWithValidUPH).toFixed(2)) : 0;
+
+    return { averageUPH, dailyBreakdown };
 
   }, [allWorkLogs, activeTarget, clientNow, targets]); // Added clientNow and targets as dependencies
 
@@ -104,23 +127,40 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
         </div>
         {/* Removed navigation buttons */}
       </CardHeader>
-      <CardContent className="pt-2 flex items-center justify-center h-[calc(100%-4rem)]"> {/* Adjusted height */}
-        {weeklyAverageUPH === null ? (
-          <p className="text-muted-foreground text-sm text-center flex items-center gap-1">
+      <CardContent className="pt-2 flex flex-col justify-center h-[calc(100%-4rem)]"> {/* Adjusted height */}
+        {weeklyData.averageUPH === null ? (
+          <p className="text-muted-foreground text-sm text-center flex items-center gap-1 mx-auto"> {/* Centered message */}
             <AlertCircle className="h-4 w-4" /> No active target.
           </p>
         ) : (
-          <div className="text-center">
-             <div className="text-2xl font-bold tabular-nums">
-                {weeklyAverageUPH > 0 ? weeklyAverageUPH.toFixed(2) : '-'}
+          <>
+            <div className="text-center mb-2"> {/* Centered main average */}
+              <div className="text-2xl font-bold tabular-nums">
+                {weeklyData.averageUPH > 0 ? weeklyData.averageUPH.toFixed(2) : '-'}
                 <span className="text-sm font-normal text-muted-foreground ml-1">UPH</span>
-            </div>
-             {activeTarget && (
+              </div>
+              {activeTarget && (
                 <p className="text-xs text-muted-foreground mt-0.5" title={`Calculated based on Active Target: ${activeTarget.name}`}>
                     (Target: {activeTarget.name})
                 </p>
+              )}
+            </div>
+
+             {/* Daily Breakdown Section */}
+            {weeklyData.dailyBreakdown.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-border/50">
+                 <p className="text-xs font-medium text-muted-foreground text-center mb-1">Daily UPH</p>
+                 <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+                    {weeklyData.dailyBreakdown.map(day => (
+                        <div key={day.date} className="text-xs flex items-center gap-1 text-muted-foreground" title={`${formatFriendlyDate(day.date)}: ${day.uph}`}>
+                            <span className="font-medium">{day.formattedDate}:</span>
+                            <span className="font-semibold text-foreground tabular-nums">{day.uph}</span>
+                        </div>
+                    ))}
+                 </div>
+              </div>
             )}
-          </div>
+          </>
         )}
       </CardContent>
     </Card>
@@ -128,4 +168,3 @@ const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
 };
 
 export default WeeklyAverages;
-
