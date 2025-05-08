@@ -15,7 +15,7 @@ import {
     getHours,
     getMinutes,
     getSeconds,
-    addDays,
+    addDays, // Import addDays
     differenceInSeconds,
     addSeconds,
 } from 'date-fns';
@@ -64,7 +64,7 @@ export function getWeekDates(date: Date = new Date()): Date[] {
  */
 export function formatFriendlyDate(date: Date | string | null | undefined): string {
     if (!date) return 'Invalid Date';
-    const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
+    const dateObj = typeof date === 'string' ? parseISO(date + 'T00:00:00') : date; // Use parseISO for safety
      if (!isValid(dateObj)) return 'Invalid Date';
     return format(dateObj, 'eee, MMM d');
 }
@@ -229,7 +229,6 @@ export function formatTimeAheadBehind(timeDifferenceSeconds: number | null): str
         return `Behind ${durationString}`;
     }
 }
-
 
 /**
  * Calculates the projected time the target goal will be hit based on current progress and scheduled end time.

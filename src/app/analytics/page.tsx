@@ -7,7 +7,7 @@ import type { DailyWorkLog, UPHTarget, AuditLogEntry } from '@/types'; // Added 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
-import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, getHours, isSameDay } from 'date-fns'; // Added getHours, isSameDay
+import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, getHours, isSameDay, parse, setHours, setMinutes, setSeconds, isAfter } from 'date-fns'; // Added parse, setHours, setMinutes, setSeconds, isAfter
 import { DateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -97,6 +97,15 @@ export default function AnalyticsPage() {
     return null; // No single date selected or range spans multiple days
   }, [filterDateRange]);
 
+   // Find the work log for the selected date
+  const selectedDayLog = useMemo(() => {
+    if (!selectedDateForHourlyChart) return null;
+    const selectedDateStr = format(selectedDateForHourlyChart, 'yyyy-MM-dd');
+    // Find the log for the selected date (consider finalized or not)
+    return workLogs.find(log => log.date === selectedDateStr);
+  }, [workLogs, selectedDateForHourlyChart]);
+
+
   // Prepare data for charts
   const dailyWorkChartData = useMemo(() => {
     // Sort logs by date ascending for charting trends over time
@@ -121,49 +130,84 @@ export default function AnalyticsPage() {
 
   // Prepare data for hourly activity chart
    const hourlyActivityChartData = useMemo(() => {
-    if (!selectedDateForHourlyChart || auditLogs.length === 0) {
-        return [];
-    }
+       if (!selectedDateForHourlyChart || auditLogs.length === 0 || !selectedDayLog) {
+         return [];
+       }
 
-    const selectedDayStart = startOfDay(selectedDateForHourlyChart);
-    const selectedDayEnd = endOfDay(selectedDateForHourlyChart);
+      // Attempt to parse start and end times from the selected day's log
+      const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+      const startMatch = selectedDayLog.startTime.match(timeRegex);
+      const endMatch = selectedDayLog.endTime.match(timeRegex);
 
-    // Filter audit logs for the selected date and relevant actions
-    const relevantActions: AuditLogEntry['action'][] = [
-        'CREATE_WORK_LOG',
-        'UPDATE_WORK_LOG',
-        'UPDATE_WORK_LOG_QUICK_COUNT',
-        'UPDATE_WORK_LOG_BREAK',
-        'UPDATE_WORK_LOG_TRAINING',
-        'UPDATE_WORK_LOG_GOAL_MET',
-        'SYSTEM_ARCHIVE_TODAY_LOG', // Might indicate end-of-day activity
-    ];
+       if (!startMatch || !endMatch) {
+           console.warn('Invalid start or end time format in log for hourly chart:', selectedDayLog);
+           return []; // Cannot determine shift range
+       }
 
-    const hourlyCounts: Record<number, number> = Array.from({ length: 24 }, (_, i) => i).reduce((acc, hour) => {
-        acc[hour] = 0;
-        return acc;
-    }, {} as Record<number, number>);
+       const startHour = parseInt(startMatch[1], 10);
+       const startMinute = parseInt(startMatch[2], 10);
+       const endHour = parseInt(endMatch[1], 10);
+       const endMinute = parseInt(endMatch[2], 10);
 
-    auditLogs.forEach(log => {
-        const logTimestamp = parseISO(log.timestamp);
-        if (
-            isValid(logTimestamp) &&
-            logTimestamp >= selectedDayStart &&
-            logTimestamp <= selectedDayEnd &&
-            relevantActions.includes(log.action)
-        ) {
-            const hour = getHours(logTimestamp);
-            hourlyCounts[hour]++;
+      const shiftStartDate = setMinutes(setHours(selectedDateForHourlyChart, startHour), startMinute);
+      // Handle overnight shift if end time is on the next day
+      let shiftEndDate = setMinutes(setHours(selectedDateForHourlyChart, endHour), endMinute);
+       if (shiftEndDate <= shiftStartDate) {
+         shiftEndDate = addDays(shiftEndDate, 1);
+       }
+
+
+       // Filter audit logs for the selected date's shift period and relevant actions
+       const relevantActions: AuditLogEntry['action'][] = [
+         'CREATE_WORK_LOG',
+         'UPDATE_WORK_LOG',
+         'UPDATE_WORK_LOG_QUICK_COUNT',
+         'UPDATE_WORK_LOG_BREAK',
+         'UPDATE_WORK_LOG_TRAINING',
+         'UPDATE_WORK_LOG_GOAL_MET',
+         'SYSTEM_ARCHIVE_TODAY_LOG',
+       ];
+
+       const hourlyCounts: Record<number, number> = {};
+
+       // Initialize hourly counts only for hours within the shift
+        let currentHourMarker = shiftStartDate;
+        while (currentHourMarker < shiftEndDate) {
+            const hour = getHours(currentHourMarker);
+            hourlyCounts[hour] = 0;
+            currentHourMarker = addHours(currentHourMarker, 1);
+            // Special case: if shift ends exactly on the hour, include that hour's bucket
+            if (getHours(currentHourMarker) === endHour && currentHourMarker <= shiftEndDate) {
+                 hourlyCounts[endHour] = 0;
+            }
         }
-    });
 
-    // Format for chart
-    return Object.entries(hourlyCounts).map(([hour, count]) => ({
-        hourLabel: `${String(hour).padStart(2, '0')}:00`, // Format as HH:00
-        count: count,
-    }));
+       auditLogs.forEach(log => {
+         const logTimestamp = parseISO(log.timestamp);
+         if (
+             isValid(logTimestamp) &&
+             logTimestamp >= shiftStartDate && // Check if within shift start
+             logTimestamp < shiftEndDate &&   // Check if strictly before shift end
+             relevantActions.includes(log.action)
+         ) {
+           const hour = getHours(logTimestamp);
+           // Ensure the hour exists in our shift-based counts
+           if (hourlyCounts[hour] !== undefined) {
+                hourlyCounts[hour]++;
+           }
+         }
+       });
 
-   }, [auditLogs, selectedDateForHourlyChart]);
+       // Format for chart, ensuring we only include hours from the shift
+       return Object.entries(hourlyCounts)
+           .map(([hour, count]) => ({
+               hour: parseInt(hour, 10), // Keep hour as number for potential sorting
+               hourLabel: `${String(hour).padStart(2, '0')}:00`, // Format as HH:00
+               count: count,
+           }))
+           .sort((a, b) => a.hour - b.hour); // Sort by hour ascending
+
+   }, [auditLogs, selectedDateForHourlyChart, selectedDayLog]);
 
 
   // Chart Configurations
@@ -203,7 +247,10 @@ export default function AnalyticsPage() {
    const summaryStats = useMemo(() => {
     const totalDocs = dailyWorkChartData.reduce((sum, d) => sum + d.documents, 0);
     const totalVideos = dailyWorkChartData.reduce((sum, d) => sum + d.videos, 0);
-    const avgUPH = dailyWorkChartData.length > 0 ? dailyWorkChartData.reduce((sum, d) => sum + d.uph, 0) / dailyWorkChartData.length : 0;
+    const validUphEntries = dailyWorkChartData.filter(d => d.uph > 0);
+    const avgUPH = validUphEntries.length > 0
+        ? validUphEntries.reduce((sum, d) => sum + d.uph, 0) / validUphEntries.length
+        : 0;
     const daysLogged = dailyWorkChartData.length;
     return {
       totalDocs,
@@ -435,12 +482,13 @@ export default function AnalyticsPage() {
                 <Clock className="h-5 w-5" /> Hourly Activity
             </CardTitle>
             <CardDescription>
-              Number of logged activities (log creation/updates) per hour for the selected day.
+              Number of logged activities (log creation/updates) per hour for the selected day's shift.
               {selectedDateForHourlyChart ? ` (${format(selectedDateForHourlyChart, 'MMM d, yyyy')})` : ''}
+              {!selectedDayLog && selectedDateForHourlyChart && ' (No log found for shift times)'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {selectedDateForHourlyChart ? (
+            {selectedDateForHourlyChart && selectedDayLog ? ( // Only show if date is selected AND log exists
               hourlyActivityChartData.length > 0 ? (
                 <ChartContainer config={hourlyActivityChartConfig} className="h-[300px] w-full">
                   <BarChart data={hourlyActivityChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
@@ -451,9 +499,9 @@ export default function AnalyticsPage() {
                       axisLine={false}
                       tickMargin={8}
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      angle={-45} // Angle labels for better fit
-                      textAnchor="end"
-                      interval={1} // Show every other label
+                      angle={hourlyActivityChartData.length > 10 ? -45 : 0} // Angle labels if many bars
+                      textAnchor={hourlyActivityChartData.length > 10 ? "end" : "middle"}
+                      interval={hourlyActivityChartData.length > 14 ? 1 : 0} // Show every label or every other
                     />
                     <YAxis
                       tickLine={false}
@@ -472,12 +520,12 @@ export default function AnalyticsPage() {
                 </ChartContainer>
               ) : (
                 <div className="h-[300px] flex items-center justify-center">
-                  <p className="text-muted-foreground">No logged activity found for {format(selectedDateForHourlyChart, 'MMM d, yyyy')}.</p>
+                  <p className="text-muted-foreground">No logged activity found for the shift period on {format(selectedDateForHourlyChart, 'MMM d, yyyy')}.</p>
                 </div>
               )
             ) : (
               <div className="h-[300px] flex items-center justify-center">
-                <p className="text-muted-foreground">Please select a single day in the date range filter to view hourly activity.</p>
+                <p className="text-muted-foreground">Please select a single day with a valid work log in the date range filter to view hourly activity.</p>
               </div>
             )}
           </CardContent>
@@ -487,6 +535,4 @@ export default function AnalyticsPage() {
       </div>
     </div>
   );
-} // Added missing closing brace here
-
-    
+}
