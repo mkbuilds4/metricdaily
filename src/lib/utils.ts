@@ -249,9 +249,12 @@ export function calculateProjectedGoalHitTime(
         return '-';
     }
 
-    // Check if goal is already met (using currentUnits logic from calculateCurrentMetrics or similar)
-    // This requires fetching current metrics, which might be better done in the component
-    // For now, assume goal is NOT met if this function is called purposefully for projection.
+    // Check if goal is already met (using persisted goal met time)
+    const goalMetTimeISO = log.goalMetTimes?.[target.id];
+    if (goalMetTimeISO && isValid(parseISO(goalMetTimeISO))) {
+        return '-'; // Goal already met and saved
+    }
+
 
     const dateStr = log.date;
     const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -272,12 +275,6 @@ export function calculateProjectedGoalHitTime(
     }
 
     // Revised logic: Projected Hit Time = Scheduled End Time - Time Ahead/Behind
-    // If ahead (positive timeDifferenceSeconds), projected time is earlier than scheduled end.
-    // If behind (negative timeDifferenceSeconds), projected time is later than scheduled end.
-    // Note: timeDifferenceSeconds calculation was: target_time - actual_time
-    // So, positive diff means target_time > actual_time (ahead)
-    // Negative diff means target_time < actual_time (behind)
-    // To adjust end time: End Time + (-timeDifferenceSeconds) = End Time - timeDifferenceSeconds
     const projectedTime = addSeconds(shiftEndDate, -timeDifferenceSeconds);
 
     if (!isValid(projectedTime)) {

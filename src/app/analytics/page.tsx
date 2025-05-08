@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -12,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Calendar as CalendarIcon, Filter, X, Activity, TrendingUp, Clock, BookOpen, Video } from 'lucide-react';
-import { cn, calculateDailyUPH } from '@/lib/utils';
+import { cn, calculateDailyUPH, formatDurationFromMinutes } from '@/lib/utils'; // Import formatDurationFromMinutes
 import { Separator } from '@/components/ui/separator';
 
 // Define chart colors using HSL variables from globals.css
@@ -121,6 +122,7 @@ export default function AnalyticsPage() {
         fullDate: log.date,
         documents: log.documentsCompleted,
         videos: log.videoSessionsCompleted,
+        hoursWorked: log.hoursWorked, // Add hoursWorked here
         uph: uph !== null && isFinite(uph) ? uph : 0,
         targetUPH: targetForLog?.targetUPH ?? null,
       };
@@ -254,7 +256,9 @@ export default function AnalyticsPage() {
   const dailyCountsChartConfig = {
     documents: { label: "Documents", color: CHART_COLORS.documents },
     videos: { label: "Videos", color: CHART_COLORS.videos },
+    hoursWorked: { label: "Hours", color: 'hsl(var(--muted-foreground))' }, // Use a muted color for hours
   };
+
 
   const dailyUPHChartConfig = {
      uph: { label: "Actual UPH", color: CHART_COLORS.uph },
@@ -425,7 +429,7 @@ export default function AnalyticsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Daily Completed Items</CardTitle>
-             <CardDescription>Documents and Video Sessions completed per day.</CardDescription>
+             <CardDescription>Documents and Video Sessions completed per day. Hover for hours worked.</CardDescription>
           </CardHeader>
           <CardContent>
             {dailyWorkChartData.length > 0 ? (
@@ -447,13 +451,32 @@ export default function AnalyticsPage() {
                     axisLine={false}
                     tickMargin={8}
                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                     domain={['auto', 'auto']} // Adjust Y-axis domain automatically
+                     allowDecimals={false} // No decimals for counts
                   />
                    <ChartTooltip
                      cursor={false}
-                     content={<ChartTooltipContent hideLabel indicator="line" />}
+                     // Update tooltip content to include hoursWorked
+                     content={<ChartTooltipContent
+                                hideLabel
+                                indicator="line"
+                                formatter={(value, name, props) => {
+                                    if (props.payload && props.payload.hoursWorked !== undefined) {
+                                        return (
+                                            <div className="flex flex-col">
+                                                <span>{props.payload.documents} Documents</span>
+                                                <span>{props.payload.videos} Videos</span>
+                                                 <span className="text-muted-foreground text-xs">({props.payload.hoursWorked.toFixed(2)} hrs)</span>
+                                            </div>
+                                        );
+                                    }
+                                    return value; // Fallback
+                                }}
+                            />}
                    />
                   <Line type="monotone" dataKey="documents" stroke={CHART_COLORS.documents} strokeWidth={2} dot={false} name="Documents" />
                   <Line type="monotone" dataKey="videos" stroke={CHART_COLORS.videos} strokeWidth={2} dot={false} name="Videos" />
+                  {/* hoursWorked is now included in the tooltip */}
                    <ChartLegend content={<ChartLegendContent />} />
                 </LineChart>
               </ChartContainer>
@@ -576,3 +599,4 @@ export default function AnalyticsPage() {
     </div>
   );
 }
+
