@@ -3,7 +3,7 @@
 // Using localStorage for simplicity. Replace with database/API calls for persistence.
 import type { DailyWorkLog, UPHTarget, AuditLogEntry, AuditLogActionType, UserSettings } from '@/types';
 import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
-import { sampleWorkLogs, sampleUPHTargets } from './sample-data';
+import { sampleWorkLogs, sampleUPHTargets, sampleAuditLogs } from './sample-data'; // Import sampleAuditLogs
 
 const WORK_LOGS_KEY = 'workLogs';
 const UPH_TARGETS_KEY = 'uphTargets';
@@ -475,8 +475,9 @@ export function isSampleDataLoaded(): boolean {
 export function loadSampleData(): boolean {
     const currentLogs = getWorkLogs();
     const currentTargets = getUPHTargets();
+    const currentAuditLogs = getAuditLogs();
 
-    if (currentLogs.length === 0 && currentTargets.length === 0) {
+    if (currentLogs.length === 0 && currentTargets.length === 0 && currentAuditLogs.length === 0) {
         // Make sure sample targets are set up correctly
         const processedTargets = sampleUPHTargets.map((target, index) => ({
             ...target,
@@ -492,8 +493,11 @@ export function loadSampleData(): boolean {
             breakDurationMinutes: log.breakDurationMinutes ?? 0, // Default break if missing
             trainingDurationMinutes: log.trainingDurationMinutes ?? 0, // Default training if missing
             goalMetTimes: {}, // Initialize empty goalMetTimes
-            isFinalized: false, // Ensure sample logs are not finalized
+            isFinalized: log.date !== formatDateISO(new Date()), // Finalize logs before today
         }));
+
+        // Save sample audit logs
+        saveToLocalStorage(AUDIT_LOGS_KEY, sampleAuditLogs);
 
         saveToLocalStorage(WORK_LOGS_KEY, processedLogs);
         saveToLocalStorage(UPH_TARGETS_KEY, processedTargets);
@@ -511,7 +515,7 @@ export function loadSampleData(): boolean {
           addAuditLog('UPDATE_SETTINGS', 'Settings', 'Saved initial default settings during sample data load.');
         }
 
-        addAuditLog('SYSTEM_LOAD_SAMPLE_DATA', 'System', 'Loaded sample work logs and UPH targets.');
+        addAuditLog('SYSTEM_LOAD_SAMPLE_DATA', 'System', 'Loaded sample work logs, UPH targets, and audit logs.');
         return true;
     }
     return false;
@@ -525,10 +529,9 @@ export function clearAllData(): void {
     saveToLocalStorage(WORK_LOGS_KEY, []);
     saveToLocalStorage(UPH_TARGETS_KEY, []);
     saveToLocalStorage(SETTINGS_KEY, {}); // Clear settings as well
+    saveToLocalStorage(AUDIT_LOGS_KEY, []); // Clear audit logs
     saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Reset sample data flag
-    // Keep audit logs for now, could add an option to clear them too
-    // saveToLocalStorage(AUDIT_LOGS_KEY, []);
-    addAuditLog('SYSTEM_CLEAR_ALL_DATA', 'System', 'Cleared all work logs, UPH targets, and settings.');
+    addAuditLog('SYSTEM_CLEAR_ALL_DATA', 'System', 'Cleared all work logs, UPH targets, settings, and audit logs.');
 }
 
 /**
@@ -631,4 +634,3 @@ export function saveDefaultSettings(settings: UserSettings): UserSettings {
   );
   return validatedSettings;
 }
-

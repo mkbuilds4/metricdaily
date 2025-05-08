@@ -1,7 +1,7 @@
 
 // src/lib/sample-data.ts
-import type { DailyWorkLog, UPHTarget } from '@/types';
-import { format, subDays, addDays } from 'date-fns';
+import type { DailyWorkLog, UPHTarget, AuditLogEntry, AuditLogActionType } from '@/types';
+import { format, subDays, addDays, setHours, setMinutes, setSeconds, parseISO } from 'date-fns';
 import { formatDateISO } from './utils'; // Use consistent date formatting
 
 // Helper to get dates relative to today
@@ -57,8 +57,8 @@ export const sampleWorkLogs: DailyWorkLog[] = [
     breakDurationMinutes: 65,
     trainingDurationMinutes: 5, // Sample training
     hoursWorked: 7.17, // Example calculation (8.5h - 65m break - 5m train)
-    documentsCompleted: 62,
-    videoSessionsCompleted: 85,
+    documentsCompleted: 62, // Final count for today
+    videoSessionsCompleted: 85, // Final count for today
     targetId: sampleUPHTargets[0].id,
     notes: 'Started a bit late, focused on docs.',
     isFinalized: false, // Today's log is not finalized initially
@@ -170,5 +170,114 @@ export const sampleWorkLogs: DailyWorkLog[] = [
   },
 ];
 
-// You can add more sample logs or targets as needed.
 
+// Sample Audit Logs for 'log-today' to populate the hourly chart
+const todayLogId = 'log-today';
+const todayLogDate = parseISO(formatDateISO(today));
+const baseLogState = sampleWorkLogs.find(log => log.id === todayLogId)!;
+
+export const sampleAuditLogs: AuditLogEntry[] = [
+    // 14:00 - Start of shift (implicit state is 0 docs, 0 videos)
+    // 14:55 - First update
+    {
+        id: 'audit-1',
+        timestamp: setSeconds(setMinutes(setHours(todayLogDate, 14), 55), 10).toISOString(),
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
+        entityType: 'WorkLog',
+        entityId: todayLogId,
+        details: `Quick updated document count to 8 for log ${formatDateISO(today)}.`,
+        previousState: { ...baseLogState, documentsCompleted: 0, videoSessionsCompleted: 0 },
+        newState: { ...baseLogState, documentsCompleted: 8, videoSessionsCompleted: 0 },
+    },
+    // 15:30 - Second update
+    {
+        id: 'audit-2',
+        timestamp: setSeconds(setMinutes(setHours(todayLogDate, 15), 30), 25).toISOString(),
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
+        entityType: 'WorkLog',
+        entityId: todayLogId,
+        details: `Quick updated video count to 12 for log ${formatDateISO(today)}.`,
+        previousState: { ...baseLogState, documentsCompleted: 8, videoSessionsCompleted: 0 },
+        newState: { ...baseLogState, documentsCompleted: 8, videoSessionsCompleted: 12 },
+    },
+     // 16:15 - Third update
+    {
+        id: 'audit-3',
+        timestamp: setSeconds(setMinutes(setHours(todayLogDate, 16), 15), 5).toISOString(),
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
+        entityType: 'WorkLog',
+        entityId: todayLogId,
+        details: `Quick updated document count to 15 for log ${formatDateISO(today)}.`,
+        previousState: { ...baseLogState, documentsCompleted: 8, videoSessionsCompleted: 12 },
+        newState: { ...baseLogState, documentsCompleted: 15, videoSessionsCompleted: 12 },
+    },
+     // 17:40 - Fourth update
+    {
+        id: 'audit-4',
+        timestamp: setSeconds(setMinutes(setHours(todayLogDate, 17), 40), 0).toISOString(),
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
+        entityType: 'WorkLog',
+        entityId: todayLogId,
+        details: `Quick updated video count to 30 for log ${formatDateISO(today)}.`,
+        previousState: { ...baseLogState, documentsCompleted: 15, videoSessionsCompleted: 12 },
+        newState: { ...baseLogState, documentsCompleted: 15, videoSessionsCompleted: 30 },
+    },
+      // 18:05 - Fifth update
+    {
+        id: 'audit-5',
+        timestamp: setSeconds(setMinutes(setHours(todayLogDate, 18), 5), 15).toISOString(),
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
+        entityType: 'WorkLog',
+        entityId: todayLogId,
+        details: `Quick updated document count to 25 for log ${formatDateISO(today)}.`,
+        previousState: { ...baseLogState, documentsCompleted: 15, videoSessionsCompleted: 30 },
+        newState: { ...baseLogState, documentsCompleted: 25, videoSessionsCompleted: 30 },
+    },
+      // 19:20 - Sixth update
+    {
+        id: 'audit-6',
+        timestamp: setSeconds(setMinutes(setHours(todayLogDate, 19), 20), 40).toISOString(),
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
+        entityType: 'WorkLog',
+        entityId: todayLogId,
+        details: `Quick updated video count to 55 for log ${formatDateISO(today)}.`,
+        previousState: { ...baseLogState, documentsCompleted: 25, videoSessionsCompleted: 30 },
+        newState: { ...baseLogState, documentsCompleted: 25, videoSessionsCompleted: 55 },
+    },
+      // 20:10 - Seventh update
+    {
+        id: 'audit-7',
+        timestamp: setSeconds(setMinutes(setHours(todayLogDate, 20), 10), 55).toISOString(),
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
+        entityType: 'WorkLog',
+        entityId: todayLogId,
+        details: `Quick updated document count to 40 for log ${formatDateISO(today)}.`,
+        previousState: { ...baseLogState, documentsCompleted: 25, videoSessionsCompleted: 55 },
+        newState: { ...baseLogState, documentsCompleted: 40, videoSessionsCompleted: 55 },
+    },
+       // 21:35 - Eighth update
+    {
+        id: 'audit-8',
+        timestamp: setSeconds(setMinutes(setHours(todayLogDate, 21), 35), 5).toISOString(),
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
+        entityType: 'WorkLog',
+        entityId: todayLogId,
+        details: `Quick updated video count to 70 for log ${formatDateISO(today)}.`,
+        previousState: { ...baseLogState, documentsCompleted: 40, videoSessionsCompleted: 55 },
+        newState: { ...baseLogState, documentsCompleted: 40, videoSessionsCompleted: 70 },
+    },
+       // 22:25 - Final update (reaching the target numbers)
+    {
+        id: 'audit-9',
+        timestamp: setSeconds(setMinutes(setHours(todayLogDate, 22), 25), 0).toISOString(),
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
+        entityType: 'WorkLog',
+        entityId: todayLogId,
+        details: `Quick updated document count to 62 and video count to 85 for log ${formatDateISO(today)}.`,
+        previousState: { ...baseLogState, documentsCompleted: 40, videoSessionsCompleted: 70 },
+        newState: { ...baseLogState, documentsCompleted: 62, videoSessionsCompleted: 85 }, // Match final counts
+    },
+].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()); // Ensure sorted chronologically
+
+
+// You can add more sample logs or targets as needed.
