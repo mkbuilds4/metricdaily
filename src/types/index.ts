@@ -15,6 +15,7 @@ export interface DailyWorkLog {
   videoSessionsCompleted: number;
   targetId?: string; // Optional: Link to the UPHTarget active when logging
   notes?: string; // Optional notes for the day
+  goalMetTimes?: Record<string, string>; // Optional: Stores ISO timestamp when target goals were met { [targetId]: ISOTimestamp }
 }
 
 /**
@@ -39,6 +40,7 @@ export type AuditLogActionType =
   | 'UPDATE_WORK_LOG_QUICK_COUNT'
   | 'UPDATE_WORK_LOG_BREAK'
   | 'UPDATE_WORK_LOG_TRAINING'
+  | 'UPDATE_WORK_LOG_GOAL_MET' // Added action for goal met time
   | 'DELETE_WORK_LOG'
   | 'CREATE_UPH_TARGET'
   | 'UPDATE_UPH_TARGET'

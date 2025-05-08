@@ -48,9 +48,11 @@ function saveToLocalStorage<T>(key: string, value: T): void {
 
 export function getAuditLogs(): AuditLogEntry[] {
   const logs = getFromLocalStorage<AuditLogEntry[]>(AUDIT_LOGS_KEY, []);
-  logs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  // Sort logs by timestamp descending (most recent first)
+  logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   return logs;
 }
+
 
 export function addAuditLog(
   action: AuditLogActionType,
@@ -60,7 +62,7 @@ export function addAuditLog(
   previousState?: Partial<DailyWorkLog | UPHTarget | UserSettings> | null,
   newState?: Partial<DailyWorkLog | UPHTarget | UserSettings> | null
 ): void {
-  const auditLogs = getAuditLogs();
+  const auditLogs = getAuditLogs(); // Get currently sorted logs
   const newLogEntry: AuditLogEntry = {
     id: generateLocalId(),
     timestamp: new Date().toISOString(),
@@ -71,7 +73,9 @@ export function addAuditLog(
     previousState: previousState ?? undefined,
     newState: newState ?? undefined,
   };
+  // Add new entry to the beginning (maintaining sort order)
   auditLogs.unshift(newLogEntry);
+  // Save only the most recent logs (e.g., last 500)
   saveToLocalStorage(AUDIT_LOGS_KEY, auditLogs.slice(0, 500));
   console.log('[Audit Log] Added:', newLogEntry);
 }
@@ -85,16 +89,21 @@ export function getWorkLogs(): DailyWorkLog[] {
 }
 
 export function saveWorkLog(
-  logData: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { id?: string; hoursWorked?: number; trainingDurationMinutes?: number }
+  logData: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { id?: string; hoursWorked?: number; } // Removed trainingDurationMinutes here as it's part of DailyWorkLog
 ): DailyWorkLog {
   const totalNonWorkMinutes = (logData.breakDurationMinutes || 0) + (logData.trainingDurationMinutes || 0);
   let finalHoursWorked: number;
 
-  if (logData.hoursWorked !== undefined && logData.breakDurationMinutes === undefined && logData.trainingDurationMinutes === undefined) {
+  // Prioritize calculating hours if times/durations are present
+  if (logData.date && logData.startTime && logData.endTime && totalNonWorkMinutes !== undefined && totalNonWorkMinutes !== null) {
+      finalHoursWorked = calculateHoursWorked(logData.date, logData.startTime, logData.endTime, totalNonWorkMinutes);
+  } else if (logData.hoursWorked !== undefined && logData.hoursWorked !== null) {
+       // Fallback to provided hoursWorked if calculation isn't possible (e.g., for quick updates)
       finalHoursWorked = logData.hoursWorked;
   } else {
-      finalHoursWorked = calculateHoursWorked(logData.date, logData.startTime, logData.endTime, totalNonWorkMinutes);
+       throw new Error('Could not determine hours worked. Need either start/end times and durations, or explicit hoursWorked.');
   }
+
 
   if (finalHoursWorked < 0) throw new Error('Calculated hours worked cannot be negative.');
   if (logData.documentsCompleted === undefined || isNaN(logData.documentsCompleted) || logData.documentsCompleted < 0) throw new Error('Documents completed must be a non-negative number.');
@@ -111,87 +120,109 @@ export function saveWorkLog(
 
   const logs = getWorkLogs();
   let savedLog: DailyWorkLog;
-  let operation: 'CREATE_WORK_LOG' | 'UPDATE_WORK_LOG' = 'CREATE_WORK_LOG';
+  let operation: 'CREATE_WORK_LOG' | 'UPDATE_WORK_LOG' | 'UPDATE_WORK_LOG_GOAL_MET' = 'CREATE_WORK_LOG';
   let previousState: DailyWorkLog | null = null;
+  let details = ''; // Initialize details string
 
+
+  // Base data for the log, excluding ID
   const completeLogData: Omit<DailyWorkLog, 'id'> = {
       date: logData.date,
       startTime: logData.startTime,
       endTime: logData.endTime,
-      breakDurationMinutes: logData.breakDurationMinutes || 0,
-      trainingDurationMinutes: logData.trainingDurationMinutes || 0,
+      breakDurationMinutes: logData.breakDurationMinutes ?? 0,
+      trainingDurationMinutes: logData.trainingDurationMinutes ?? 0,
       hoursWorked: finalHoursWorked,
       documentsCompleted: logData.documentsCompleted,
       videoSessionsCompleted: logData.videoSessionsCompleted,
       targetId: logData.targetId,
       notes: logData.notes,
+      goalMetTimes: logData.goalMetTimes ?? {}, // Include goalMetTimes, default to empty object
   };
 
+  // Determine if it's an update or create
   if (logData.id) {
     const index = logs.findIndex((log) => log.id === logData.id);
     if (index > -1) {
       previousState = { ...logs[index] };
+      // Merge existing log with new data, giving precedence to new data
       savedLog = { ...logs[index], ...completeLogData };
       logs[index] = savedLog;
       operation = 'UPDATE_WORK_LOG';
+
+      // Check specifically if goalMetTimes was the primary change
+      const oldMetTimes = JSON.stringify(previousState.goalMetTimes || {});
+      const newMetTimes = JSON.stringify(savedLog.goalMetTimes || {});
+      if (oldMetTimes !== newMetTimes && Object.keys(savedLog.goalMetTimes || {}).length > Object.keys(previousState.goalMetTimes || {}).length) {
+        operation = 'UPDATE_WORK_LOG_GOAL_MET';
+        const newTargetId = Object.keys(savedLog.goalMetTimes || {}).find(key => !(previousState?.goalMetTimes || {})[key]);
+        const targetName = getUPHTargets().find(t => t.id === newTargetId)?.name || 'Unknown Target';
+        details = `Target "${targetName}" goal met time recorded for log ${savedLog.date}.`;
+      }
+
     } else {
+      // ID provided but not found - treat as new log creation
       savedLog = { ...completeLogData, id: generateLocalId() };
       logs.push(savedLog);
+      operation = 'CREATE_WORK_LOG';
     }
   } else {
-    const existingLogIndex = logs.findIndex(log => log.date === logData.date);
-    if (existingLogIndex > -1) {
+     // No ID provided - check if a log for the same date exists to update
+     const existingLogIndex = logs.findIndex(log => log.date === logData.date);
+     if (existingLogIndex > -1) {
         previousState = { ...logs[existingLogIndex] };
-        // Keep existing targetId if none provided in new data, otherwise use new data's targetId
-        const targetIdToKeep = logData.targetId ?? logs[existingLogIndex].targetId;
-        // Keep existing training if none provided, otherwise use new data's training
-        const trainingToKeep = logData.trainingDurationMinutes !== undefined ? logData.trainingDurationMinutes : (logs[existingLogIndex].trainingDurationMinutes || 0);
-        // Keep existing break if none provided, otherwise use new data's break
-        const breakToKeep = logData.breakDurationMinutes !== undefined ? logData.breakDurationMinutes : (logs[existingLogIndex].breakDurationMinutes || 0);
-
-        // Re-calculate hours based on potentially updated times/durations
-        const updatedNonWorkMinutes = breakToKeep + trainingToKeep;
-        const updatedHoursWorked = calculateHoursWorked(logData.date, logData.startTime, logData.endTime, updatedNonWorkMinutes);
-
-        savedLog = {
-            ...logs[existingLogIndex], // Start with existing log
-            ...completeLogData,         // Apply base new data (date, times, counts, notes)
-            targetId: targetIdToKeep,
-            breakDurationMinutes: breakToKeep,
-            trainingDurationMinutes: trainingToKeep,
-            hoursWorked: updatedHoursWorked // Use newly calculated hours
-        };
-
+        // Merge existing log with new data
+        savedLog = { ...logs[existingLogIndex], ...completeLogData };
         logs[existingLogIndex] = savedLog;
         operation = 'UPDATE_WORK_LOG';
-    } else {
+
+         // Check specifically if goalMetTimes was the primary change (as above)
+        const oldMetTimes = JSON.stringify(previousState.goalMetTimes || {});
+        const newMetTimes = JSON.stringify(savedLog.goalMetTimes || {});
+        if (oldMetTimes !== newMetTimes && Object.keys(savedLog.goalMetTimes || {}).length > Object.keys(previousState.goalMetTimes || {}).length) {
+            operation = 'UPDATE_WORK_LOG_GOAL_MET';
+            const newTargetId = Object.keys(savedLog.goalMetTimes || {}).find(key => !(previousState?.goalMetTimes || {})[key]);
+            const targetName = getUPHTargets().find(t => t.id === newTargetId)?.name || 'Unknown Target';
+            details = `Target "${targetName}" goal met time recorded for log ${savedLog.date}.`;
+        }
+
+     } else {
+        // No existing log for this date - create new
         savedLog = { ...completeLogData, id: generateLocalId() };
         logs.push(savedLog);
-    }
+        operation = 'CREATE_WORK_LOG';
+     }
   }
 
+  // Sort and save
   logs.sort((a, b) => b.date.localeCompare(a.date));
   saveToLocalStorage(WORK_LOGS_KEY, logs);
 
-  let details = `${operation === 'CREATE_WORK_LOG' ? 'Created' : 'Updated'} work log for ${savedLog.date}. `;
-  if (previousState) {
-    const changes: string[] = [];
-    if (previousState.startTime !== savedLog.startTime) changes.push(`Start: ${previousState.startTime} -> ${savedLog.startTime}`);
-    if (previousState.endTime !== savedLog.endTime) changes.push(`End: ${previousState.endTime} -> ${savedLog.endTime}`);
-    if (previousState.breakDurationMinutes !== savedLog.breakDurationMinutes) changes.push(`Break: ${previousState.breakDurationMinutes}m -> ${savedLog.breakDurationMinutes}m`);
-    if ((previousState.trainingDurationMinutes || 0) !== (savedLog.trainingDurationMinutes || 0)) changes.push(`Training: ${previousState.trainingDurationMinutes || 0}m -> ${savedLog.trainingDurationMinutes || 0}m`);
-    if (previousState.documentsCompleted !== savedLog.documentsCompleted) changes.push(`Docs: ${previousState.documentsCompleted} -> ${savedLog.documentsCompleted}`);
-    if (previousState.videoSessionsCompleted !== savedLog.videoSessionsCompleted) changes.push(`Videos: ${previousState.videoSessionsCompleted} -> ${savedLog.videoSessionsCompleted}`);
-    if (previousState.notes !== savedLog.notes) changes.push(`Notes updated.`);
-    if (previousState.targetId !== savedLog.targetId) changes.push(`Target ID updated.`);
-    details += changes.join(', ') || 'No specific field changes detected (likely quick update of same value).';
-  } else {
-    details += `Docs: ${savedLog.documentsCompleted}, Videos: ${savedLog.videoSessionsCompleted}, Hours: ${savedLog.hoursWorked.toFixed(2)}.`;
+  // Generate audit log details if not already set for goal met
+  if (!details) {
+    details = `${operation === 'CREATE_WORK_LOG' ? 'Created' : 'Updated'} work log for ${savedLog.date}. `;
+    if (previousState && operation === 'UPDATE_WORK_LOG') { // Only detail changes for standard updates
+        const changes: string[] = [];
+        if (previousState.startTime !== savedLog.startTime) changes.push(`Start: ${previousState.startTime} -> ${savedLog.startTime}`);
+        if (previousState.endTime !== savedLog.endTime) changes.push(`End: ${previousState.endTime} -> ${savedLog.endTime}`);
+        if (previousState.breakDurationMinutes !== savedLog.breakDurationMinutes) changes.push(`Break: ${previousState.breakDurationMinutes}m -> ${savedLog.breakDurationMinutes}m`);
+        if ((previousState.trainingDurationMinutes || 0) !== (savedLog.trainingDurationMinutes || 0)) changes.push(`Training: ${previousState.trainingDurationMinutes || 0}m -> ${savedLog.trainingDurationMinutes || 0}m`);
+        if (previousState.documentsCompleted !== savedLog.documentsCompleted) changes.push(`Docs: ${previousState.documentsCompleted} -> ${savedLog.documentsCompleted}`);
+        if (previousState.videoSessionsCompleted !== savedLog.videoSessionsCompleted) changes.push(`Videos: ${previousState.videoSessionsCompleted} -> ${savedLog.videoSessionsCompleted}`);
+        if (previousState.notes !== savedLog.notes) changes.push(`Notes updated.`);
+        if (previousState.targetId !== savedLog.targetId) changes.push(`Target ID updated.`);
+        // Don't list goalMetTimes changes here, handled by specific action type
+        details += changes.join(', ') || 'No other specific field changes detected.';
+    } else if (operation === 'CREATE_WORK_LOG') {
+        details += `Docs: ${savedLog.documentsCompleted}, Videos: ${savedLog.videoSessionsCompleted}, Hours: ${savedLog.hoursWorked.toFixed(2)}.`;
+    }
   }
+
 
   addAuditLog(operation, 'WorkLog', details, savedLog.id, previousState, savedLog );
   return savedLog;
 }
+
 
 export function deleteWorkLog(id: string): void {
     let logs = getWorkLogs();
@@ -231,7 +262,7 @@ export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): UP
   const newTarget: UPHTarget = {
     ...targetData,
     id: generateLocalId(),
-    isActive: targets.length === 0,
+    isActive: targets.length === 0, // Activate if it's the first target
   };
 
   targets.push(newTarget);
@@ -260,9 +291,10 @@ export function updateUPHTarget(targetData: UPHTarget): UPHTarget {
 
   if (index > -1) {
     previousState = { ...targets[index] };
-    targets[index] = targetData;
+    targets[index] = targetData; // Replace the entire target object
     saveToLocalStorage(UPH_TARGETS_KEY, targets);
 
+    // Generate details for audit log
     const changes: string[] = [];
     if (previousState.name !== targetData.name) changes.push(`Name: "${previousState.name}" -> "${targetData.name}"`);
     if (previousState.targetUPH !== targetData.targetUPH) changes.push(`Target UPH: ${previousState.targetUPH} -> ${targetData.targetUPH}`);
@@ -314,9 +346,10 @@ export function setActiveUPHTarget(id: string): UPHTarget {
       activatedTarget = { ...t, isActive: true };
       return activatedTarget;
     } else if (t.isActive) {
+      // Deactivate previously active target
       return { ...t, isActive: false };
     }
-    return t;
+    return t; // Keep others as they are
   });
 
   if (!activatedTarget) throw new Error(`Target with ID ${id} not found.`);
@@ -327,11 +360,12 @@ export function setActiveUPHTarget(id: string): UPHTarget {
     'UPHTarget',
     `Set UPH target "${activatedTarget.name}" as active.${previouslyActiveTarget ? ` Previously active: "${previouslyActiveTarget.name}".` : ''}`,
     activatedTarget.id,
-    previouslyActiveTarget,
-    activatedTarget
+    previouslyActiveTarget, // Log the target that was deactivated
+    activatedTarget // Log the target that was activated
   );
   return activatedTarget;
 }
+
 
 export function getActiveUPHTarget(): UPHTarget | null {
   const targets = getUPHTargets();
@@ -340,10 +374,10 @@ export function getActiveUPHTarget(): UPHTarget | null {
   if (activeTarget) {
     return activeTarget;
   } else if (targets.length > 0) {
-    console.log("[Action] No active target found, activating the first one.");
-    // Don't automatically activate here, let the UI prompt the user or use a default
-    // return setActiveUPHTarget(targets[0].id);
-     return targets[0]; // Return the first one as a fallback display, but don't modify state
+    // Don't automatically activate. Let the UI handle it or use a default.
+    // Returning the first one allows the UI to display *something* but doesn't change state.
+     console.warn("[Action] No active target found. Returning first target as fallback for display.");
+     return targets[0];
   }
   return null;
 }
@@ -360,10 +394,19 @@ export function duplicateUPHTarget(id: string): UPHTarget {
     throw new Error(`Target with ID ${id} not found for duplication.`);
   }
 
+  // Create a unique name for the duplicate
+  let duplicateName = `${originalTarget.name} - Copy`;
+  let counter = 1;
+  while (targets.some(t => t.name === duplicateName)) {
+    counter++;
+    duplicateName = `${originalTarget.name} - Copy ${counter}`;
+  }
+
+
   const newTarget: UPHTarget = {
     ...originalTarget,
     id: generateLocalId(),
-    name: `${originalTarget.name} - Copy`,
+    name: duplicateName,
     isActive: false, // Duplicated targets are inactive by default
   };
 
@@ -455,6 +498,7 @@ export function loadSampleData(): boolean {
             targetId: processedTargets[0]?.id || undefined, // Use the first sample target's ID
             breakDurationMinutes: log.breakDurationMinutes ?? 0, // Default break if missing
             trainingDurationMinutes: log.trainingDurationMinutes ?? 0, // Default training if missing
+            goalMetTimes: {}, // Initialize empty goalMetTimes
         }));
 
         saveToLocalStorage(WORK_LOGS_KEY, processedLogs);
@@ -528,6 +572,20 @@ export function saveDefaultSettings(settings: UserSettings): UserSettings {
     console.error('Attempted to save settings on the server.');
     return settings; // Return input on server
   }
+  // Validate time formats before saving
+  const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  if (!timeRegex.test(settings.defaultStartTime) || !timeRegex.test(settings.defaultEndTime)) {
+    throw new Error("Invalid time format. Use HH:mm.");
+  }
+  // Validate minutes are non-negative integers
+  if (settings.defaultBreakMinutes < 0 || !Number.isInteger(settings.defaultBreakMinutes)) {
+     settings.defaultBreakMinutes = 0;
+  }
+   if (settings.defaultTrainingMinutes < 0 || !Number.isInteger(settings.defaultTrainingMinutes)) {
+     settings.defaultTrainingMinutes = 0;
+  }
+
+
   const previousSettings = getDefaultSettings();
   saveToLocalStorage(SETTINGS_KEY, settings);
   addAuditLog(
@@ -540,3 +598,4 @@ export function saveDefaultSettings(settings: UserSettings): UserSettings {
   );
   return settings;
 }
+
