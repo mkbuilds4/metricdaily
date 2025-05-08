@@ -6,7 +6,7 @@ import { getWorkLogs, getUPHTargets, getActiveUPHTarget, getAuditLogs } from '@/
 import type { DailyWorkLog, UPHTarget, AuditLogEntry } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LabelList } from 'recharts'; // Added LabelList
 import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, getHours, isSameDay, parse, setHours, setMinutes, setSeconds, isAfter, addDays, addHours } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
@@ -602,8 +602,26 @@ export default function AnalyticsPage() {
                       content={<ChartTooltipContent hideLabel />}
                     />
                      {/* Define Bars for documents and videos */}
-                     <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs" />
-                     <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos" /> {/* Top bar gets radius */}
+                     <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs">
+                       {/* Add LabelList for documents */}
+                       <LabelList
+                         dataKey="documents"
+                         position="center"
+                         fill="hsl(var(--primary-foreground))" // Use a contrasting color
+                         fontSize={10}
+                         formatter={(value: number) => (value > 0 ? value : '')} // Hide label if value is 0
+                       />
+                     </Bar>
+                     <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos"> {/* Top bar gets radius */}
+                       {/* Add LabelList for videos */}
+                       <LabelList
+                         dataKey="videos"
+                         position="center"
+                         fill="hsl(var(--primary-foreground))" // Use a contrasting color
+                         fontSize={10}
+                         formatter={(value: number) => (value > 0 ? value : '')} // Hide label if value is 0
+                       />
+                     </Bar>
                     <ChartLegend content={<ChartLegendContent />} />
                   </BarChart>
                 </ChartContainer>
