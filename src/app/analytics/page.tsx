@@ -157,14 +157,14 @@ export default function AnalyticsPage() {
      for (const auditEntry of relevantAuditLogs) {
          if (auditEntry.newState && typeof auditEntry.newState === 'object') {
              const newState = auditEntry.newState as Partial<DailyWorkLog>;
-             // Check if newState contains count information
+             // Check if newState contains count information (for QUICK_COUNT or regular UPDATE)
              if (newState.documentsCompleted !== undefined || newState.videoSessionsCompleted !== undefined) {
                  const timestamp = parseISO(auditEntry.timestamp);
                  if (isValid(timestamp)) {
                      const hour = getHours(timestamp);
                      // Update the state for this hour with the latest known counts from this log entry
+                     // Ensure we handle potential null/undefined from newState
                      hourlyStates[hour] = {
-                         // Use count from newState if present, otherwise fallback to previous state in this hour or 0
                          documents: newState.documentsCompleted ?? hourlyStates[hour]?.documents ?? 0,
                          videos: newState.videoSessionsCompleted ?? hourlyStates[hour]?.videos ?? 0,
                          timestamp: auditEntry.timestamp,
@@ -173,6 +173,7 @@ export default function AnalyticsPage() {
              }
          }
      }
+
 
      // 3. Calculate hourly deltas
      const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -200,12 +201,13 @@ export default function AnalyticsPage() {
             // Assign initial counts to the start hour if they occurred before or during the start hour
             const firstLogTimestamp = parseISO(relevantAuditLogs[0].timestamp);
             if (isValid(firstLogTimestamp) && getHours(firstLogTimestamp) <= startHour) {
+                // Use the state recorded for the start hour if available, else use the derived lastKnownCounts
                 const initialHourState = hourlyStates[startHour] ?? lastKnownCounts;
                  hourlyDeltas[startHour] = {
                     documents: Math.max(0, initialHourState.documents - 0), // Delta from 0
                     videos: Math.max(0, initialHourState.videos - 0),     // Delta from 0
                 };
-                lastKnownCounts = initialHourState; // Update last known counts
+                lastKnownCounts = initialHourState; // Update last known counts based on the state used
             }
        }
 

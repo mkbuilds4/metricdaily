@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -129,7 +128,7 @@ export default function Home() {
       ) => {
     if (!isClient) return {} as DailyWorkLog;
 
-    const existingLog = workLogs.find(l => l.id === logData.id); // Get previous state before saving
+    const existingLog = workLogs.find(l => l.id === logData.id || (l.date === logData.date && !l.isFinalized)); // Get previous state before saving
     const isCreating = !logData.id && !workLogs.find(l => l.date === logData.date && !l.isFinalized);
 
     try {
@@ -172,28 +171,38 @@ export default function Home() {
                  const targetName = uphTargets.find(t => t.id === newTargetId)?.name || 'Unknown Target';
                  details = `Target "${targetName}" goal met time recorded for log ${savedLog.date}.`;
                  break;
-             case 'UPDATE_WORK_LOG': // Generic update
-             default:
-                details = `Updated work log for ${savedLog.date}. `;
-                if (existingLog) {
-                    const changes: string[] = [];
-                    if (existingLog.startTime !== savedLog.startTime) changes.push(`Start: ${existingLog.startTime} -> ${savedLog.startTime}`);
-                    if (existingLog.endTime !== savedLog.endTime) changes.push(`End: ${existingLog.endTime} -> ${savedLog.endTime}`);
-                    if (existingLog.breakDurationMinutes !== savedLog.breakDurationMinutes) changes.push(`Break: ${existingLog.breakDurationMinutes}m -> ${savedLog.breakDurationMinutes}m`);
-                    if ((existingLog.trainingDurationMinutes || 0) !== (savedLog.trainingDurationMinutes || 0)) changes.push(`Training: ${existingLog.trainingDurationMinutes || 0}m -> ${savedLog.trainingDurationMinutes || 0}m`);
-                    if (existingLog.documentsCompleted !== savedLog.documentsCompleted) changes.push(`Docs: ${existingLog.documentsCompleted} -> ${savedLog.documentsCompleted}`);
-                    if (existingLog.videoSessionsCompleted !== savedLog.videoSessionsCompleted) changes.push(`Videos: ${existingLog.videoSessionsCompleted} -> ${savedLog.videoSessionsCompleted}`);
-                    if (existingLog.notes !== savedLog.notes) changes.push(`Notes updated.`);
-                    if (existingLog.targetId !== savedLog.targetId) changes.push(`Target ID updated.`);
-                    details += changes.join(', ') || 'No specific field changes detected.';
-                 } else {
-                     details += logDetails; // Add details if it's an update but no existing log was found (edge case)
+             case 'UPDATE_WORK_LOG': // Generic update (e.g., from form save) - avoid logging this for quick updates
+                 if (auditActionType !== 'UPDATE_WORK_LOG_QUICK_COUNT') {
+                    details = `Updated work log for ${savedLog.date}. `;
+                    if (existingLog) {
+                        const changes: string[] = [];
+                        if (existingLog.startTime !== savedLog.startTime) changes.push(`Start: ${existingLog.startTime} -> ${savedLog.startTime}`);
+                        if (existingLog.endTime !== savedLog.endTime) changes.push(`End: ${existingLog.endTime} -> ${savedLog.endTime}`);
+                        if (existingLog.breakDurationMinutes !== savedLog.breakDurationMinutes) changes.push(`Break: ${existingLog.breakDurationMinutes}m -> ${savedLog.breakDurationMinutes}m`);
+                        if ((existingLog.trainingDurationMinutes || 0) !== (savedLog.trainingDurationMinutes || 0)) changes.push(`Training: ${existingLog.trainingDurationMinutes || 0}m -> ${savedLog.trainingDurationMinutes || 0}m`);
+                        if (existingLog.documentsCompleted !== savedLog.documentsCompleted) changes.push(`Docs: ${existingLog.documentsCompleted} -> ${savedLog.documentsCompleted}`);
+                        if (existingLog.videoSessionsCompleted !== savedLog.videoSessionsCompleted) changes.push(`Videos: ${existingLog.videoSessionsCompleted} -> ${savedLog.videoSessionsCompleted}`);
+                        if (existingLog.notes !== savedLog.notes) changes.push(`Notes updated.`);
+                        if (existingLog.targetId !== savedLog.targetId) changes.push(`Target ID updated.`);
+                        details += changes.join(', ') || 'No specific field changes detected.';
+                    } else {
+                        details += logDetails; // Add details if it's an update but no existing log was found (edge case)
+                    }
+                    // Log the generic update action only if it wasn't a specific quick update
+                    addAuditLog(actionToLog, 'WorkLog', details, savedLog.id, existingLog, savedLog);
                  }
+                 break;
+             default:
+                 // For other specific actions like BREAK, TRAINING, GOAL_MET, log them directly
+                 addAuditLog(actionToLog, 'WorkLog', details, savedLog.id, existingLog, savedLog);
                  break;
         }
 
-        // Log the action determined above
-        addAuditLog(actionToLog, 'WorkLog', details, savedLog.id, existingLog, savedLog);
+        // If it was a quick count update, log it specifically
+        if (actionToLog === 'UPDATE_WORK_LOG_QUICK_COUNT') {
+           addAuditLog(actionToLog, 'WorkLog', details, savedLog.id, existingLog, savedLog);
+        }
+
 
         // Toast moved to the specific actions calling this handler for better context
         return savedLog; // Return the saved log
@@ -926,4 +935,5 @@ export default function Home() {
     </div>
   );
 }
+
 
