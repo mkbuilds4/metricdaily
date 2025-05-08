@@ -596,11 +596,11 @@ export default function AnalyticsPage() {
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                       allowDecimals={false} // Show whole numbers for actual counts
                     />
-                    <ChartTooltip
-                      cursor={false}
-                       // Adjust content to show both docs and videos
-                      content={<ChartTooltipContent hideLabel />}
-                    />
+                     {/* Disable default tooltip content */}
+                     <ChartTooltip
+                       cursor={false}
+                       content={<></>} // Use empty fragment to disable content
+                     />
                      {/* Define Bars for documents and videos */}
                      <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs">
                        {/* Add LabelList for documents */}
