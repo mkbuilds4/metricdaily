@@ -107,7 +107,7 @@ export default function PreviousLogsPage() {
 
     return allLogs.filter(log => {
         // Filter out NON-FINALIZED logs for today
-        const logDateObj = parseISO(log.date + 'T00:00:00');
+        const logDateObj = parseISO(log.date + 'T00:00:00'); // Ensure time component for correct date comparison
         if (!isValid(logDateObj)) return false; // Skip invalid dates
 
         const isPreviousDay = isBefore(logDateObj, todayStart);
@@ -146,53 +146,58 @@ export default function PreviousLogsPage() {
     });
   }, [allLogs, filterTerm, filterDateRange, activeTarget, uphTargets]); // Added uphTargets dependency
 
-  // Sorting Logic - Updated
+  // Sorting Logic - Updated for Clarity and Default Sort
   const sortedLogs = useMemo(() => {
-    if (sortDirection === 'none' || !sortColumn) { // Check for !sortColumn as well
-       // Default sort if sorting is cleared or column is null
-       return [...filteredLogs].sort((a, b) => b.date.localeCompare(a.date));
+    const currentSortCol = sortColumn; // Capture state for closure
+    const currentSortDir = sortDirection;
+
+    // Apply default sort if sorting is cleared
+    if (currentSortDir === 'none' || !currentSortCol) {
+       return [...filteredLogs].sort((a, b) => {
+            const dateA = parseISO(a.date + 'T00:00:00');
+            const dateB = parseISO(b.date + 'T00:00:00');
+            if (!isValid(dateA) || !isValid(dateB)) return 0; // Handle invalid dates
+            return dateB.getTime() - dateA.getTime(); // Default: Date Descending
+       });
     }
 
     return [...filteredLogs].sort((a, b) => {
-      let valA: string | number | Date | null = null; // Can be Date for date column
+      let valA: string | number | Date | null = null;
       let valB: string | number | Date | null = null;
 
-      if (sortColumn === 'avgUPH') {
-         // Important: Calculate UPH based on the target associated with *each specific log*
+      if (currentSortCol === 'avgUPH') {
          const targetA = uphTargets.find(t => t.id === a.targetId) ?? activeTarget;
          const targetB = uphTargets.find(t => t.id === b.targetId) ?? activeTarget;
          valA = targetA ? calculateDailyUPH(a, targetA) : 0;
          valB = targetB ? calculateDailyUPH(b, targetB) : 0;
-      } else if (sortColumn === 'date') {
-          // Convert date strings to Date objects for proper sorting
+      } else if (currentSortCol === 'date') {
           valA = parseISO(a.date + 'T00:00:00');
           valB = parseISO(b.date + 'T00:00:00');
-          if (!isValid(valA as Date)) valA = null; // Handle invalid parse
+          if (!isValid(valA as Date)) valA = null;
           if (!isValid(valB as Date)) valB = null;
       } else {
-         // Access other properties directly
-         valA = a[sortColumn as keyof Omit<DailyWorkLog, 'avgUPH'>];
-         valB = b[sortColumn as keyof Omit<DailyWorkLog, 'avgUPH'>];
+         valA = a[currentSortCol as keyof Omit<DailyWorkLog, 'avgUPH'>];
+         valB = b[currentSortCol as keyof Omit<DailyWorkLog, 'avgUPH'>];
       }
 
       // Comparison logic
       let comparison = 0;
       if (valA === null || valA === undefined) comparison = -1;
       else if (valB === null || valB === undefined) comparison = 1;
-      else if (valA instanceof Date && valB instanceof Date) { // Compare dates
+      else if (valA instanceof Date && valB instanceof Date) {
           comparison = (valA as Date).getTime() - (valB as Date).getTime();
-      } else if (typeof valA === 'string' && typeof valB === 'string') { // Compare strings
+      } else if (typeof valA === 'string' && typeof valB === 'string') {
           comparison = valA.localeCompare(valB);
-      } else if (typeof valA === 'number' && typeof valB === 'number') { // Compare numbers
+      } else if (typeof valA === 'number' && typeof valB === 'number') {
           comparison = valA - valB;
-      } else { // Fallback string comparison
+      } else {
           comparison = String(valA).localeCompare(String(valB));
       }
 
       // Apply sort direction
-      return sortDirection === 'asc' ? comparison : -comparison;
+      return currentSortDir === 'asc' ? comparison : -comparison;
     });
-  }, [filteredLogs, sortColumn, sortDirection, activeTarget, uphTargets]); // Dependencies remain the same
+  }, [filteredLogs, sortColumn, sortDirection, activeTarget, uphTargets]); // Dependencies are correct
 
   // Pagination Logic
   const paginatedLogs = useMemo(() => {
@@ -221,16 +226,11 @@ export default function PreviousLogsPage() {
 
      setSortColumn(currentSortCol => {
         if (currentSortCol === column && sortDirection === 'desc') {
-             // If clearing the sort, revert to default column
-             return DEFAULT_SORT_COLUMN;
+             // If clearing the sort ('none' will be set above), keep the column for next click cycle
+             return column;
         }
         return column; // Set the new column otherwise
      });
-
-    // If the new direction is 'none', ensure the sort column also resets to default
-    if (sortColumn === column && sortDirection === 'desc') {
-         setSortDirection(DEFAULT_SORT_DIRECTION); // Reset direction to default after clearing
-    }
 
     setCurrentPage(1); // Reset to first page on sort change
   }, [sortColumn, sortDirection]); // Include sortDirection in dependency
@@ -278,7 +278,7 @@ export default function PreviousLogsPage() {
   const today = new Date(); // Define today here for use in presets
   const presetRanges = [
     { label: "Yesterday", range: { from: startOfDay(subDays(today, 1)), to: endOfDay(subDays(today, 1)) } },
-    { label: "This Week", range: { from: startOfWeek(today, { weekStartsOn: 1 }), to: endOfWeek(today, { weekStartsOn: 1 }) } },
+    { label: "This Week", range: { from: startOfWeek(today, { weekStartsOn: 1 }), to: endOfDay(today) } }, // End on today for 'This Week'
     { label: "Last Week", range: { from: startOfWeek(subWeeks(today, 1), { weekStartsOn: 1 }), to: endOfWeek(subWeeks(today, 1), { weekStartsOn: 1 }) } },
     { label: "Last 7 Days", range: { from: startOfDay(subDays(today, 6)), to: endOfDay(today) } },
     { label: "Last 30 Days", range: { from: startOfDay(subDays(today, 29)), to: endOfDay(today) } },
@@ -304,12 +304,6 @@ export default function PreviousLogsPage() {
       'Avg UPH (vs Logged Target)' // Single UPH column
     ];
 
-    // Dynamically add columns for each target's calculated units/UPH if needed (optional)
-    // targets.forEach(target => {
-    //   headers.push(`${target.name} - Calculated Units`);
-    //   headers.push(`${target.name} - Calculated UPH`);
-    // });
-
     const rows = logs.map(log => {
       const loggedTarget = targets.find(t => t.id === log.targetId);
       const avgUph = loggedTarget ? calculateDailyUPH(log, loggedTarget) : 0; // Calculate based on logged target
@@ -333,13 +327,6 @@ export default function PreviousLogsPage() {
         escapeCSVField(avgUph.toFixed(2)), // Add the calculated avg UPH
       ];
 
-      // Add dynamic target columns if needed
-      // targets.forEach(target => {
-      //   const units = calculateDailyUnits(log, target);
-      //   const uph = calculateDailyUPH(log, target);
-      //   row.push(escapeCSVField(units.toFixed(2)));
-      //   row.push(escapeCSVField(uph.toFixed(2)));
-      // });
       return row.join(',');
     });
 
