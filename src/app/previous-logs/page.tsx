@@ -110,7 +110,8 @@ export default function PreviousLogsPage() {
         if (!isValid(logDateObj)) return false; // Skip invalid dates
 
         const isPreviousDay = isBefore(logDateObj, todayStart);
-        const isFinalizedToday = log.date === formatDateISO(today) && log.isFinalized;
+        // Use new Date() directly here as 'today' variable is not defined in this scope
+        const isFinalizedToday = log.date === formatDateISO(new Date()) && log.isFinalized;
 
         // Include if it's a previous day OR if it's today AND finalized
         if (!isPreviousDay && !isFinalizedToday) {
@@ -261,7 +262,7 @@ export default function PreviousLogsPage() {
       setDatePickerOpen(false); // Close popover after selection
   };
 
-  const today = new Date();
+  const today = new Date(); // Define today here for use in presets
   const presetRanges = [
     { label: "Yesterday", range: { from: startOfDay(subDays(today, 1)), to: endOfDay(subDays(today, 1)) } },
     { label: "This Week", range: { from: startOfWeek(today, { weekStartsOn: 1 }), to: endOfWeek(today, { weekStartsOn: 1 }) } },
@@ -553,6 +554,7 @@ export default function PreviousLogsPage() {
         deleteWorkLogAction={handleDeleteWorkLog}
         showTodaySection={false} // Ensure today's section is not shown here
         // Removed onGoalMet as it's not relevant for previous logs
+        onGoalMet={() => {}} // Provide a dummy function or handle appropriately
        />
 
       {/* Pagination Controls */}
@@ -590,4 +592,5 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
+
 
