@@ -28,7 +28,7 @@ const CHART_COLORS = {
   hourlyVideos: 'hsl(var(--chart-2))',
 };
 
-const DEFAULT_DAYS_TO_SHOW = 30; // Show last 30 days by default
+// Removed DEFAULT_DAYS_TO_SHOW constant
 
 export default function AnalyticsPage() {
   const [workLogs, setWorkLogs] = useState<DailyWorkLog[]>([]);
@@ -37,10 +37,10 @@ export default function AnalyticsPage() {
   const [activeTarget, setActiveTarget] = useState<UPHTarget | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [filterDateRange, setFilterDateRange] = useState<DateRange | undefined>(() => {
-    // Default to last 30 days
-    const endDate = endOfDay(new Date());
-    const startDate = startOfDay(subDays(endDate, DEFAULT_DAYS_TO_SHOW - 1));
-    return { from: startDate, to: endDate };
+    // Default to Today
+    const todayStart = startOfDay(new Date());
+    const todayEnd = endOfDay(new Date());
+    return { from: todayStart, to: todayEnd };
   });
   const [datePickerOpen, setDatePickerOpen] = useState(false);
 
