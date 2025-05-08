@@ -471,38 +471,46 @@ export default function AnalyticsPage() {
                   />
                    <ChartTooltip
                      cursor={false}
-                     content={<ChartTooltipContent
-                                hideLabel
-                                indicator="line"
-                                formatter={(value, name, props) => {
-                                    // Custom formatter to show all three values in one tooltip box
-                                    if (props.payload) {
-                                        return (
-                                            <div className="grid gap-1">
-                                                <div className="font-medium">{props.payload.date}</div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.documents }} />
-                                                    <span>Docs: {props.payload.documents}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.videos }} />
-                                                    <span>Videos: {props.payload.videos}</span>
-                                                </div>
-                                                 <div className="flex items-center gap-2">
-                                                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.hoursWorked }} />
-                                                    <span>Hours: {props.payload.hoursWorked.toFixed(2)}</span>
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-                                    return value; // Fallback
-                                }}
-                            />}
+                     content={
+                       <ChartTooltipContent
+                         indicator="line"
+                         labelFormatter={(label, payload) => {
+                           // Display only the date label once
+                           return payload?.[0]?.payload?.date ? format(parseISO(payload[0].payload.fullDate), 'PPP') : label;
+                         }}
+                         formatter={(value, name, props) => {
+                           // Custom formatter to display value with correct label
+                           let label = '';
+                           let color = '';
+                           if (name === 'documents') {
+                             label = 'Docs:';
+                             color = CHART_COLORS.documents;
+                           } else if (name === 'videos') {
+                             label = 'Videos:';
+                             color = CHART_COLORS.videos;
+                           } else if (name === 'hoursWorked') {
+                             label = 'Hours:';
+                             color = CHART_COLORS.hoursWorked;
+                             // Format hours to 2 decimal places
+                             value = typeof value === 'number' ? value.toFixed(2) : value;
+                           }
+                           return (
+                             <div className="flex items-center gap-2">
+                               <div className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+                               <div className="flex flex-1 justify-between">
+                                 <span className="text-muted-foreground">{label}</span>
+                                 <span className="font-medium">{value}</span>
+                               </div>
+                             </div>
+                           );
+                         }}
+                       />
+                     }
                    />
-                  <Line yAxisId="left" type="monotone" dataKey="documents" stroke={CHART_COLORS.documents} strokeWidth={2} dot={false} name="Documents" />
-                  <Line yAxisId="left" type="monotone" dataKey="videos" stroke={CHART_COLORS.videos} strokeWidth={2} dot={false} name="Videos" />
+                  <Line yAxisId="left" type="monotone" dataKey="documents" stroke={CHART_COLORS.documents} strokeWidth={2} dot={false} name="documents" />
+                  <Line yAxisId="left" type="monotone" dataKey="videos" stroke={CHART_COLORS.videos} strokeWidth={2} dot={false} name="videos" />
                   {/* Hours Worked Line associated with the right axis */}
-                   <Line yAxisId="right" type="monotone" dataKey="hoursWorked" stroke={CHART_COLORS.hoursWorked} strokeWidth={2} strokeDasharray="5 5" dot={false} name="Hours Worked" />
+                   <Line yAxisId="right" type="monotone" dataKey="hoursWorked" stroke={CHART_COLORS.hoursWorked} strokeWidth={2} strokeDasharray="5 5" dot={false} name="hoursWorked" />
                    <ChartLegend content={<ChartLegendContent />} />
                 </LineChart>
               </ChartContainer>
