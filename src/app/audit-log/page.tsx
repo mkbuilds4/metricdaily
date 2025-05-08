@@ -322,10 +322,10 @@ export default function AuditLogPage() {
                                         backgroundColor: 'hsl(var(--background))',
                                         border: '1px solid hsl(var(--border))',
                                         borderRadius: 'var(--radius)',
-                                        color: 'hsl(var(--foreground))' // Ensure text color uses foreground
+                                        color: 'hsl(var(--foreground))', // Ensure text color uses foreground
                                     }}
                                     labelStyle={{ color: 'hsl(var(--foreground))', fontSize: '12px' }} // Ensure label uses foreground
-                                    itemStyle={{ fontSize: '12px' }}
+                                    itemStyle={{ color: 'hsl(var(--foreground))', fontSize: '12px' }} // Ensure item text uses foreground
                                 />
                                 <Bar dataKey="value" name="Count" radius={[0, 4, 4, 0]} barSize={12}>
                                     {/* Add Cell to apply individual colors */}
@@ -538,3 +538,5 @@ export default function AuditLogPage() {
     </div>
   );
 }
+
+    
