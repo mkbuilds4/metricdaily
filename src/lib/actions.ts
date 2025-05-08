@@ -1,9 +1,7 @@
-
 // src/lib/actions.ts
-// Client-side actions interacting with localStorage.
-
+// Using localStorage for simplicity. Replace with database/API calls for persistence.
 import type { DailyWorkLog, UPHTarget, AuditLogEntry, AuditLogActionType, UserSettings } from '@/types';
-import { formatDateISO, calculateHoursWorked } from '@/lib/utils';
+import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
 import { sampleWorkLogs, sampleUPHTargets } from './sample-data';
 
 const WORK_LOGS_KEY = 'workLogs';
@@ -97,8 +95,7 @@ export function getWorkLogs(): DailyWorkLog[] {
 
 /**
  * Saves or updates a work log in local storage.
- * Handles CREATE_WORK_LOG, UPDATE_WORK_LOG, and UPDATE_WORK_LOG_GOAL_MET audit logs.
- * Other specific update types (QUICK_COUNT, BREAK, TRAINING) should be logged by the calling function.
+ * **Does NOT perform audit logging.** Audit logs should be handled by the calling function.
  */
 export function saveWorkLog(
   logData: Omit<DailyWorkLog, 'id' | 'hoursWorked'> & { id?: string; hoursWorked?: number; }
@@ -133,10 +130,6 @@ export function saveWorkLog(
 
   const logs = getWorkLogs(); // Retrieve all logs
   let savedLog: DailyWorkLog;
-  // Default action type, might be changed below
-  let operation: AuditLogActionType = 'CREATE_WORK_LOG';
-  let previousState: DailyWorkLog | null = null;
-  let details = '';
 
   // Base data for the log, excluding ID, using sanitized counts
   const completeLogData: Omit<DailyWorkLog, 'id'> = {
@@ -157,50 +150,25 @@ export function saveWorkLog(
   if (logData.id) {
     const index = logs.findIndex((log) => log.id === logData.id);
     if (index > -1) {
-      previousState = { ...logs[index] };
+      // --- Update Existing Log ---
       savedLog = { ...logs[index], ...completeLogData };
       logs[index] = savedLog;
-      operation = 'UPDATE_WORK_LOG'; // Default update type
-
-      // Check specifically for goal met time change
-      const oldMetTimes = JSON.stringify(previousState.goalMetTimes || {});
-      const newMetTimes = JSON.stringify(savedLog.goalMetTimes || {});
-      if (oldMetTimes !== newMetTimes && Object.keys(savedLog.goalMetTimes || {}).length > Object.keys(previousState.goalMetTimes || {}).length) {
-        operation = 'UPDATE_WORK_LOG_GOAL_MET';
-        const newTargetId = Object.keys(savedLog.goalMetTimes || {}).find(key => !(previousState?.goalMetTimes || {})[key]);
-        const targetName = getUPHTargets().find(t => t.id === newTargetId)?.name || 'Unknown Target';
-        details = `Target "${targetName}" goal met time recorded for log ${savedLog.date}.`;
-      }
     } else {
-      // ID provided but not found - treat as creation
+      // --- Create New Log (ID provided but not found) ---
       savedLog = { ...completeLogData, id: generateLocalId() };
       logs.push(savedLog);
-      operation = 'CREATE_WORK_LOG';
     }
   } else {
-     // No ID provided - check if log for this date exists
+     // --- No ID provided ---
      const existingLogIndex = logs.findIndex(log => log.date === logData.date);
      if (existingLogIndex > -1) {
-        // Log for date exists - update it
-        previousState = { ...logs[existingLogIndex] };
+        // --- Update Existing Log (found by date) ---
         savedLog = { ...logs[existingLogIndex], ...completeLogData };
         logs[existingLogIndex] = savedLog;
-        operation = 'UPDATE_WORK_LOG'; // Default update type
-
-        // Check specifically for goal met time change
-        const oldMetTimes = JSON.stringify(previousState.goalMetTimes || {});
-        const newMetTimes = JSON.stringify(savedLog.goalMetTimes || {});
-        if (oldMetTimes !== newMetTimes && Object.keys(savedLog.goalMetTimes || {}).length > Object.keys(previousState.goalMetTimes || {}).length) {
-            operation = 'UPDATE_WORK_LOG_GOAL_MET';
-            const newTargetId = Object.keys(savedLog.goalMetTimes || {}).find(key => !(previousState?.goalMetTimes || {})[key]);
-            const targetName = getUPHTargets().find(t => t.id === newTargetId)?.name || 'Unknown Target';
-            details = `Target "${targetName}" goal met time recorded for log ${savedLog.date}.`;
-        }
      } else {
-        // No log for date exists - create it
+        // --- Create New Log ---
         savedLog = { ...completeLogData, id: generateLocalId() };
         logs.push(savedLog);
-        operation = 'CREATE_WORK_LOG';
      }
   }
 
@@ -208,29 +176,7 @@ export function saveWorkLog(
   saveToLocalStorage(WORK_LOGS_KEY, logs);
   saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false);
 
-  // Generate audit log details IF not handled by a specific action type already
-  if (!details) {
-    details = `${operation === 'CREATE_WORK_LOG' ? 'Created' : 'Updated'} work log for ${savedLog.date}. `;
-    if (previousState && operation === 'UPDATE_WORK_LOG') {
-        const changes: string[] = [];
-        if (previousState.startTime !== savedLog.startTime) changes.push(`Start: ${previousState.startTime} -> ${savedLog.startTime}`);
-        if (previousState.endTime !== savedLog.endTime) changes.push(`End: ${previousState.endTime} -> ${savedLog.endTime}`);
-        if (previousState.breakDurationMinutes !== savedLog.breakDurationMinutes) changes.push(`Break: ${previousState.breakDurationMinutes}m -> ${savedLog.breakDurationMinutes}m`);
-        if ((previousState.trainingDurationMinutes || 0) !== (savedLog.trainingDurationMinutes || 0)) changes.push(`Training: ${previousState.trainingDurationMinutes || 0}m -> ${savedLog.trainingDurationMinutes || 0}m`);
-        if (previousState.documentsCompleted !== savedLog.documentsCompleted) changes.push(`Docs: ${previousState.documentsCompleted} -> ${savedLog.documentsCompleted}`);
-        if (previousState.videoSessionsCompleted !== savedLog.videoSessionsCompleted) changes.push(`Videos: ${previousState.videoSessionsCompleted} -> ${savedLog.videoSessionsCompleted}`);
-        if (previousState.notes !== savedLog.notes) changes.push(`Notes updated.`);
-        if (previousState.targetId !== savedLog.targetId) changes.push(`Target ID updated.`);
-        details += changes.join(', ') || 'No other specific field changes detected.';
-    } else if (operation === 'CREATE_WORK_LOG') {
-        details += `Docs: ${savedLog.documentsCompleted}, Videos: ${savedLog.videoSessionsCompleted}, Hours: ${savedLog.hoursWorked.toFixed(2)}.`;
-    }
-  }
-
-  // Log only for CREATE, generic UPDATE, and GOAL_MET
-  if (operation === 'CREATE_WORK_LOG' || operation === 'UPDATE_WORK_LOG' || operation === 'UPDATE_WORK_LOG_GOAL_MET') {
-     addAuditLog(operation, 'WorkLog', details, savedLog.id, previousState, savedLog );
-  }
+  // REMOVED Audit Log call from this function
 
   return savedLog;
 }
@@ -446,7 +392,7 @@ export function duplicateUPHTarget(id: string): UPHTarget {
 /**
  * Adds break time to a specific work log.
  * Returns the updated log.
- * Audit logging should be handled by the calling function.
+ * **Logs the UPDATE_WORK_LOG_BREAK action.**
  */
 export function addBreakTimeToLog(logId: string, breakMinutes: number): DailyWorkLog {
   const logs = getWorkLogs();
@@ -464,14 +410,23 @@ export function addBreakTimeToLog(logId: string, breakMinutes: number): DailyWor
   saveToLocalStorage(WORK_LOGS_KEY, logs);
   saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false);
 
-  // Removed audit log call from here
+  // Audit log specific to break update
+  addAuditLog(
+        'UPDATE_WORK_LOG_BREAK',
+        'WorkLog',
+        `Added ${breakMinutes}m break to log for ${updatedLog.date}. Total break: ${updatedLog.breakDurationMinutes}m.`,
+        updatedLog.id,
+        { breakDurationMinutes: originalLog.breakDurationMinutes, hoursWorked: originalLog.hoursWorked },
+        { breakDurationMinutes: updatedLog.breakDurationMinutes, hoursWorked: updatedLog.hoursWorked }
+    );
+
   return updatedLog;
 }
 
 /**
  * Adds training time to a specific work log.
  * Returns the updated log.
- * Audit logging should be handled by the calling function.
+ * **Logs the UPDATE_WORK_LOG_TRAINING action.**
  */
 export function addTrainingTimeToLog(logId: string, trainingMinutes: number): DailyWorkLog {
   const logs = getWorkLogs();
@@ -489,7 +444,16 @@ export function addTrainingTimeToLog(logId: string, trainingMinutes: number): Da
   saveToLocalStorage(WORK_LOGS_KEY, logs);
   saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false);
 
-  // Removed audit log call from here
+   // Audit log specific to training update
+   addAuditLog(
+        'UPDATE_WORK_LOG_TRAINING',
+        'WorkLog',
+        `Added ${trainingMinutes}m training to log for ${updatedLog.date}. Total training: ${updatedLog.trainingDurationMinutes}m.`,
+        updatedLog.id,
+        { trainingDurationMinutes: originalLog.trainingDurationMinutes || 0, hoursWorked: originalLog.hoursWorked },
+        { trainingDurationMinutes: updatedLog.trainingDurationMinutes, hoursWorked: updatedLog.hoursWorked }
+    );
+
   return updatedLog;
 }
 
@@ -574,21 +538,22 @@ export function archiveTodayLog(): DailyWorkLog | null {
         const logToArchive = { ...allLogs[todayLogIndex] }; // Copy the log before removing
 
         // Remove the log from the array
-        allLogs.splice(todayLogIndex, 1);
+        // NOTE: We are NOT actually removing it anymore. We keep it in the list.
+        // The UI logic in page.tsx and previous-logs/page.tsx will filter it.
+        // This function now primarily serves to log the "End Day" action.
+        // saveToLocalStorage(WORK_LOGS_KEY, allLogs); // No longer saving the filtered list here
 
-        // Save the updated array (without today's log)
-        saveToLocalStorage(WORK_LOGS_KEY, allLogs);
         saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Indicate real data might still exist
 
         addAuditLog(
-            'SYSTEM_ARCHIVE_TODAY_LOG',
+            'SYSTEM_ARCHIVE_TODAY_LOG', // Keep this action type to signify intent
             'WorkLog',
-            `Finalized log for ${logToArchive.date} (End Day clicked). It will now appear in Previous Logs.`,
+            `Finalized log for ${logToArchive.date} (End Day clicked). Log remains visible but is considered finalized.`,
             logToArchive.id,
             logToArchive, // Log the full archived log as previous state
-            null // Log null as new state, signifying removal from active logs
+            logToArchive // Log the same log as new state, since it wasn't removed
         );
-        return logToArchive; // Return the log that was archived
+        return logToArchive; // Return the log that was "archived"
     } else {
         addAuditLog('SYSTEM_ARCHIVE_TODAY_LOG', 'System', `Attempted to finalize today's log, but no log found for ${todayDateStr}.`);
         return null; // No log found for today
@@ -658,3 +623,4 @@ export function saveDefaultSettings(settings: UserSettings): UserSettings {
   );
   return validatedSettings;
 }
+

@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link'; // Import Link
 import ProductivityDashboard from '@/components/DashboardDisplay';
 import WeeklyAverages from '@/components/WeeklyAverages';
@@ -9,20 +8,20 @@ import DailyProgressIndicator from '@/components/DailyProgressIndicator';
 import {
   getWorkLogs,
   getActiveUPHTarget,
-  saveWorkLog,
+  saveWorkLog, // Now only saves data, no audit logging
   deleteWorkLog,
   getUPHTargets,
   loadSampleData,
   clearAllData,
-  addBreakTimeToLog,
-  addTrainingTimeToLog,
+  addBreakTimeToLog, // Still logs its specific action
+  addTrainingTimeToLog, // Still logs its specific action
   archiveTodayLog,
   getDefaultSettings,
   isSampleDataLoaded, // Import check for sample data
   setActiveUPHTarget, // Import setActiveUPHTarget
-  addAuditLog, // Import addAuditLog
+  addAuditLog, // Import addAuditLog for use in page handlers
 } from '@/lib/actions'; // Using client-side actions
-import type { DailyWorkLog, UPHTarget, UserSettings } from '@/types';
+import type { DailyWorkLog, UPHTarget, UserSettings, AuditLogActionType } from '@/types';
 import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -119,11 +118,19 @@ export default function Home() {
   }, [workLogs, isClient]);
 
   // --- Action Handlers ---
-  const handleSaveWorkLog = useCallback((logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked?: number; goalMetTimes?: Record<string, string> }) => {
+  const handleSaveWorkLog = useCallback((
+      logData: Omit<DailyWorkLog, 'id'> & { id?: string; hoursWorked?: number; goalMetTimes?: Record<string, string> },
+      auditActionType?: AuditLogActionType // Optional parameter for specific audit logging
+      ) => {
     if (!isClient) return {} as DailyWorkLog;
+
+    const existingLog = workLogs.find(l => l.id === logData.id); // Get previous state before saving
+    const isCreating = !logData.id && !workLogs.find(l => l.date === logData.date);
+
     try {
-        // The saveWorkLog itself will now handle generic update/create audit logging
+        // saveWorkLog now ONLY saves data, no audit logging within it
         const savedLog = saveWorkLog(logData);
+
         // Update local state immediately with the returned saved log
         setWorkLogs(prevLogs => {
             const existingIndex = prevLogs.findIndex(l => l.id === savedLog.id);
@@ -140,6 +147,46 @@ export default function Home() {
 
         setHasInitialData(true); // Assume data exists after save
         setSampleDataActive(false); // Any save operation clears sample data status
+
+        // --- Audit Logging handled here in the page component ---
+        const actionToLog = auditActionType || (isCreating ? 'CREATE_WORK_LOG' : 'UPDATE_WORK_LOG');
+        let details = '';
+
+        switch (actionToLog) {
+             case 'CREATE_WORK_LOG':
+                 details = `Created work log for ${savedLog.date}. Docs: ${savedLog.documentsCompleted}, Videos: ${savedLog.videoSessionsCompleted}, Hours: ${savedLog.hoursWorked.toFixed(2)}.`;
+                 break;
+             case 'UPDATE_WORK_LOG_QUICK_COUNT':
+                 const fieldUpdated = existingLog?.documentsCompleted !== savedLog.documentsCompleted ? 'document' : 'video';
+                 const newValue = fieldUpdated === 'document' ? savedLog.documentsCompleted : savedLog.videoSessionsCompleted;
+                 details = `Quick updated ${fieldUpdated} count to ${newValue} for log ${savedLog.date}.`;
+                 break;
+             case 'UPDATE_WORK_LOG_GOAL_MET':
+                 const newTargetId = Object.keys(savedLog.goalMetTimes || {}).find(key => !(existingLog?.goalMetTimes || {})[key]);
+                 const targetName = uphTargets.find(t => t.id === newTargetId)?.name || 'Unknown Target';
+                 details = `Target "${targetName}" goal met time recorded for log ${savedLog.date}.`;
+                 break;
+             case 'UPDATE_WORK_LOG': // Generic update
+             default:
+                details = `Updated work log for ${savedLog.date}. `;
+                if (existingLog) {
+                    const changes: string[] = [];
+                    if (existingLog.startTime !== savedLog.startTime) changes.push(`Start: ${existingLog.startTime} -> ${savedLog.startTime}`);
+                    if (existingLog.endTime !== savedLog.endTime) changes.push(`End: ${existingLog.endTime} -> ${savedLog.endTime}`);
+                    if (existingLog.breakDurationMinutes !== savedLog.breakDurationMinutes) changes.push(`Break: ${existingLog.breakDurationMinutes}m -> ${savedLog.breakDurationMinutes}m`);
+                    if ((existingLog.trainingDurationMinutes || 0) !== (savedLog.trainingDurationMinutes || 0)) changes.push(`Training: ${existingLog.trainingDurationMinutes || 0}m -> ${savedLog.trainingDurationMinutes || 0}m`);
+                    if (existingLog.documentsCompleted !== savedLog.documentsCompleted) changes.push(`Docs: ${existingLog.documentsCompleted} -> ${savedLog.documentsCompleted}`);
+                    if (existingLog.videoSessionsCompleted !== savedLog.videoSessionsCompleted) changes.push(`Videos: ${existingLog.videoSessionsCompleted} -> ${savedLog.videoSessionsCompleted}`);
+                    if (existingLog.notes !== savedLog.notes) changes.push(`Notes updated.`);
+                    if (existingLog.targetId !== savedLog.targetId) changes.push(`Target ID updated.`);
+                    details += changes.join(', ') || 'No specific field changes detected.';
+                 }
+                 break;
+        }
+
+        // Log the action determined above
+        addAuditLog(actionToLog, 'WorkLog', details, savedLog.id, existingLog, savedLog);
+
         // Toast moved to the specific actions calling this handler for better context
         return savedLog; // Return the saved log
     } catch (error) {
@@ -151,7 +198,7 @@ export default function Home() {
         });
         throw error;
     }
-  }, [toast, isClient]); // Depends on toast and isClient
+  }, [toast, isClient, workLogs, uphTargets]); // Added workLogs and uphTargets dependencies for audit context
 
   const handleDeleteWorkLog = useCallback((id: string) => {
      if (!isClient) return;
@@ -248,19 +295,12 @@ export default function Home() {
 
       try {
            // Pass the complete object required by saveWorkLog
-           const savedLog = handleSaveWorkLog(updatedLogPartial as any); // Type assertion might be needed if TS struggles with the dynamic field
+           // **Pass the specific audit action type**
+           const savedLog = handleSaveWorkLog(updatedLogPartial as any, 'UPDATE_WORK_LOG_QUICK_COUNT'); // Type assertion might be needed
            // Inputs will update via the useEffect watching workLogs
            toast({ title: "Count Updated", description: `Today's ${field === 'documentsCompleted' ? 'document' : 'video'} count set to ${newValue}.` });
 
-           // **REMOVED**: Explicit audit log for quick count update. Relying on generic UPDATE_WORK_LOG from saveWorkLog.
-           // addAuditLog(
-           //     'UPDATE_WORK_LOG_QUICK_COUNT',
-           //     'WorkLog',
-           //     `Quick updated ${field === 'documentsCompleted' ? 'document' : 'video'} count to ${newValue} for log ${savedLog.date}.`,
-           //     savedLog.id,
-           //     originalLogState, // Previous state
-           //     savedLog // New state
-           // );
+           // Audit logging is now handled within handleSaveWorkLog using the passed type
 
       } catch(error) {
            // Revert input on error if it was direct text entry
@@ -377,7 +417,8 @@ export default function Home() {
     };
 
     try {
-      handleSaveWorkLog(newLog); // saveWorkLog will log as CREATE_WORK_LOG
+      // Pass 'CREATE_WORK_LOG' as the audit action type
+      handleSaveWorkLog(newLog, 'CREATE_WORK_LOG');
       toast({
         title: "New Day Started",
         description: `Work log for ${todayDateStr} created with default times.`,
@@ -385,7 +426,7 @@ export default function Home() {
     } catch (error) {
       // Error handling is within handleSaveWorkLog
     }
-  }, [handleSaveWorkLog, toast, isClient]);
+  }, [handleSaveWorkLog, toast, isClient]); // Added handleSaveWorkLog dependency
 
   const handleEndDay = useCallback(() => {
      if (!isClient) return;
@@ -480,8 +521,9 @@ export default function Home() {
       });
       return;
     }
-    const originalLogState = { ...todayLog }; // Capture state before update
+    // Capture state before update - addBreakTimeToLog handles its own audit
     try {
+      // This function logs its own specific audit action
       const updatedLog = addBreakTimeToLog(todayLog.id, breakMinutes);
       // Update local state immediately
       setWorkLogs(prevLogs => {
@@ -497,15 +539,7 @@ export default function Home() {
         title: "Break Added",
         description: `${breakMinutes} minutes added to your break time. Total break: ${formatDurationFromMinutes(updatedLog.breakDurationMinutes * 60)}.`,
       });
-      // Add specific audit log for break update
-       addAuditLog(
-            'UPDATE_WORK_LOG_BREAK',
-            'WorkLog',
-            `Added ${breakMinutes}m break to log for ${updatedLog.date}. Total break: ${updatedLog.breakDurationMinutes}m.`,
-            updatedLog.id,
-            { breakDurationMinutes: originalLogState.breakDurationMinutes, hoursWorked: originalLogState.hoursWorked },
-            { breakDurationMinutes: updatedLog.breakDurationMinutes, hoursWorked: updatedLog.hoursWorked }
-        );
+
     } catch (error) {
       console.error('[Home] Error adding break:', error);
       toast({
@@ -527,8 +561,9 @@ export default function Home() {
       });
       return;
     }
-     const originalLogState = { ...todayLog }; // Capture state before update
+    // Capture state before update - addTrainingTimeToLog handles its own audit
     try {
+      // This function logs its own specific audit action
       const updatedLog = addTrainingTimeToLog(todayLog.id, trainingMinutes);
       // Update local state immediately
         setWorkLogs(prevLogs => {
@@ -544,15 +579,6 @@ export default function Home() {
         title: "Training Time Added",
         description: `${trainingMinutes} minutes added to your training time. Total training: ${formatDurationFromMinutes((updatedLog.trainingDurationMinutes || 0) * 60)}.`,
       });
-      // Add specific audit log for training update
-        addAuditLog(
-            'UPDATE_WORK_LOG_TRAINING',
-            'WorkLog',
-            `Added ${trainingMinutes}m training to log for ${updatedLog.date}. Total training: ${updatedLog.trainingDurationMinutes}m.`,
-            updatedLog.id,
-            { trainingDurationMinutes: originalLogState.trainingDurationMinutes || 0, hoursWorked: originalLogState.hoursWorked },
-            { trainingDurationMinutes: updatedLog.trainingDurationMinutes, hoursWorked: updatedLog.hoursWorked }
-        );
     } catch (error) {
       console.error('[Home] Error adding training:', error);
       toast({
@@ -604,9 +630,8 @@ export default function Home() {
 
 
                 try {
-                    // Call saveWorkLog synchronously (localStorage is sync)
-                    // saveWorkLog will handle the UPDATE_WORK_LOG_GOAL_MET audit log
-                    const savedLog = saveWorkLog(payloadToSave);
+                    // Call handleSaveWorkLog from page context, specifying the audit type
+                    const savedLog = handleSaveWorkLog(payloadToSave, 'UPDATE_WORK_LOG_GOAL_MET');
 
                     // Update the log within the current state array
                     const updatedLogs = [...prevLogs];
@@ -614,7 +639,7 @@ export default function Home() {
                     return updatedLogs.sort((a, b) => b.date.localeCompare(a.date)); // Return the updated, sorted array
                 } catch (error) {
                     console.error(`[Home] Error saving goal met time for target ${targetId}:`, error);
-                    // Toast handled in saveWorkLog
+                    // Toast handled in handleSaveWorkLog
                     return prevLogs; // Return previous state on error
                 }
             } else {
@@ -626,8 +651,8 @@ export default function Home() {
             return prevLogs; // No log for today, return previous state
         }
     });
-  // Removed handleSaveWorkLog from dependencies as it caused issues, relies on closure now
-  }, [isClient, saveWorkLog]); // Added saveWorkLog back as dependency
+  // Depends on handleSaveWorkLog from page context now
+  }, [isClient, handleSaveWorkLog]);
 
 
   // --- Set Active Target Handler ---
