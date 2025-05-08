@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { format, parseISO, startOfDay, endOfDay, isValid, subDays, startOfWeek, endOfWeek } from 'date-fns';
 import { RefreshCw, Download, Filter, X, Calendar as CalendarIcon, Activity, Database, Settings as SettingsIcon, System, Shield } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'; // Import Recharts components (removed Legend)
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'; // Import Cell from recharts
 import { useToast } from '@/hooks/use-toast';
 import { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
@@ -322,7 +322,12 @@ export default function AuditLogPage() {
                                     labelStyle={{ color: 'hsl(var(--foreground))', fontSize: '12px' }}
                                     itemStyle={{ fontSize: '12px' }}
                                 />
-                                <Bar dataKey="value" name="Count" radius={[0, 4, 4, 0]} barSize={12} />
+                                <Bar dataKey="value" name="Count" radius={[0, 4, 4, 0]} barSize={12}>
+                                    {/* Add Cell to apply individual colors */}
+                                    {analyticsData.actionChartData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                                    ))}
+                                </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                      ) : (
@@ -528,5 +533,3 @@ export default function AuditLogPage() {
     </div>
   );
 }
-
-    
