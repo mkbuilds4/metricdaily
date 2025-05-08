@@ -21,7 +21,7 @@ const CHART_COLORS = {
   documents: 'hsl(var(--chart-1))',
   videos: 'hsl(var(--chart-2))',
   uph: 'hsl(var(--chart-3))',
-  targetUPH: 'hsl(var(--chart-4))',
+  targetUPH: 'hsl(var(--chart-4))', // Keep for config consistency, but won't be used in UPH chart
   hoursWorked: 'hsl(var(--chart-5))', // Added color for hours worked
   // Colors for the hourly chart - using documents/videos colors again
   hourlyDocuments: 'hsl(var(--chart-1))',
@@ -120,6 +120,7 @@ export default function AnalyticsPage() {
 
     return sortedLogs.map(log => {
       const logDate = parseISO(log.date);
+      // Use the target associated with the log, fallback to active target for calculation
       const targetForLog = targets.find(t => t.id === log.targetId) ?? activeTarget;
       const uph = targetForLog ? calculateDailyUPH(log, targetForLog) : null;
 
@@ -130,7 +131,7 @@ export default function AnalyticsPage() {
         videos: log.videoSessionsCompleted,
         hoursWorked: log.hoursWorked, // Keep hoursWorked here
         uph: uph !== null && isFinite(uph) ? uph : 0,
-        targetUPH: targetForLog?.targetUPH ?? null,
+        // Removed targetUPH as it's no longer displayed on the UPH chart
       };
     });
   }, [filteredLogs, targets, activeTarget]);
@@ -268,7 +269,7 @@ export default function AnalyticsPage() {
 
   const dailyUPHChartConfig = {
      uph: { label: "Actual UPH", color: CHART_COLORS.uph },
-     targetUPH: { label: "Target UPH", color: CHART_COLORS.targetUPH },
+     // targetUPH removed from config as it's no longer displayed
   };
 
    // Updated config for hourly chart legend labels
@@ -495,8 +496,7 @@ export default function AnalyticsPage() {
           <CardHeader>
             <CardTitle>Daily Average UPH</CardTitle>
             <CardDescription>
-                Average Units Per Hour achieved each day compared to the target for that day's log.
-                ({activeTarget ? `Using "${activeTarget.name}" as fallback` : 'Requires an active target as fallback'})
+                Average Units Per Hour achieved each day (based on the log's associated target or active target as fallback).
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -523,7 +523,7 @@ export default function AnalyticsPage() {
                            cursor={false}
                            content={<ChartTooltipContent hideLabel />}
                         />
-                         <Bar dataKey="targetUPH" fill={CHART_COLORS.targetUPH} radius={4} name="Target UPH" />
+                         {/* Removed Target UPH Bar */}
                         <Bar dataKey="uph" fill={CHART_COLORS.uph} radius={4} name="Actual UPH"/>
                        <ChartLegend content={<ChartLegendContent />} />
                     </BarChart>
@@ -673,6 +673,6 @@ export default function AnalyticsPage() {
       </div>
     </div>
   );
-} // <-- Moved the closing brace here
+}
 
     
