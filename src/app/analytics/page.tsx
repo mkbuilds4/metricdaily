@@ -6,7 +6,7 @@ import { getWorkLogs, getUPHTargets, getActiveUPHTarget, getAuditLogs } from '@/
 import type { DailyWorkLog, UPHTarget, AuditLogEntry } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LabelList, ReferenceLine, Label } from 'recharts'; // Added ReferenceLine and Label
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LabelList, ReferenceLine } from 'recharts'; // Removed Label from recharts as it's also a component name from ui/label
 import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, getHours, isSameDay, parse, setHours, setMinutes, setSeconds, isAfter, addDays, addHours, getDayOfYear, getYear } from 'date-fns'; // Added getDayOfYear, getYear
 import { DateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Calendar as CalendarIcon, Filter, X, Activity, TrendingUp, Clock, BookOpen, Video } from 'lucide-react';
 import { cn, calculateDailyUPH, formatDurationFromMinutes } from '@/lib/utils'; // Import formatDurationFromMinutes
 import { Separator } from '@/components/ui/separator';
+import { Label as RechartsLabel } from 'recharts'; // Alias Recharts Label to avoid conflict
 
 // Define chart colors using HSL variables from globals.css
 const CHART_COLORS = {
@@ -402,23 +403,21 @@ export default function AnalyticsPage() {
                      />
                      {/* Define Bars for documents and videos */}
                      <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs" isAnimationActive={false}> {/* Disabled animation */}
-                       {/* ADD LabelList for documents count */}
                        <LabelList
-                         dataKey="documents" // Explicitly set dataKey for clarity
-                         position="center" // Position inside the bar segment
-                         fill="hsl(var(--background))" // White/light text on dark bar
+                         dataKey="documents"
+                         position="insideTop" // Changed from center to insideTop
+                         fill="hsl(var(--background))"
                          fontSize={10}
-                         formatter={(value: number) => (value > 0 ? value : '')} // Show count if > 0
+                         formatter={(value: number) => (value > 0 ? String(value) : '')} // Show count if > 0
                        />
                      </Bar>
                      <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos" isAnimationActive={false}> {/* Top bar gets radius, disabled animation */}
-                       {/* ADD LabelList for videos count */}
                        <LabelList
-                         dataKey="videos" // Explicitly set dataKey
-                         position="center" // Position inside the bar segment
-                         fill="hsl(var(--background))" // White/light text on dark bar
+                         dataKey="videos"
+                         position="insideTop" // Changed from center to insideTop
+                         fill="hsl(var(--background))"
                          fontSize={10}
-                         formatter={(value: number) => (value > 0 ? value : '')} // Show count if > 0
+                         formatter={(value: number) => (value > 0 ? String(value) : '')} // Show count if > 0
                        />
                        {/* ADD LabelList for TOTAL count above the top bar */}
                        <LabelList
@@ -614,7 +613,7 @@ export default function AnalyticsPage() {
                                 isAnimationActive={false} // Disable animation
                              >
                                 {/* Optional: Add a label to the line */}
-                                 <Label
+                                 <RechartsLabel
                                     value={`Target: ${activeTarget.targetUPH.toFixed(1)}`}
                                     position="insideTopLeft" // Adjust position as needed
                                     fill={CHART_COLORS.targetUPHLine}
@@ -775,3 +774,5 @@ export default function AnalyticsPage() {
     </div>
   );
 }
+
+    
