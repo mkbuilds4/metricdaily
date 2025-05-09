@@ -19,7 +19,7 @@ import {
   SidebarTrigger,
   SidebarGroupLabel, // Added SidebarGroupLabel
 } from '@/components/ui/sidebar';
-import { Home, Settings, List, History, BarChart3, HelpCircle, Upload } from 'lucide-react'; // Added Upload
+import { Home, Settings, List, History, BarChart3, HelpCircle, Upload, Download } from 'lucide-react'; // Added Upload, Download
 import { usePathname } from 'next/navigation';
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from '@/components/ThemeProvider';
@@ -89,15 +89,9 @@ export default function RootLayout({
                             <SidebarGroup>
                                 <SidebarGroupLabel>Admin</SidebarGroupLabel>
                                 <SidebarMenuItem>
-                                    <SidebarMenuButton href="/settings" isActive={pathname === '/settings'} tooltip="Settings">
+                                    <SidebarMenuButton href="/settings" isActive={pathname === '/settings' || pathname === '/import-data'} tooltip="Settings / Data">
                                         <Settings />
-                                        <span>Settings</span>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton href="/import-data" isActive={pathname === '/import-data'} tooltip="Import Data">
-                                        <Upload />
-                                        <span>Import Data</span>
+                                        <span>Settings / Data</span>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                                 <SidebarMenuItem>
@@ -131,3 +125,4 @@ export default function RootLayout({
     </html>
   );
 }
+

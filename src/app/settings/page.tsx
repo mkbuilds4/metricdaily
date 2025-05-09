@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -12,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { getDefaultSettings, saveDefaultSettings, clearAllData } from '@/lib/actions';
 import type { UserSettings } from '@/types';
-import { Trash2, Settings as SettingsIcon, Info, Upload } from 'lucide-react'; // Added Upload icon
+import { Trash2, Settings as SettingsIcon, Info, Upload, Download } from 'lucide-react'; // Added Download icon
 import {
   AlertDialog,
   AlertDialogAction,
@@ -226,10 +227,10 @@ export default function SettingsPage() {
       <Card>
           <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Upload className="h-6 w-6" /> Import & Export Data
+                <Upload className="h-6 w-6" /> Import &amp; Export Application Data (JSON)
               </CardTitle>
               <CardDescription>
-                  Manage your application data by importing or exporting it.
+                  Manage your application data by importing or exporting it in JSON format.
               </CardDescription>
           </CardHeader>
           <CardContent>
@@ -244,6 +245,20 @@ export default function SettingsPage() {
                     <Button asChild variant="outline">
                         <Link href="/import-data">
                             <Upload className="mr-2 h-4 w-4" /> Go to Import Page
+                        </Link>
+                    </Button>
+                </div>
+                <Separator className="my-6" />
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                        <p className="font-medium">Export Application Data</p>
+                        <p className="text-sm text-muted-foreground">
+                            Download all your application data (work logs, UPH targets, settings, audit logs) as a single JSON file.
+                        </p>
+                    </div>
+                    <Button asChild variant="outline">
+                        <Link href="/previous-logs">
+                             <Download className="mr-2 h-4 w-4" /> Go to Export Page
                         </Link>
                     </Button>
                 </div>
@@ -283,3 +298,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+

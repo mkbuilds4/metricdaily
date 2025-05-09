@@ -7,9 +7,12 @@ import {
   getWorkLogs,
   getUPHTargets,
   deleteWorkLog,
-  addAuditLog, // Keep addAuditLog for export action
+  addAuditLog, 
+  getAuditLogs, // Import getAuditLogs
+  getDefaultSettings, // Import getDefaultSettings
+  isSampleDataLoaded, // Import isSampleDataLoaded
 } from '@/lib/actions';
-import type { DailyWorkLog, UPHTarget } from '@/types';
+import type { DailyWorkLog, UPHTarget, ApplicationData, AuditLogEntry, UserSettings } from '@/types'; // Import ApplicationData
 import { formatDateISO, calculateDailyUPH, calculateDailyUnits, cn, formatFriendlyDate } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 import { Button } from '@/components/ui/button';
@@ -17,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FileSpreadsheet, Filter, X, Calendar as CalendarIcon, ArrowUpDown } from 'lucide-react'; // Added ArrowUpDown
+import { Upload, Filter, X, Calendar as CalendarIcon, ArrowUpDown } from 'lucide-react'; // Changed FileSpreadsheet to Upload for JSON
 import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, isBefore } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { Separator } from '@/components/ui/separator';
@@ -242,57 +245,10 @@ export default function PreviousLogsPage() {
   ];
 
 
-  // CSV Export
-  const escapeCSVField = (field: any): string => {
-    if (field === null || field === undefined) return '';
-    let stringField = String(field);
-    if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n')) {
-      stringField = stringField.replace(/"/g, '""');
-      return `"${stringField}"`;
-    }
-    return stringField;
-  };
-
-  const generateCSVContent = useCallback((logs: DailyWorkLog[], targets: UPHTarget[]): string => {
-    const headers = [
-      'Date', 'Start Time', 'End Time', 'Break Duration (min)', 'Training Duration (min)', 'Net Hours Worked',
-      'Documents Completed', 'Video Sessions Completed', 'Notes', 'Finalized',
-      'Logged Target ID', 'Logged Target Name', 'Logged Target UPH (Goal)', 'Logged Target Docs/Unit', 'Logged Target Videos/Unit',
-      'Avg UPH (vs Logged Target)'
-    ];
-
-    const rows = logs.map(log => {
-      const loggedTarget = targets.find(t => t.id === log.targetId);
-      const avgUph = loggedTarget ? calculateDailyUPH(log, loggedTarget) : 0;
-
-      const row = [
-        escapeCSVField(log.date),
-        escapeCSVField(log.startTime),
-        escapeCSVField(log.endTime),
-        escapeCSVField(log.breakDurationMinutes),
-        escapeCSVField(log.trainingDurationMinutes || 0),
-        escapeCSVField(log.hoursWorked.toFixed(2)),
-        escapeCSVField(log.documentsCompleted),
-        escapeCSVField(log.videoSessionsCompleted),
-        escapeCSVField(log.notes || ''),
-        escapeCSVField(log.isFinalized ? 'Yes' : 'No'),
-        escapeCSVField(log.targetId || 'N/A'),
-        escapeCSVField(loggedTarget?.name || 'N/A'),
-        escapeCSVField(loggedTarget?.targetUPH?.toFixed(2) || 'N/A'),
-        escapeCSVField(loggedTarget?.docsPerUnit?.toString() || 'N/A'),
-        escapeCSVField(loggedTarget?.videosPerUnit?.toString() || 'N/A'),
-        escapeCSVField(avgUph.toFixed(2)),
-      ];
-
-      return row.join(',');
-    });
-
-    return [headers.join(','), ...rows].join('\n');
-  }, []);
-
-   const downloadCSV = useCallback((csvString: string, filename: string) => {
+  // JSON Export
+  const downloadJSON = useCallback((jsonData: string, filename: string) => {
     if (typeof window === 'undefined') return;
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
     const link = document.createElement('a');
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
@@ -307,28 +263,46 @@ export default function PreviousLogsPage() {
       toast({
         variant: "destructive",
         title: "Download Failed",
-        description: "Your browser does not support direct CSV downloads."
+        description: "Your browser does not support direct JSON downloads."
       });
     }
   }, [toast]);
 
   const handleExportData = useCallback(() => {
-    if (filteredAndSortedLogs.length === 0) { // Use filteredAndSortedLogs for export
-      toast({
-        title: "No Data to Export",
-        description: "There are no logs matching the current filters to export.",
-      });
-      return;
-    }
+    if (typeof window === 'undefined') return;
     try {
-      const csvData = generateCSVContent(filteredAndSortedLogs, uphTargets); // Use filteredAndSortedLogs
+      // Fetch all data for export
+      const allWorkLogsData = getWorkLogs();
+      const allUphTargetsData = getUPHTargets();
+      const allAuditLogsData = getAuditLogs();
+      const currentUserSettings = getDefaultSettings();
+      const currentSampleDataLoaded = isSampleDataLoaded();
+
+      if (allWorkLogsData.length === 0 && allUphTargetsData.length === 0 && allAuditLogsData.length === 0) {
+        toast({
+          title: "No Data to Export",
+          description: "There is no application data to export.",
+        });
+        return;
+      }
+
+      const applicationDataToExport: ApplicationData = {
+        workLogs: allWorkLogsData,
+        uphTargets: allUphTargetsData,
+        auditLogs: allAuditLogsData,
+        userSettings: currentUserSettings,
+        sampleDataLoaded: currentSampleDataLoaded,
+      };
+
+      const jsonData = JSON.stringify(applicationDataToExport, null, 2); // Pretty print JSON
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      downloadCSV(csvData, `metric_daily_previous_logs_${timestamp}.csv`);
+      downloadJSON(jsonData, `metric_daily_backup_${timestamp}.json`);
+
       toast({
         title: "Export Successful",
-        description: "Filtered previous logs data has been exported to CSV.",
+        description: "All application data has been exported to a JSON file.",
       });
-      addAuditLog('SYSTEM_EXPORT_DATA', 'System', 'Exported filtered previous work logs to CSV.');
+      addAuditLog('SYSTEM_EXPORT_DATA', 'System', 'Exported all application data to JSON.');
     } catch (error) {
       console.error("Error exporting data:", error);
       toast({
@@ -336,9 +310,9 @@ export default function PreviousLogsPage() {
         title: "Export Failed",
         description: "An error occurred while preparing the data for export.",
       });
-       addAuditLog('SYSTEM_EXPORT_DATA_FAILED', 'System', `Failed to export previous work logs to CSV. Error: ${error instanceof Error ? error.message : String(error)}`);
+      addAuditLog('SYSTEM_EXPORT_DATA_FAILED', 'System', `Failed to export application data to JSON. Error: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [filteredAndSortedLogs, uphTargets, generateCSVContent, downloadCSV, toast]); // Use filteredAndSortedLogs
+  }, [downloadJSON, toast]);
 
 
   // Helper to render sort icon
@@ -366,8 +340,8 @@ export default function PreviousLogsPage() {
     <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 md:mb-8">
         <h1 className="text-3xl md:text-4xl font-bold text-center sm:text-left">Previous Work Logs</h1>
-        <Button onClick={handleExportData} disabled={filteredAndSortedLogs.length === 0}>
-          <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Filtered ({filteredAndSortedLogs.length})
+        <Button onClick={handleExportData}>
+          <Upload className="mr-2 h-4 w-4" /> Export All Data (JSON)
         </Button>
       </div>
 
@@ -377,7 +351,7 @@ export default function PreviousLogsPage() {
              <CardTitle className="text-lg font-semibold flex items-center gap-2">
                 <Filter className="h-5 w-5" /> Filter & Sort Logs
              </CardTitle>
-             <CardDescription>Refine and order the list of previous work logs.</CardDescription>
+             <CardDescription>Refine and order the list of previous work logs displayed below. Export includes all data.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-2">
             {/* Search and Date Filter Row */}
@@ -524,3 +498,4 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
+
