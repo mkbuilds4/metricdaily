@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -171,7 +170,7 @@ export default function AnalyticsPage() {
                if (isValid(parsedLogDate)) {
                   const logDayIdentifier = `${getYear(parsedLogDate)}-${getDayOfYear(parsedLogDate)}`;
                   if (logDayIdentifier !== selectedDayIdentifier) {
-                     // console.log(`Skipping log ${log.id}: date mismatch (${logDateFromEntry} vs selected ${format(selectedDateForHourlyChart, 'yyyy-MM-dd')})`);
+                     // console.log(`Skipping log ${log.id}: date mismatch (${logDateFromEntry} vs selected ${format(selectedDateForHourlyChart, 'yyyy-MM-dd')}`);
                       return false; // Mismatched date within the log data itself
                   }
                }
@@ -404,6 +403,7 @@ export default function AnalyticsPage() {
                      <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs" isAnimationActive={false}> {/* Disabled animation */}
                        {/* ADD LabelList for documents count */}
                        <LabelList
+                         dataKey="documents" // Explicitly set dataKey for clarity
                          position="center" // Position inside the bar segment
                          fill="hsl(var(--background))" // White/light text on dark bar
                          fontSize={10}
@@ -413,6 +413,7 @@ export default function AnalyticsPage() {
                      <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos" isAnimationActive={false}> {/* Top bar gets radius, disabled animation */}
                        {/* ADD LabelList for videos count */}
                        <LabelList
+                         dataKey="videos" // Explicitly set dataKey
                          position="center" // Position inside the bar segment
                          fill="hsl(var(--background))" // White/light text on dark bar
                          fontSize={10}
@@ -424,9 +425,8 @@ export default function AnalyticsPage() {
                          offset={5} // Add some offset above the bar
                          fill="hsl(var(--foreground))"
                          fontSize={10}
-                         formatter={(value: number, entry: any) => {
-                           // Access payload data directly from the entry object provided by LabelList
-                           const payload = entry;
+                         formatter={(_value, entry: any) => { // _value is videos here, we need the full entry
+                           const payload = entry.payload ?? entry; // Recharts might pass payload nested or directly
                            if (!payload) return '';
                            const total = (payload.documents || 0) + (payload.videos || 0);
                            return total > 0 ? total : ''; // Show total if > 0
