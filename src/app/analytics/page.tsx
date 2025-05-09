@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -425,11 +426,17 @@ export default function AnalyticsPage() {
                          offset={5} // Add some offset above the bar
                          fill="hsl(var(--foreground))"
                          fontSize={10}
-                         formatter={(_value, entry: any) => { // _value is videos here, we need the full entry
-                           const payload = entry.payload ?? entry; // Recharts might pass payload nested or directly
-                           if (!payload) return '';
-                           const total = (payload.documents || 0) + (payload.videos || 0);
-                           return total > 0 ? total : ''; // Show total if > 0
+                         formatter={(_value, entry: any) => {
+                           if (!entry) { // Guard against undefined entry
+                               return '';
+                           }
+                           const dataPayload = entry.payload ?? entry; // Handle potential nesting
+
+                           if (!dataPayload || typeof dataPayload.documents === 'undefined' || typeof dataPayload.videos === 'undefined') {
+                               return '';
+                           }
+                           const total = (dataPayload.documents || 0) + (dataPayload.videos || 0);
+                           return total > 0 ? String(total) : '';
                          }}
                        />
                      </Bar>
