@@ -11,7 +11,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { HelpCircle, ChevronLeft, ChevronRight, History, Settings, LayoutDashboard, List, BarChart, Trash2, Archive, Zap } from 'lucide-react'; // Added Archive, Zap icon
+import { HelpCircle, ChevronLeft, ChevronRight, History, Settings, LayoutDashboard, List, BarChart, Trash2, Archive, Zap, RefreshCcw } from 'lucide-react'; // Added RefreshCcw
 
 const tutorialPages = [
  {
