@@ -80,20 +80,22 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       if (showTodaySection && log.date === todayDateStr && !log.isFinalized && !foundTodayLog) {
         foundTodayLog = log;
       } else if (isBefore(logDateObj, todayStart) || (log.date === todayDateStr && log.isFinalized)) {
-        if (!prevLogsMap[log.date] || (prevLogsMap[log.date].isFinalized && !log.isFinalized)) {
+        // For previous logs, ensure we only take one log per date.
+        // If multiple logs exist for the same past date (e.g. one finalized, one not - though this shouldn't happen for past days),
+        // prioritize the finalized one, or simply the one encountered.
+        if (!prevLogsMap[log.date] || (prevLogsMap[log.date] && !prevLogsMap[log.date].isFinalized && log.isFinalized)) {
              prevLogsMap[log.date] = log;
-        } else if (prevLogsMap[log.date] && !prevLogsMap[log.date].isFinalized && log.isFinalized) {
-            // Keep the non-finalized one if both exist for the same day (shouldn't happen often)
-        } else if (prevLogsMap[log.date] && log.id > prevLogsMap[log.date].id) {
-            // Fallback: keep the one with the "later" ID if both finalized status are same
+        } else if (prevLogsMap[log.date] && prevLogsMap[log.date].isFinalized && !log.isFinalized) {
+            // Do nothing, keep the finalized one.
+        } else if (!prevLogsMap[log.date]) { // If no entry for this date yet
             prevLogsMap[log.date] = log;
         }
       }
     });
-
-    const prevLogsGrouped = Object.values(prevLogsMap)
-                              .map(log => ({ date: log.date, log }))
-                              .sort((a, b) => b.date.localeCompare(a.date));
+    
+    const prevLogsGrouped = Object.values(prevLogsMap) // Use Object.values to get the single log per date
+                              .map(log => ({ date: log.date, log })) // Create the structure expected
+                              .sort((a, b) => b.date.localeCompare(a.date)); // Sort dates descending
 
     return { todayLog: foundTodayLog, previousLogsByDate: prevLogsGrouped };
   }, [allWorkLogs, showTodaySection]);
@@ -103,7 +105,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       const timerId = setInterval(() => {
         setCurrentTime(new Date());
       }, 1000);
-      setCurrentTime(new Date());
+      setCurrentTime(new Date()); // Initialize once
       return () => clearInterval(timerId);
     }
   }, [showTodaySection, isClient]);
@@ -170,7 +172,10 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     unitsToGoal = parseFloat(unitsToGoal.toFixed(2));
 
     const scheduleStatusText = isGoalMet ? (
-      <CheckCircle className="inline-block h-4 w-4 mr-1"/>
+      <>
+        <CheckCircle className="inline-block h-4 w-4 mr-1"/>
+        {goalMetTime ? `Met at ${format(goalMetTime, 'h:mm:ss a')}` : 'Met'}
+      </>
     ) : (
       formatTimeAheadBehind(timeAheadBehindSeconds)
     );
@@ -225,8 +230,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
               <div className="col-span-1">
                 <p className="text-muted-foreground">Schedule Status</p>
                 <p className={cn("font-medium tabular-nums", scheduleStatusColor)}>
-                  {scheduleStatusText}
-                  {isGoalMet && goalMetTime ? ` at ${format(goalMetTime, 'h:mm:ss a')}` : formatTimeAheadBehind(timeAheadBehindSeconds) }
+                   {scheduleStatusText}
                 </p>
               </div>
               <div className="col-span-1">
@@ -246,7 +250,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                 <p className="text-muted-foreground">Schedule Result</p>
                 <p className={cn("font-medium tabular-nums", scheduleStatusColor)}>
                   {scheduleStatusText}
-                  {isGoalMet && goalMetTime ? ` at ${format(goalMetTime, 'h:mm:ss a')}` : formatTimeAheadBehind(timeAheadBehindSeconds)}
                 </p>
               </div>
               <div>
@@ -304,16 +307,18 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
           >
             {previousLogsByDate.map(({ date, log }) => (
               <AccordionItem value={log.id} key={log.id} className="border-b border-border bg-card rounded-md overflow-hidden shadow-sm">
-                <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group data-[state=open]:bg-muted/50 hover:no-underline" asChild={false}>
+                 <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group data-[state=open]:bg-muted/50 hover:no-underline" asChild={false} hideChevron>
                   <PreviousLogTriggerSummary
                     log={log}
                     allTargets={targets}
                     activeTarget={activeTarget}
                     onDelete={() => handleDeleteLog(log.id, log.date)}
+                    isExpanded={expandedLogId === log.id}
                   />
+                   <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180 ml-auto" />
                 </AccordionTrigger>
                 <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-md">
-                  <PreviousLogTriggerSummary log={log} allTargets={targets} activeTarget={activeTarget} onDelete={() => handleDeleteLog(log.id, log.date)} isExpanded={true} />
+                  {/* Content for previous logs is now more detailed within PreviousLogTriggerSummary when expanded */}
                   {targets.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
                       {sortedTargetsByUPH.map(displayTarget => renderTargetMetricCard(log, displayTarget, false))}
@@ -339,3 +344,4 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
+
