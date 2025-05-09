@@ -35,6 +35,9 @@ const PreviousLogTriggerSummary: React.FC<PreviousLogTriggerSummaryProps> = ({
 
   const showDeleteButton = onDelete && !isDashboardTodayView; // Only show if onDelete is provided AND not the dashboard's today view
 
+  const displayedTargets = allTargets.filter(t => t.isDisplayed ?? true);
+
+
   if (isExpanded) {
     return (
       <div className="mb-4 relative">

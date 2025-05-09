@@ -29,6 +29,7 @@ export interface UPHTarget {
   docsPerUnit: number; // How many documents are required to complete one unit *for this target*
   videosPerUnit: number; // How many video sessions are required to complete one unit *for this target*
   isActive: boolean; // Indicates if this is the currently active target for calculations
+  isDisplayed?: boolean; // Optional: Indicates if this target should be displayed on the dashboard/metrics views
 }
 
 /**

@@ -290,7 +290,7 @@ export function getUPHTargets(): UPHTarget[] {
   return targets;
 }
 
-export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): UPHTarget {
+export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive' | 'isDisplayed'>): UPHTarget {
   if (!targetData.name || targetData.name.trim() === '') throw new Error('Target name cannot be empty.');
   if (targetData.targetUPH === undefined || isNaN(targetData.targetUPH) || targetData.targetUPH <= 0) throw new Error('Target UPH must be a positive number.');
   if (targetData.docsPerUnit === undefined || isNaN(targetData.docsPerUnit) || targetData.docsPerUnit <= 0) throw new Error('Documents per unit must be a positive number.');
@@ -301,6 +301,7 @@ export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): UP
     ...targetData,
     id: generateLocalId(),
     isActive: targets.length === 0, // Activate if it's the first target
+    isDisplayed: true, // New targets are displayed by default
   };
 
   targets.push(newTarget);
@@ -309,7 +310,7 @@ export function addUPHTarget(targetData: Omit<UPHTarget, 'id' | 'isActive'>): UP
   addAuditLog(
     'CREATE_UPH_TARGET',
     'UPHTarget',
-    `Created UPH target "${newTarget.name}". UPH: ${newTarget.targetUPH}, Docs/Unit: ${newTarget.docsPerUnit}, Videos/Unit: ${newTarget.videosPerUnit}.`,
+    `Created UPH target "${newTarget.name}". UPH: ${newTarget.targetUPH}, Docs/Unit: ${newTarget.docsPerUnit}, Videos/Unit: ${newTarget.videosPerUnit}, Displayed: ${newTarget.isDisplayed}.`,
     newTarget.id,
     null,
     newTarget
@@ -330,7 +331,7 @@ export function updateUPHTarget(targetData: UPHTarget): UPHTarget {
 
   if (index > -1) {
     previousState = { ...targets[index] };
-    targets[index] = targetData; // Replace the entire target object
+    targets[index] = { ...targetData, isDisplayed: targetData.isDisplayed ?? previousState.isDisplayed ?? true }; // Ensure isDisplayed is handled
     saveToLocalStorage(UPH_TARGETS_KEY, targets);
     saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Mark that real data exists
 
@@ -341,6 +342,8 @@ export function updateUPHTarget(targetData: UPHTarget): UPHTarget {
     if (previousState.docsPerUnit !== targetData.docsPerUnit) changes.push(`Docs/Unit: ${previousState.docsPerUnit} -> ${targetData.docsPerUnit}`);
     if (previousState.videosPerUnit !== targetData.videosPerUnit) changes.push(`Videos/Unit: ${previousState.videosPerUnit} -> ${targetData.videosPerUnit}`);
     if (previousState.isActive !== targetData.isActive) changes.push(`Activation status changed to ${targetData.isActive}.`);
+    if ((previousState.isDisplayed ?? true) !== (targetData.isDisplayed ?? true)) changes.push(`Display status changed to ${targetData.isDisplayed ?? true}.`);
+
 
     addAuditLog(
       'UPDATE_UPH_TARGET',
@@ -348,12 +351,12 @@ export function updateUPHTarget(targetData: UPHTarget): UPHTarget {
       `Updated UPH target "${targetData.name}". Changes: ${changes.join(', ') || 'No field changes.'}`,
       targetData.id,
       previousState,
-      targetData
+      targets[index] // Log the actual saved state
     );
   } else {
     throw new Error(`Target with ID ${targetData.id} not found for update.`);
   }
-  return targetData;
+  return targets[index];
 }
 
 export function deleteUPHTarget(id: string): void {
@@ -426,7 +429,7 @@ export function getActiveUPHTarget(): UPHTarget | null {
 
 /**
  * Duplicates an existing UPH target in localStorage.
- * The new target will have "- Copy" appended to its name and will be inactive.
+ * The new target will have "- Copy" appended to its name and will be inactive and displayed by default.
  */
 export function duplicateUPHTarget(id: string): UPHTarget {
   const targets = getUPHTargets();
@@ -450,6 +453,7 @@ export function duplicateUPHTarget(id: string): UPHTarget {
     id: generateLocalId(),
     name: duplicateName,
     isActive: false, // Duplicated targets are inactive by default
+    isDisplayed: true, // Duplicated targets are displayed by default
   };
 
   targets.push(newTarget);
@@ -458,7 +462,7 @@ export function duplicateUPHTarget(id: string): UPHTarget {
   addAuditLog(
     'DUPLICATE_UPH_TARGET', // Changed action type
     'UPHTarget',
-    `Duplicated UPH target "${originalTarget.name}" to "${newTarget.name}".`,
+    `Duplicated UPH target "${originalTarget.name}" to "${newTarget.name}". Displayed: ${newTarget.isDisplayed}.`,
     newTarget.id,
     originalTarget, // Log original as previous state for context
     newTarget
@@ -535,6 +539,7 @@ export function loadSampleData(): boolean {
             ...target,
             id: target.id || generateLocalId(),
             isActive: index === 0, // Activate the first one
+            isDisplayed: target.isDisplayed !== undefined ? target.isDisplayed : true, // Default to displayed
         }));
 
         // Make sure sample logs reference a valid target ID and have training set

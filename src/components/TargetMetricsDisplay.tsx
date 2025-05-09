@@ -65,7 +65,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     setIsClient(true);
   }, []);
 
-  const activeTarget = useMemo(() => targets.find(t => t.isActive) ?? (targets.length > 0 ? targets[0] : null), [targets]);
+  const activeTarget = useMemo(() => targets.find(t => t.isActive) ?? (targets.length > 0 ? targets.find(t => t.isDisplayed ?? true) || targets[0] : null), [targets]);
 
   const { todayLog, previousLogsByDate } = useMemo(() => {
     const todayDateStr = formatDateISO(new Date());
@@ -93,9 +93,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       }
     });
     
-    const prevLogsGrouped = Object.values(prevLogsMap) // Use Object.values to get the single log per date
-                              .map(log => ({ date: log.date, log })) // Create the structure expected
-                              .sort((a, b) => b.date.localeCompare(a.date)); // Sort dates descending
+    const prevLogsGrouped = Object.values(prevLogsMap) 
+                              .map(log => ({ date: log.date, log: log })) 
+                              .sort((a, b) => b.date.localeCompare(a.date)); 
 
     return { todayLog: foundTodayLog, previousLogsByDate: prevLogsGrouped };
   }, [allWorkLogs, showTodaySection]);
@@ -116,6 +116,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     }
     const currentGoalMetTimes = todayLog.goalMetTimes || {};
     targets.forEach(target => {
+      if (!(target.isDisplayed ?? true)) return; // Skip if not displayed
+
       const { currentUnits } = calculateCurrentMetrics(todayLog, target, currentTime);
       const targetUnitsForShift = calculateRequiredUnitsForTarget(todayLog.hoursWorked, target.targetUPH);
       const isCurrentlyMet = currentUnits >= targetUnitsForShift && targetUnitsForShift > 0;
@@ -126,7 +128,9 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     });
   }, [todayLog, targets, currentTime, showTodaySection, isClient, onGoalMet]);
 
-  const sortedTargetsByUPH = useMemo(() => [...targets].sort((a, b) => a.targetUPH - b.targetUPH), [targets]);
+  const sortedTargetsByUPH = useMemo(() => 
+    targets.filter(t => t.isDisplayed ?? true).sort((a, b) => a.targetUPH - b.targetUPH), 
+  [targets]);
 
   const handleDeleteLog = (logId: string, logDateStr: string) => {
     if (typeof window !== 'undefined' && !window.confirm(`Are you sure you want to delete the log for ${formatFriendlyDate(parse(logDateStr, 'yyyy-MM-dd', new Date()))}?`)) {
@@ -174,12 +178,12 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     const scheduleStatusText = isGoalMet ? (
       <>
         <CheckCircle className="inline-block h-4 w-4 mr-1"/>
-        {goalMetTime ? `Met at ${format(goalMetTime, 'h:mm:ss a')}` : 'Met'}
+         Met
       </>
     ) : (
       formatTimeAheadBehind(timeAheadBehindSeconds)
     );
-
+    
     const scheduleStatusColor = isGoalMet ? "text-green-600 dark:text-green-500" :
                                   (timeAheadBehindSeconds !== null && timeAheadBehindSeconds >= 0 ? "text-green-600 dark:text-green-500" :
                                   (timeAheadBehindSeconds !== null && timeAheadBehindSeconds < 0 ? "text-red-600 dark:text-red-500" : ""));
@@ -236,7 +240,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
               <div className="col-span-1">
                 <p className="text-muted-foreground">Est. Goal Hit Time</p>
                 <p className="font-medium tabular-nums">
-                  {isGoalMet ? '-' : projectedHitTimeFormatted}
+                  {isGoalMet ? (goalMetTime ? format(goalMetTime, 'h:mm:ss a') : '-') : projectedHitTimeFormatted}
                 </p>
               </div>
             </>
@@ -279,17 +283,17 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
         <div>
           <PreviousLogTriggerSummary
             log={todayLog}
-            allTargets={targets}
+            allTargets={targets.filter(t => t.isDisplayed ?? true)}
             activeTarget={activeTarget}
-            onDelete={undefined} // Do not allow deleting today's active log from dashboard view
+            onDelete={undefined} 
             isDashboardTodayView={true}
           />
-          {targets.length > 0 ? (
+          {sortedTargetsByUPH.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
               {sortedTargetsByUPH.map((target) => renderTargetMetricCard(todayLog, target, true))}
             </div>
           ) : (
-            <p className="text-center text-muted-foreground mt-4">No UPH targets defined to calculate metrics.</p>
+            <p className="text-center text-muted-foreground mt-4">No UPH targets marked for display.</p>
           )}
         </div>
       )}
@@ -310,7 +314,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                  <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group data-[state=open]:bg-muted/50 hover:no-underline" asChild={false} hideChevron>
                   <PreviousLogTriggerSummary
                     log={log}
-                    allTargets={targets}
+                    allTargets={targets.filter(t => t.isDisplayed ?? true)}
                     activeTarget={activeTarget}
                     onDelete={() => handleDeleteLog(log.id, log.date)}
                     isExpanded={expandedLogId === log.id}
@@ -318,13 +322,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180 ml-auto" />
                 </AccordionTrigger>
                 <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-md">
-                  {/* Content for previous logs is now more detailed within PreviousLogTriggerSummary when expanded */}
-                  {targets.length > 0 ? (
+                  
+                  {sortedTargetsByUPH.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
                       {sortedTargetsByUPH.map(displayTarget => renderTargetMetricCard(log, displayTarget, false))}
                     </div>
                   ) : (
-                    <p className="text-center text-muted-foreground mt-4">No UPH targets defined.</p>
+                    <p className="text-center text-muted-foreground mt-4">No UPH targets marked for display.</p>
                   )}
                 </AccordionContent>
               </AccordionItem>
@@ -344,4 +348,3 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
-

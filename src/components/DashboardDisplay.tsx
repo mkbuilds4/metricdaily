@@ -37,6 +37,8 @@ const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
   // Determine the target to display: log's target if found, otherwise active target
   const displayTarget = logTarget ?? initialActiveTarget;
 
+  const displayedTargets = initialUphTargets.filter(t => t.isDisplayed ?? true);
+
   return (
     <Card>
       <CardHeader>
@@ -77,7 +79,7 @@ const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
         {/* Render the TargetMetricsDisplay, passing today's log and all targets */}
         <TargetMetricsDisplay
             allWorkLogs={initialWorkLogs} // Pass only today's log
-            targets={initialUphTargets} // Pass all available targets for context/comparison
+            targets={displayedTargets} // Pass only displayed targets
             deleteWorkLogAction={deleteWorkLogAction}
             setActiveUPHTargetAction={setActiveUPHTargetAction} // Pass the action down
             onGoalMet={onGoalMet} // Pass callback

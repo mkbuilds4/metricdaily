@@ -48,7 +48,7 @@ export default function PreviousLogsPage() {
   const [currentPage, setCurrentPage] = useState(1);
 
   // Determine active target based on uphTargets state
-  const activeTarget = useMemo(() => uphTargets.find(t => t.isActive) || (uphTargets.length > 0 ? uphTargets[0] : null), [uphTargets]);
+  const activeTarget = useMemo(() => uphTargets.find(t => t.isActive && (t.isDisplayed ?? true)) || uphTargets.find(t => t.isDisplayed ?? true) || (uphTargets.length > 0 ? uphTargets[0] : null), [uphTargets]);
 
 
   // Load data needed for this page
@@ -359,6 +359,8 @@ export default function PreviousLogsPage() {
       </div>
     );
   }
+  
+  const displayedTargets = uphTargets.filter(t => t.isDisplayed ?? true);
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
@@ -481,7 +483,7 @@ export default function PreviousLogsPage() {
       {/* Render logs using TargetMetricsDisplay with Accordion */}
       <TargetMetricsDisplay
         allWorkLogs={paginatedLogs} // Pass sorted and filtered logs for the current page
-        targets={uphTargets}
+        targets={displayedTargets} // Pass only displayed targets
         deleteWorkLogAction={handleDeleteWorkLog}
         showTodaySection={false} // Ensure today's section is not shown here
         onGoalMet={() => {}} // Provide a dummy function
@@ -522,4 +524,3 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
-

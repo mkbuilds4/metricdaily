@@ -25,6 +25,7 @@ export const sampleUPHTargets: UPHTarget[] = [
     docsPerUnit: 10,
     videosPerUnit: 1.5,
     isActive: true, // Make the first one active by default
+    isDisplayed: true,
   },
   {
     id: 'minimum-1',
@@ -33,6 +34,7 @@ export const sampleUPHTargets: UPHTarget[] = [
     docsPerUnit: 10,
     videosPerUnit: 1.5,
     isActive: false,
+    isDisplayed: true,
   },
   {
     id: 'outstanding-1',
@@ -41,6 +43,7 @@ export const sampleUPHTargets: UPHTarget[] = [
     docsPerUnit: 10,
     videosPerUnit: 1.5,
     isActive: false,
+    isDisplayed: true,
   },
 ];
 

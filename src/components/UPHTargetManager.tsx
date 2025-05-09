@@ -28,16 +28,18 @@ import {
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Edit, CheckCircle, XCircle, ArrowUpDown, Copy } from 'lucide-react'; // Added Copy icon
+import { Trash2, Edit, CheckCircle, XCircle, ArrowUpDown, Copy, Eye, EyeOff } from 'lucide-react'; // Added Eye, EyeOff
 import { useToast } from "@/hooks/use-toast";
 import type { UPHTarget } from '@/types';
 import { cn } from '@/lib/utils';
+import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 
 const targetFormSchema = z.object({
   name: z.string().min(1, { message: 'Target name is required.' }),
   targetUPH: z.coerce.number().positive({ message: 'Target UPH must be positive.' }),
   docsPerUnit: z.coerce.number().positive({ message: 'Docs per unit must be a positive number.' }),
   videosPerUnit: z.coerce.number().positive({ message: 'Videos per unit must be a positive number.' }),
+  isDisplayed: z.boolean().optional(), // Add isDisplayed to form schema
 });
 
 type TargetFormData = z.infer<typeof targetFormSchema>;
@@ -48,10 +50,10 @@ interface UPHTargetManagerProps {
   updateUPHTargetAction: (data: UPHTarget) => UPHTarget;
   deleteUPHTargetAction: (id: string) => void;
   setActiveUPHTargetAction: (id: string) => UPHTarget;
-  duplicateUPHTargetAction: (id: string) => UPHTarget; // New prop for duplicating
+  duplicateUPHTargetAction: (id: string) => UPHTarget;
 }
 
-type SortableColumn = keyof Pick<UPHTarget, 'name' | 'targetUPH' | 'docsPerUnit' | 'videosPerUnit'>;
+type SortableColumn = keyof Pick<UPHTarget, 'name' | 'targetUPH' | 'docsPerUnit' | 'videosPerUnit' | 'isDisplayed'>; // Added isDisplayed
 type SortDirection = 'asc' | 'desc';
 
 const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
@@ -60,7 +62,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     updateUPHTargetAction,
     deleteUPHTargetAction,
     setActiveUPHTargetAction,
-    duplicateUPHTargetAction, // New prop
+    duplicateUPHTargetAction,
 }) => {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -79,14 +81,17 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
        return [...localTargets].sort((a, b) => a.name.localeCompare(b.name));
     }
     return [...localTargets].sort((a, b) => {
-      const valA = a[sortColumn];
-      const valB = b[sortColumn];
+      const valA = sortColumn === 'isDisplayed' ? (a.isDisplayed ?? true) : a[sortColumn as keyof Omit<UPHTarget, 'isDisplayed'>];
+      const valB = sortColumn === 'isDisplayed' ? (b.isDisplayed ?? true) : b[sortColumn as keyof Omit<UPHTarget, 'isDisplayed'>];
       let comparison = 0;
       if (typeof valA === 'string' && typeof valB === 'string') {
         comparison = valA.localeCompare(valB);
       } else if (typeof valA === 'number' && typeof valB === 'number') {
         comparison = valA - valB;
-      } else {
+      } else if (typeof valA === 'boolean' && typeof valB === 'boolean') {
+        comparison = valA === valB ? 0 : valA ? -1 : 1; // True comes before false for descending
+      }
+      else {
         comparison = String(valA).localeCompare(String(valB));
       }
       return sortDirection === 'asc' ? comparison : -comparison;
@@ -100,6 +105,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
       targetUPH: 0,
       docsPerUnit: 1,
       videosPerUnit: 1,
+      isDisplayed: true,
     },
   });
 
@@ -117,6 +123,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
       targetUPH: target.targetUPH,
       docsPerUnit: target.docsPerUnit,
       videosPerUnit: target.videosPerUnit,
+      isDisplayed: target.isDisplayed ?? true,
     });
     setIsDialogOpen(true);
   };
@@ -128,6 +135,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
       targetUPH: 0,
       docsPerUnit: 1,
       videosPerUnit: 1,
+      isDisplayed: true,
     });
     setIsDialogOpen(true);
   };
@@ -139,6 +147,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
         const updatedTargetData: UPHTarget = {
           ...editingTarget,
           ...values,
+          isDisplayed: values.isDisplayed ?? editingTarget.isDisplayed ?? true,
         };
         const updatedTarget = updateUPHTargetAction(updatedTargetData);
         setLocalTargets(prev =>
@@ -146,13 +155,16 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
         );
         toast({ title: "Target Updated", description: `"${values.name}" has been updated.` });
       } else {
-        const newTargetData: Omit<UPHTarget, 'id' | 'isActive'> = values;
+        const newTargetData: Omit<UPHTarget, 'id' | 'isActive'> = {
+            ...values,
+            isDisplayed: values.isDisplayed ?? true,
+        };
         const actualNewTarget = addUPHTargetAction(newTargetData);
         setLocalTargets(prev => [...prev, actualNewTarget]);
         toast({ title: "Target Added", description: `"${values.name}" has been added.` });
       }
       setIsDialogOpen(false);
-      form.reset();
+      form.reset({name: '', targetUPH: 0, docsPerUnit: 1, videosPerUnit: 1, isDisplayed: true });
       setEditingTarget(null);
     } catch (error) {
       console.error("Failed to save target:", error);
@@ -173,7 +185,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
       setLocalTargets(prev =>
           prev.map(t => ({ ...t, isActive: t.id === newActiveTarget.id }))
       );
-      toast({ title: "Target Activated", description: "The selected target is now active." });
+      toast({ title: "Target Activated", description: `"${newActiveTarget.name}" is now the active target.` });
     } catch (error) {
       console.error("Failed to set active target:", error);
       toast({
@@ -236,6 +248,22 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     }
   };
 
+  const handleToggleDisplay = (target: UPHTarget) => {
+    setIsLoading(true);
+    const updatedTarget = { ...target, isDisplayed: !(target.isDisplayed ?? true) };
+    try {
+        const savedTarget = updateUPHTargetAction(updatedTarget);
+        setLocalTargets(prev => prev.map(t => t.id === savedTarget.id ? savedTarget : t));
+        toast({ title: "Display Updated", description: `Display for "${savedTarget.name}" set to ${savedTarget.isDisplayed}.`});
+    } catch (error) {
+        console.error("Failed to update display status:", error);
+        toast({ variant: "destructive", title: "Update Failed", description: "Could not update display status." });
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+
   const renderSortIcon = (column: SortableColumn) => {
     if (sortColumn !== column) {
       return <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />;
@@ -283,7 +311,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         <FormItem>
                         <FormLabel>Target UPH</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 15.5" {...field} value={field.value ?? 0} onChange={field.onChange} step="0.1" min="0.1" />
+                            <Input type="number" placeholder="e.g., 15.5" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.000001" min="0.000001" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -296,7 +324,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         <FormItem>
                         <FormLabel>Documents per Unit</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 5.25" {...field} value={field.value ?? 0} onChange={field.onChange} step="any" min="0.000001" />
+                            <Input type="number" placeholder="e.g., 5.25" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="any" min="0.000001" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -309,15 +337,35 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                         <FormItem>
                         <FormLabel>Video Sessions per Unit</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 2.55" {...field} value={field.value ?? 0} onChange={field.onChange} step="any" min="0.000001" />
+                            <Input type="number" placeholder="e.g., 2.55" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="any" min="0.000001" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
                     )}
                     />
+                <FormField
+                  control={form.control}
+                  name="isDisplayed"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                      <div className="space-y-0.5">
+                        <FormLabel>Display on Dashboard</FormLabel>
+                        <DialogDescription className="text-xs"> {/* Using DialogDescription for smaller text */}
+                          Show this target in dashboard metrics.
+                        </DialogDescription>
+                      </div>
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value ?? true}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
                 <DialogFooter>
                     <DialogClose asChild>
-                        <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); form.reset(); setEditingTarget(null); }}>Cancel</Button>
+                        <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); form.reset({name: '', targetUPH: 0, docsPerUnit: 1, videosPerUnit: 1, isDisplayed: true }); setEditingTarget(null); }}>Cancel</Button>
                     </DialogClose>
                     <Button type="submit" disabled={isLoading}>
                          {isLoading ? 'Saving...' : (editingTarget ? 'Save Changes' : 'Add Target')}
@@ -334,6 +382,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[50px]">Active</TableHead>
+                  <TableHead className="w-[60px]">Display</TableHead> {/* New column for Display toggle */}
                   <TableHead>
                      <Button variant="ghost" onClick={() => handleSort('name')} className="px-0 hover:bg-transparent">
                        Name
@@ -358,17 +407,17 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                        {renderSortIcon('videosPerUnit')}
                      </Button>
                   </TableHead>
-                  <TableHead className="w-[130px] text-right">Actions</TableHead> {/* Adjusted width for new button */}
+                  <TableHead className="w-[130px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sortedTargets.length === 0 && (
                      <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground h-24">No UPH targets defined yet.</TableCell>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground h-24">No UPH targets defined yet.</TableCell> {/* Adjusted colSpan */}
                     </TableRow>
                 )}
                 {sortedTargets.map((target) => (
-                  <TableRow key={target.id} className={target.isActive ? 'bg-accent/10' : ''}>
+                  <TableRow key={target.id} className={cn(target.isActive ? 'bg-accent/10' : '', !(target.isDisplayed ?? true) && 'opacity-50 hover:opacity-75')}>
                     <TableCell className="text-center">
                       {target.isActive ? (
                         <CheckCircle className="h-5 w-5 text-accent mx-auto" />
@@ -385,6 +434,19 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                            <XCircle className="h-5 w-5 text-muted-foreground hover:text-foreground" />
                         </Button>
                       )}
+                    </TableCell>
+                     <TableCell className="text-center">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleToggleDisplay(target)}
+                            disabled={isLoading}
+                            title={target.isDisplayed ?? true ? "Hide on Dashboard" : "Show on Dashboard"}
+                            aria-label={target.isDisplayed ?? true ? "Hide on Dashboard" : "Show on Dashboard"}
+                            className="p-1 h-8 w-8 mx-auto"
+                        >
+                           {(target.isDisplayed ?? true) ? <Eye className="h-5 w-5 text-primary" /> : <EyeOff className="h-5 w-5 text-muted-foreground hover:text-foreground" />}
+                        </Button>
                     </TableCell>
                     <TableCell className="font-medium">{target.name}</TableCell>
                     <TableCell>{target.targetUPH}</TableCell>
