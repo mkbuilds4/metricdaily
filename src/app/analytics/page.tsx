@@ -330,7 +330,7 @@ export default function AnalyticsPage() {
               hourlyActivityChartData.length > 0 ? (
                 <ChartContainer config={hourlyActivityChartConfig} className="h-[300px] w-full">
                   {/* Use stacked BarChart */}
-                  <BarChart data={hourlyActivityChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                  <BarChart data={hourlyActivityChartData} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}> {/* Increased top margin for total label */}
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis
                       dataKey="hourLabel"
@@ -356,23 +356,23 @@ export default function AnalyticsPage() {
                      />
                      {/* Define Bars for documents and videos */}
                      <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs">
-                       {/* Add LabelList for documents */}
-                       <LabelList
-                         dataKey="documents"
-                         position="center"
-                         fill="hsl(var(--primary-foreground))" // Use a contrasting color
-                         fontSize={10}
-                         formatter={(value: number) => (value > 0 ? value : '')} // Hide label if value is 0
-                       />
+                       {/* REMOVED LabelList for documents */}
                      </Bar>
                      <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos"> {/* Top bar gets radius */}
-                       {/* Add LabelList for videos */}
+                       {/* REMOVED LabelList for videos */}
+                       {/* ADD LabelList for TOTAL count above the top bar */}
                        <LabelList
-                         dataKey="videos"
-                         position="center"
-                         fill="hsl(var(--primary-foreground))" // Use a contrasting color
+                         position="top"
+                         offset={5} // Add some offset above the bar
+                         fill="hsl(var(--foreground))"
                          fontSize={10}
-                         formatter={(value: number) => (value > 0 ? value : '')} // Hide label if value is 0
+                         formatter={(value: number, props: any) => {
+                           // Access the full payload for the bar to get both doc and video counts
+                           const payload = props.payload;
+                           if (!payload) return '';
+                           const total = (payload.documents || 0) + (payload.videos || 0);
+                           return total > 0 ? total : ''; // Show total if > 0
+                         }}
                        />
                      </Bar>
                     <ChartLegend content={<ChartLegendContent />} />
@@ -441,8 +441,11 @@ export default function AnalyticsPage() {
                        <ChartTooltipContent
                          indicator="line"
                          labelFormatter={(label, payload) => {
-                           // Display only the date label once
-                           return payload?.[0]?.payload?.fullDate ? format(parseISO(payload[0].payload.fullDate), 'PPP') : label;
+                           // Display only the date label once per tooltip group
+                            if (payload && payload.length > 0 && payload[0].payload?.fullDate) {
+                                return format(parseISO(payload[0].payload.fullDate), 'PPP');
+                            }
+                           return label;
                          }}
                          formatter={(value, name, props) => {
                            // Custom formatter to display value with correct label
