@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -386,6 +387,13 @@ export default function AnalyticsPage() {
                       tickMargin={8}
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                       allowDecimals={false} // Show whole numbers for actual counts
+                      label={{
+                        value: 'Total Sessions Completed',
+                        angle: -90,
+                        position: 'insideLeft',
+                        style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 12 },
+                        dy: 70, // Adjust dy to move label down (further from top)
+                      }}
                     />
                      {/* Disable default tooltip content */}
                      <ChartTooltip
