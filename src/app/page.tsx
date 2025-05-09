@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link'; // Import Link
 import ProductivityDashboard from '@/components/DashboardDisplay';
 import WeeklyAverages from '@/components/WeeklyAverages';
@@ -9,7 +9,7 @@ import DailyProgressIndicator from '@/components/DailyProgressIndicator';
 import {
   getWorkLogs,
   getActiveUPHTarget,
-  saveWorkLog,
+  saveWorkLog, // This is from lib/actions.ts
   deleteWorkLog,
   getUPHTargets,
   loadSampleData,
@@ -20,7 +20,7 @@ import {
   getDefaultSettings,
   isSampleDataLoaded,
   setActiveUPHTarget,
-  addAuditLog,
+  // addAuditLog is not directly used in this component for saveWorkLog anymore
 } from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget, UserSettings, AuditLogActionType } from '@/types';
 import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes, calculateTimeAheadBehindSchedule } from '@/lib/utils';
@@ -180,15 +180,13 @@ export default function Home() {
 
   const handleSaveWorkLog = useCallback((
       logData: Partial<Omit<DailyWorkLog, 'id' | 'hoursWorked'>> & { id?: string; hoursWorked?: number; date: string; startTime: string; endTime: string; goalMetTimes?: Record<string, string> },
-      auditActionType?: AuditLogActionType
+      auditActionType?: AuditLogActionType // This auditActionType is passed to actions.ts#saveWorkLog
       ) => {
     if (!isClient) return {} as DailyWorkLog;
 
-    const existingLog = workLogs.find(l => l.id === logData.id || (l.date === logData.date && !l.isFinalized));
-    const isCreating = !logData.id && !workLogs.find(l => l.date === logData.date && !l.isFinalized);
-
     try {
-        const savedLog = saveWorkLog(logData);
+        // Call the saveWorkLog action from lib/actions.ts, passing the specific auditActionType
+        const savedLog = saveWorkLog(logData, auditActionType);
 
         setWorkLogs(prevLogs => {
             const existingIndex = prevLogs.findIndex(l => l.id === savedLog.id);
@@ -203,54 +201,10 @@ export default function Home() {
         });
 
         setHasInitialData(true);
-        setSampleDataActive(false);
+        // saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // This is handled in actions.ts#saveWorkLog
 
-        const actionToLog = auditActionType || (isCreating ? 'CREATE_WORK_LOG' : 'UPDATE_WORK_LOG');
-        let details = '';
-        const logDetails = `Docs: ${savedLog.documentsCompleted}, Videos: ${savedLog.videoSessionsCompleted}, Hours: ${savedLog.hoursWorked.toFixed(2)}.`;
-
-        switch (actionToLog) {
-             case 'CREATE_WORK_LOG':
-                 details = `Created work log for ${savedLog.date}. ${logDetails}`;
-                 break;
-             case 'UPDATE_WORK_LOG_QUICK_COUNT':
-                 const fieldUpdated = existingLog?.documentsCompleted !== savedLog.documentsCompleted ? 'document' : 'video';
-                 const newValue = fieldUpdated === 'document' ? savedLog.documentsCompleted : savedLog.videoSessionsCompleted;
-                 details = `Quick updated ${fieldUpdated} count to ${newValue} for log ${savedLog.date}.`;
-                 break;
-             case 'UPDATE_WORK_LOG_GOAL_MET':
-                 const newTargetId = Object.keys(savedLog.goalMetTimes || {}).find(key => !(existingLog?.goalMetTimes || {})[key]);
-                 const targetName = uphTargets.find(t => t.id === newTargetId)?.name || 'Unknown Target';
-                 details = `Target "${targetName}" goal met time recorded for log ${savedLog.date}.`;
-                 break;
-             case 'UPDATE_WORK_LOG':
-                 if (auditActionType !== 'UPDATE_WORK_LOG_QUICK_COUNT') {
-                    details = `Updated work log for ${savedLog.date}. `;
-                    if (existingLog) {
-                        const changes: string[] = [];
-                        if (existingLog.startTime !== savedLog.startTime) changes.push(`Start: ${existingLog.startTime} -> ${savedLog.startTime}`);
-                        if (existingLog.endTime !== savedLog.endTime) changes.push(`End: ${existingLog.endTime} -> ${savedLog.endTime}`);
-                        if (existingLog.breakDurationMinutes !== savedLog.breakDurationMinutes) changes.push(`Break: ${existingLog.breakDurationMinutes}m -> ${savedLog.breakDurationMinutes}m`);
-                        if ((existingLog.trainingDurationMinutes || 0) !== (savedLog.trainingDurationMinutes || 0)) changes.push(`Training: ${existingLog.trainingDurationMinutes || 0}m -> ${savedLog.trainingDurationMinutes || 0}m`);
-                        if (existingLog.documentsCompleted !== savedLog.documentsCompleted) changes.push(`Docs: ${existingLog.documentsCompleted} -> ${savedLog.documentsCompleted}`);
-                        if (existingLog.videoSessionsCompleted !== savedLog.videoSessionsCompleted) changes.push(`Videos: ${existingLog.videoSessionsCompleted} -> ${savedLog.videoSessionsCompleted}`);
-                        if (existingLog.notes !== savedLog.notes) changes.push(`Notes updated.`);
-                        if (existingLog.targetId !== savedLog.targetId) changes.push(`Target ID updated.`);
-                        details += changes.join(', ') || 'No specific field changes detected.';
-                    } else {
-                        details += logDetails;
-                    }
-                    addAuditLog(actionToLog, 'WorkLog', details, savedLog.id, existingLog, savedLog);
-                 }
-                 break;
-             default:
-                 addAuditLog(actionToLog, 'WorkLog', details, savedLog.id, existingLog, savedLog);
-                 break;
-        }
-
-        if (actionToLog === 'UPDATE_WORK_LOG_QUICK_COUNT') {
-           addAuditLog(actionToLog, 'WorkLog', details, savedLog.id, existingLog, savedLog);
-        }
+        // Audit logging is now centralized in actions.ts#saveWorkLog
+        // No need for addAuditLog call or details generation here.
 
         return savedLog;
     } catch (error) {
@@ -262,7 +216,7 @@ export default function Home() {
         });
         throw error;
     }
-  }, [toast, isClient, workLogs, uphTargets]);
+  }, [toast, isClient]); // Dependencies updated
 
   const handleDeleteWorkLog = useCallback((id: string) => {
      if (!isClient) return;
@@ -283,7 +237,6 @@ export default function Home() {
 
    const handleQuickUpdate = (field: 'documentsCompleted' | 'videoSessionsCompleted', value: number | string) => {
       if (!isClient) return;
-      // Use calculatedTodayLog here
       if (!calculatedTodayLog) {
           console.warn("[Home] Quick Update: No active log found for today to update.");
           toast({
@@ -293,8 +246,6 @@ export default function Home() {
           });
           return;
       }
-
-      const originalLogState = { ...calculatedTodayLog };
 
       let newValue: number;
       const currentDocValue = calculatedTodayLog.documentsCompleted || 0;
@@ -345,6 +296,7 @@ export default function Home() {
 
 
       try {
+           // Pass 'UPDATE_WORK_LOG_QUICK_COUNT' as the specific audit action type
            const savedLog = handleSaveWorkLog(updatedLogPartial as any, 'UPDATE_WORK_LOG_QUICK_COUNT');
            toast({ title: "Count Updated", description: `Today's ${field === 'documentsCompleted' ? 'document' : 'video'} count set to ${newValue}.` });
 
@@ -447,6 +399,7 @@ export default function Home() {
     };
 
     try {
+      // Pass 'CREATE_WORK_LOG' as the specific audit action type
       handleSaveWorkLog(newLog as any, 'CREATE_WORK_LOG');
       toast({
         title: "New Day Started",
@@ -567,7 +520,7 @@ export default function Home() {
         description: error instanceof Error ? error.message : "Could not add break time.",
       });
     }
-  }, [calculatedTodayLog, toast, isClient, workLogs]); // Use calculatedTodayLog
+  }, [calculatedTodayLog, toast, isClient, workLogs]);
 
   const handleAddTraining = useCallback((trainingMinutes: number) => {
     if (!isClient) return;
@@ -602,7 +555,7 @@ export default function Home() {
         description: error instanceof Error ? error.message : "Could not add training time.",
       });
     }
-  }, [calculatedTodayLog, toast, isClient, workLogs]); // Use calculatedTodayLog
+  }, [calculatedTodayLog, toast, isClient, workLogs]);
 
   const handleGoalMet = useCallback((targetId: string, metAt: Date) => {
      if (!isClient) return;
@@ -611,7 +564,7 @@ export default function Home() {
         const todayLogIndex = prevLogs.findIndex(log => log.date === formatDateISO(new Date()) && !log.isFinalized);
 
         if (todayLogIndex > -1) {
-            const currentTodayLog = prevLogs[todayLogIndex]; // Use a different name to avoid conflict with outer scope calculatedTodayLog
+            const currentTodayLog = prevLogs[todayLogIndex];
             if (!metAt || !(metAt instanceof Date) || isNaN(metAt.getTime())) {
                 console.error("[Home] Goal met handler received invalid 'metAt' date:", metAt);
                 return prevLogs;
@@ -638,6 +591,7 @@ export default function Home() {
                  };
 
                 try {
+                    // Pass 'UPDATE_WORK_LOG_GOAL_MET' as the specific audit action type
                     const savedLog = handleSaveWorkLog(payloadToSave, 'UPDATE_WORK_LOG_GOAL_MET');
                     const updatedLogs = [...prevLogs];
                     updatedLogs[todayLogIndex] = savedLog;
