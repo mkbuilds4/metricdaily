@@ -367,10 +367,8 @@ export default function AnalyticsPage() {
                          fill="hsl(var(--foreground))"
                          fontSize={10}
                          formatter={(value: number, entry: any) => { // Changed props to entry
-                           // Access the full payload for the bar to get both doc and video counts
-                           const payload = entry.payload; // Access payload from entry
-                           if (!payload) return '';
-                           const total = (payload.documents || 0) + (payload.videos || 0);
+                           // Access the full data entry object directly
+                           const total = (entry?.documents ?? 0) + (entry?.videos ?? 0);
                            return total > 0 ? total : ''; // Show total if > 0
                          }}
                        />
@@ -708,3 +706,6 @@ export default function AnalyticsPage() {
     </div>
   );
 }
+
+
+  
