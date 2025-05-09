@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -90,9 +91,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     });
 
      // Convert map to array of { date, log } for easier mapping
-     // Use the correct structure { date, log } when mapping
     const prevLogsGrouped = Object.entries(prevLogsMap)
-                                .map(([date, log]) => ({ date, log })) // Corrected: Use the log directly
+                                .map(([date, log]) => ({ date, log })) // Use the log directly
                                 .sort((a, b) => b.date.localeCompare(a.date)); // Sort dates descending
 
     return { todayLog: foundTodayLog, previousLogsByDate: prevLogsGrouped };
@@ -265,7 +265,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                                 <p className={cn("font-medium tabular-nums", scheduleStatusColor)}>
                                     {scheduleStatusText}
                                     {/* Show met time only if goal is met */}
-                                    {isGoalMet && goalMetTime ? `` : ''}
+                                    {isGoalMet && goalMetTime ? ` at ${format(goalMetTime, 'h:mm:ss a')}` : ''}
                                 </p>
                             </div>
                             <div className="col-span-1">
@@ -309,130 +309,6 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     };
 
 
-   const renderLogSummaryCard = (log: DailyWorkLog, isToday: boolean) => {
-        // Determine the target to use for the summary calculation
-        const logTarget = targets.find(t => t.id === log.targetId);
-        const targetForSummaryCalc = logTarget ?? activeTarget; // Fallback to active if log target missing
-
-        let summaryUPH: number | null = null;
-        let currentUnitsNow: number | null = null;
-
-        if (targetForSummaryCalc) {
-            if (isToday && currentTime && isClient) {
-                const metrics = calculateCurrentMetrics(log, targetForSummaryCalc, currentTime);
-                summaryUPH = metrics.currentUPH; // UPH based on time elapsed so far
-                currentUnitsNow = metrics.currentUnits;
-            } else if (!isToday) {
-                summaryUPH = calculateDailyUPH(log, targetForSummaryCalc); // Avg UPH for the whole day
-            }
-        }
-
-        const summaryTargetName = targetForSummaryCalc ? targetForSummaryCalc.name : 'N/A';
-        const logDate = parse(log.date, 'yyyy-MM-dd', new Date());
-        const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date; // Use isValid from date-fns
-        const totalUnits = targetForSummaryCalc ? calculateDailyUnits(log, targetForSummaryCalc) : 0;
-        const breakTimeFormatted = formatDurationFromMinutes(log.breakDurationMinutes * 60);
-        const trainingTimeFormatted = log.trainingDurationMinutes && log.trainingDurationMinutes > 0 ? formatDurationFromMinutes(log.trainingDurationMinutes * 60) : null;
-
-
-        return (
-            <Card className="mb-4 relative shadow-sm"> {/* Added relative positioning */}
-                 <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                         <div>
-                            <CardTitle className="text-xl">
-                                {isToday ? `Today (${formattedLogDate})` : formattedLogDate}
-                            </CardTitle>
-                             <CardDescription>
-                                {log.hoursWorked.toFixed(2)} hrs ({log.startTime} - {log.endTime})
-                                <br/>
-                                <span title={`Break: ${breakTimeFormatted}`}>
-                                    <Clock className="inline-block h-3.5 w-3.5 mr-1 align-text-bottom" /> {breakTimeFormatted}
-                                </span>
-                                {trainingTimeFormatted && (
-                                    <span className="ml-2" title={`Training: ${trainingTimeFormatted}`}>
-                                        <Brain className="inline-block h-3.5 w-3.5 mr-1 align-text-bottom" /> {trainingTimeFormatted}
-                                    </span>
-                                )}
-                                <br/>
-                                {targetForSummaryCalc ? (
-                                    <span className="text-xs text-muted-foreground" title={`Metrics context: ${summaryTargetName}`}>
-                                        (Context: {summaryTargetName}{!logTarget && activeTarget ? ' - Active' : ''})
-                                    </span>
-                                ) : (
-                                    targets.length > 0 ? (
-                                        <span className="text-xs text-destructive">(Log target missing, no active target)</span>
-                                    ) : (
-                                         <span className="text-xs text-muted-foreground">(No targets defined)</span>
-                                    )
-                                )}
-                            </CardDescription>
-                         </div>
-                          {/* Delete Button for Previous Logs */}
-                          {!isToday && (
-                                // No wrapper div needed if AccordionTrigger has asChild={true}
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="text-destructive hover:text-destructive h-7 w-7" // Adjusted size
-                                    onClick={(e) => {
-                                        e.stopPropagation(); // Prevent accordion toggle
-                                        handleDeleteLog(log.id, log.date);
-                                    }}
-                                    title="Delete This Log"
-                                    aria-label="Delete This Log"
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                          )}
-                    </div>
-                </CardHeader>
-                 <CardContent className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                     <div className="flex items-center space-x-2" title="Documents Completed">
-                        <BookOpen className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                            <p className="text-sm text-muted-foreground">Docs</p>
-                            <p className="text-lg font-semibold">{log.documentsCompleted}</p>
-                        </div>
-                    </div>
-                     <div className="flex items-center space-x-2" title="Video Sessions Completed">
-                         <Video className="h-5 w-5 text-muted-foreground" />
-                         <div>
-                             <p className="text-sm text-muted-foreground">Videos</p>
-                             <p className="text-lg font-semibold">{log.videoSessionsCompleted}</p>
-                         </div>
-                     </div>
-                       {/* Display Units Completed for previous logs OR Units Now for today */}
-                       {targetForSummaryCalc && (
-                           <div className="flex items-center space-x-2" title={`Units ${isToday ? 'Now' : 'Completed'} (Based on ${summaryTargetName})`}>
-                               <TargetIcon className="h-5 w-5 text-muted-foreground" />
-                               <div>
-                                 <p className="text-sm text-muted-foreground">{isToday ? 'Units Now' : `Units (${summaryTargetName})`}</p>
-                                 <p className="text-lg font-semibold">
-                                     {isToday && currentUnitsNow !== null ? currentUnitsNow.toFixed(2) : totalUnits.toFixed(2)}
-                                 </p>
-                              </div>
-                           </div>
-                       )}
-                       {/* Display Avg/Current UPH */}
-                       {summaryUPH !== null && targetForSummaryCalc && (
-                           <div className="flex items-center space-x-2" title={`${isToday ? 'Current' : 'Avg'} Daily UPH (Based on ${summaryTargetName})`}>
-                               <Clock className="h-5 w-5 text-muted-foreground" />
-                               <div>
-                                 <p className="text-sm text-muted-foreground">{isToday ? 'Current Daily UPH' : `Avg UPH (${summaryTargetName})`}</p>
-                                 <p className="text-lg font-semibold">{summaryUPH.toFixed(2)}</p>
-                              </div>
-                           </div>
-                       )}
-                 </CardContent>
-                 {log.notes && (
-                    <CardFooter className="pt-3">
-                        <p className="text-sm text-muted-foreground italic">Notes: {log.notes}</p>
-                    </CardFooter>
-                 )}
-            </Card>
-        );
-   }
 
   if (!isClient) {
      return <div className="p-4 text-center text-muted-foreground">Loading metrics...</div>;
@@ -442,7 +318,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     <div className="space-y-6">
       {showTodaySection && todayLog && (
         <div>
-          {renderLogSummaryCard(todayLog, true)}
+          {/* Pass all targets to the summary */}
+          <PreviousLogTriggerSummary log={todayLog} allTargets={targets} activeTarget={activeTarget} onDelete={() => handleDeleteLog(todayLog.id, todayLog.date)} />
            {targets.length > 0 ? (
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {sortedTargetsByUPH.map((target) => renderTargetMetricCard(todayLog, target, true))}
@@ -461,14 +338,13 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
              <Accordion type="multiple" className="w-full space-y-1">
                 {previousLogsByDate.map(({ date, log }) => ( // Destructure date and log
                     <AccordionItem value={log.id} key={log.id} className="border-none bg-card rounded-md overflow-hidden shadow-sm">
-                         {/* Use PreviousLogTriggerSummary component */}
-                        <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group data-[state=open]:bg-muted/50 hover:no-underline" asChild>
-                             {/* Pass activeTarget to the trigger component */}
+                        <AccordionTrigger className="p-4 hover:bg-muted/30 rounded-t-md transition-colors w-full group data-[state=open]:bg-muted/50 hover:no-underline" hideChevron={true} asChild={false}>
+                             {/* Pass activeTarget and allTargets to the trigger component */}
                              <PreviousLogTriggerSummary log={log} allTargets={targets} activeTarget={activeTarget} onDelete={() => handleDeleteLog(log.id, log.date)} />
                         </AccordionTrigger>
                         <AccordionContent className="p-4 border-t bg-muted/10 rounded-b-md">
                             {/* Display the main summary card first */}
-                            {renderLogSummaryCard(log, false)}
+                             <PreviousLogTriggerSummary log={log} allTargets={targets} activeTarget={activeTarget} onDelete={() => handleDeleteLog(log.id, log.date)} isExpanded={true} />
                             {/* Then display breakdown against each target */}
                             {targets.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
@@ -497,3 +373,4 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
+

@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -114,8 +115,10 @@ export default function PreviousLogsPage() {
     if (filterTerm) {
         logsToProcess = logsToProcess.filter(log => {
             const searchTerm = filterTerm.toLowerCase();
-            const logTarget = uphTargets.find(t => t.id === log.targetId) ?? activeTarget;
+            const logTarget = uphTargets.find(t => t.id === log.targetId) ?? activeTarget; // Needed for UPH search
             const logDateObj = parseISO(log.date + 'T00:00:00');
+
+            const avgUPHForSearch = logTarget ? calculateDailyUPH(log, logTarget) : 0; // Calculate UPH for searching
 
             return (
                 log.date.toLowerCase().includes(searchTerm) ||
@@ -126,7 +129,7 @@ export default function PreviousLogsPage() {
                 log.videoSessionsCompleted.toString().includes(searchTerm) ||
                 (log.notes && log.notes.toLowerCase().includes(searchTerm)) ||
                 (isValid(logDateObj) && format(logDateObj, 'PPP').toLowerCase().includes(searchTerm)) ||
-                (logTarget && calculateDailyUPH(log, logTarget).toFixed(2).includes(searchTerm))
+                (logTarget && avgUPHForSearch.toFixed(2).includes(searchTerm)) // Search formatted UPH
             );
         });
     }
@@ -154,10 +157,14 @@ export default function PreviousLogsPage() {
                 valA = parseISO(a.date + 'T00:00:00');
                 valB = parseISO(b.date + 'T00:00:00');
             } else if (sortColumn === 'avgUPH') {
+                 // --- Corrected UPH sorting ---
+                 // Find the target associated with each log, fallback to active target
                  const targetA = uphTargets.find(t => t.id === a.targetId) ?? activeTarget;
                  const targetB = uphTargets.find(t => t.id === b.targetId) ?? activeTarget;
+                 // Calculate UPH using the determined target for each log
                  valA = targetA ? calculateDailyUPH(a, targetA) : 0;
                  valB = targetB ? calculateDailyUPH(b, targetB) : 0;
+                 // --- End of correction ---
             } else {
                 valA = a[sortColumn as keyof DailyWorkLog] ?? 0; // Handle potential undefined
                 valB = b[sortColumn as keyof DailyWorkLog] ?? 0;
@@ -180,7 +187,7 @@ export default function PreviousLogsPage() {
 
 
     return logsToProcess;
-  }, [allLogs, filterTerm, filterDateRange, sortColumn, sortDirection, activeTarget, uphTargets]);
+  }, [allLogs, filterTerm, filterDateRange, sortColumn, sortDirection, activeTarget, uphTargets]); // Added uphTargets and activeTarget to dependencies
 
   // Pagination Logic - uses filteredAndSortedLogs
   const paginatedLogs = useMemo(() => {
@@ -515,3 +522,4 @@ export default function PreviousLogsPage() {
     </div>
   );
 }
+
