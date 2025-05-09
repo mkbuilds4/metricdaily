@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -5,13 +6,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as ShadcnFormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { getDefaultSettings, saveDefaultSettings, clearAllData } from '@/lib/actions'; // Import clearAllData
 import type { UserSettings } from '@/types';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Settings as SettingsIcon, Info } from 'lucide-react'; // Added SettingsIcon, Info
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +25,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Separator } from '@/components/ui/separator'; // Import Separator
+import { Switch } from '@/components/ui/switch'; // Import Switch
 
 
 // Schema for settings form validation
@@ -32,6 +34,7 @@ const settingsSchema = z.object({
   defaultEndTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: "Invalid time format (HH:mm)" }),
   defaultBreakMinutes: z.coerce.number().nonnegative().int().default(0),
   defaultTrainingMinutes: z.coerce.number().nonnegative().int().default(0),
+  autoSwitchTargetBySchedule: z.boolean().optional().default(false), // New setting
 });
 
 type SettingsFormData = z.infer<typeof settingsSchema>;
@@ -43,11 +46,12 @@ export default function SettingsPage() {
 
   const form = useForm<SettingsFormData>({
     resolver: zodResolver(settingsSchema),
-    defaultValues: { // Initialize with empty or actual defaults
+    defaultValues: { 
       defaultStartTime: '',
       defaultEndTime: '',
       defaultBreakMinutes: 0,
       defaultTrainingMinutes: 0,
+      autoSwitchTargetBySchedule: false,
     },
   });
 
@@ -55,7 +59,10 @@ export default function SettingsPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const currentSettings = getDefaultSettings();
-      form.reset(currentSettings); // Populate form with loaded settings
+      form.reset({
+        ...currentSettings,
+        autoSwitchTargetBySchedule: currentSettings.autoSwitchTargetBySchedule ?? false, // Ensure default
+      });
     }
   }, [form]);
 
@@ -90,14 +97,14 @@ export default function SettingsPage() {
         title: "Data Cleared",
         description: "All work logs, UPH targets, and settings have been removed.",
       });
-      // Optionally reset the form to initial defaults after clearing
+      // Reset the form to initial defaults after clearing
       form.reset({
          defaultStartTime: '14:00',
          defaultEndTime: '22:30',
          defaultBreakMinutes: 0,
          defaultTrainingMinutes: 0,
+         autoSwitchTargetBySchedule: false,
       });
-      // Data is cleared, navigation or refresh might be needed depending on desired UX
     } catch (error) {
       console.error('[Settings] Error clearing data:', error);
       toast({
@@ -117,9 +124,11 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Default Log Settings</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <SettingsIcon className="h-6 w-6" /> Default Log & Behavior Settings
+          </CardTitle>
           <CardDescription>
-            Set the default values used when starting a new day or resetting the log input form.
+            Customize default values and application behavior.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -181,7 +190,33 @@ export default function SettingsPage() {
                   )}
                 />
               </div>
-              <div className="flex justify-end">
+
+              <Separator />
+
+              <FormField
+                control={form.control}
+                name="autoSwitchTargetBySchedule"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Auto-Switch Active Target</FormLabel>
+                      <ShadcnFormDescription>
+                        Automatically set the active target on the dashboard to the one closest to being "On Schedule".
+                      </ShadcnFormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        aria-label="Toggle auto-switch active target"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+
+              <div className="flex justify-end pt-4">
                 <Button type="submit" disabled={isLoading || isClearing}>
                   {isLoading ? 'Saving...' : 'Save Settings'}
                 </Button>
@@ -194,7 +229,9 @@ export default function SettingsPage() {
       {/* Data Management Section */}
       <Card>
           <CardHeader>
-              <CardTitle>Data Management</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Trash2 className="h-6 w-6" /> Data Management
+              </CardTitle>
               <CardDescription>
                   Manage application data. Be careful, these actions cannot be undone.
               </CardDescription>

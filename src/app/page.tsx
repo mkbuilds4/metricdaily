@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -8,26 +9,26 @@ import DailyProgressIndicator from '@/components/DailyProgressIndicator';
 import {
   getWorkLogs,
   getActiveUPHTarget,
-  saveWorkLog, // Now only saves data, no audit logging
+  saveWorkLog,
   deleteWorkLog,
   getUPHTargets,
   loadSampleData,
   clearAllData,
-  addBreakTimeToLog, // Still logs its specific action
-  addTrainingTimeToLog, // Still logs its specific action
-  archiveTodayLog, // Updated action
+  addBreakTimeToLog,
+  addTrainingTimeToLog,
+  archiveTodayLog,
   getDefaultSettings,
-  isSampleDataLoaded, // Import check for sample data
-  setActiveUPHTarget, // Import setActiveUPHTarget
-  addAuditLog, // Import addAuditLog for use in page handlers
-} from '@/lib/actions'; // Using client-side actions
+  isSampleDataLoaded,
+  setActiveUPHTarget,
+  addAuditLog,
+} from '@/lib/actions';
 import type { DailyWorkLog, UPHTarget, UserSettings, AuditLogActionType } from '@/types';
-import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
+import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes, calculateTimeAheadBehindSchedule } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain, Edit3, HelpCircle, Archive, RefreshCcw } from 'lucide-react'; // Added RefreshCcw
+import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain, Edit3, HelpCircle, Archive, RefreshCcw, Settings as SettingsIcon, Zap } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -52,15 +53,21 @@ export default function Home() {
   const [docInputValue, setDocInputValue] = useState<string>('');
   const [videoInputValue, setVideoInputValue] = useState<string>('');
   const [hasInitialData, setHasInitialData] = useState(false);
-  const [sampleDataActive, setSampleDataActive] = useState(false); // State to track if sample data is loaded
+  const [sampleDataActive, setSampleDataActive] = useState(false);
   const { toast } = useToast();
   const [isClient, setIsClient] = useState(false);
+  const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
     setIsClient(true);
+    if (typeof window !== 'undefined') {
+        setCurrentTime(new Date());
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }
   }, []);
 
-  // --- Data Loading ---
   const loadData = useCallback((showLoadingIndicator = true) => {
     if (!isClient) return;
 
@@ -72,20 +79,21 @@ export default function Home() {
       const loadedLogs = getWorkLogs();
       const loadedTargets = getUPHTargets();
       const loadedActiveTarget = getActiveUPHTarget();
-      const isSampleLoaded = isSampleDataLoaded(); // Check if sample data flag is set
+      const isSampleLoaded = isSampleDataLoaded();
+      const currentSettings = getDefaultSettings();
 
       setWorkLogs(loadedLogs);
       setUphTargets(loadedTargets);
       setActiveTarget(loadedActiveTarget);
       setHasInitialData(loadedLogs.length > 0 || loadedTargets.length > 0);
-      setSampleDataActive(isSampleLoaded); // Update sample data state
+      setSampleDataActive(isSampleLoaded);
+      setUserSettings(currentSettings);
 
-      // Update input values based on the NON-FINALIZED log for today
       const todayDateStr = formatDateISO(new Date());
       const currentTodayLog = loadedLogs.find(log => log.date === todayDateStr && !log.isFinalized);
       setDocInputValue(currentTodayLog?.documentsCompleted?.toString() ?? '');
       setVideoInputValue(currentTodayLog?.videoSessionsCompleted?.toString() ?? '');
-      console.log('[Home Page] Data loaded. Active target:', loadedActiveTarget?.name, 'Sample Data Loaded:', isSampleLoaded);
+      console.log('[Home Page] Data loaded. Active target:', loadedActiveTarget?.name, 'Sample Data Loaded:', isSampleLoaded, 'Settings:', currentSettings);
 
     } catch (error) {
       console.error('[Home] Error loading data:', error);
@@ -95,47 +103,93 @@ export default function Home() {
         description: "Could not load work logs or targets from local storage.",
       });
       setHasInitialData(false);
-      setSampleDataActive(false); // Assume no sample data on error
+      setSampleDataActive(false);
+      setUserSettings(getDefaultSettings());
     } finally {
       if (showLoadingIndicator) {
         setIsLoading(false);
       }
     }
-  }, [toast, isClient]); // toast is stable, isClient triggers reload when ready
+  }, [toast, isClient]);
 
   useEffect(() => {
      if (isClient) {
         console.log('[Home Page] useEffect triggered due to isClient change.');
         loadData();
      }
-   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isClient]); // Run when isClient becomes true
+  }, [isClient, loadData]);
 
-   // Effect to update input values when workLogs change (e.g., after saving)
-   useEffect(() => {
-    if (!isClient) return; // Only run on client
+  // Direct calculation for todayLog instead of useMemo
+  let calculatedTodayLog: DailyWorkLog | null = null;
+  if (isClient) {
     const todayDateStr = formatDateISO(new Date());
-    // Find the log for today that is NOT finalized
-    const currentTodayLog = workLogs.find(log => log.date === todayDateStr && !log.isFinalized);
-    setDocInputValue(currentTodayLog?.documentsCompleted?.toString() ?? '');
-    setVideoInputValue(currentTodayLog?.videoSessionsCompleted?.toString() ?? '');
-  }, [workLogs, isClient]);
+    calculatedTodayLog = workLogs.find(log => log.date === todayDateStr && !log.isFinalized) || null;
+  }
 
-  // --- Action Handlers ---
+   useEffect(() => {
+    if (!isClient) return;
+    setDocInputValue(calculatedTodayLog?.documentsCompleted?.toString() ?? '');
+    setVideoInputValue(calculatedTodayLog?.videoSessionsCompleted?.toString() ?? '');
+  }, [workLogs, isClient, calculatedTodayLog]);
+
+
+  useEffect(() => {
+    if (!isClient || !userSettings?.autoSwitchTargetBySchedule || !calculatedTodayLog || !activeTarget || !currentTime || uphTargets.length === 0) {
+      return;
+    }
+
+    const displayedTargets = uphTargets.filter(t => t.isDisplayed ?? true);
+    if (displayedTargets.length === 0) return;
+
+    let bestTarget: UPHTarget | null = null;
+    let minAbsDifference = Infinity;
+
+    for (const target of displayedTargets) {
+      const timeDiffSeconds = calculateTimeAheadBehindSchedule(calculatedTodayLog, target, currentTime);
+      if (timeDiffSeconds !== null) {
+        const absDiff = Math.abs(timeDiffSeconds);
+        if (absDiff < minAbsDifference) {
+          minAbsDifference = absDiff;
+          bestTarget = target;
+        }
+      }
+    }
+
+    if (bestTarget && bestTarget.id !== activeTarget.id) {
+      console.log(`[AutoSwitch] Switching to target "${bestTarget.name}" as it's closest to schedule.`);
+      try {
+        const newActiveTarget = setActiveUPHTarget(bestTarget.id);
+        setActiveTarget(newActiveTarget);
+        setUphTargets(prev => prev.map(t => ({...t, isActive: t.id === newActiveTarget.id})));
+         toast({
+           title: "Target Switched",
+           description: `Auto-switched to target "${newActiveTarget.name}".`,
+           duration: 3000,
+         });
+      } catch (error) {
+          console.error('[AutoSwitch] Error setting active target:', error);
+          toast({
+              variant: "destructive",
+              title: "Auto-Switch Failed",
+              description: "Could not automatically switch target.",
+          });
+      }
+    }
+  }, [isClient, userSettings, calculatedTodayLog, activeTarget, currentTime, uphTargets, toast]);
+
+
   const handleSaveWorkLog = useCallback((
       logData: Partial<Omit<DailyWorkLog, 'id' | 'hoursWorked'>> & { id?: string; hoursWorked?: number; date: string; startTime: string; endTime: string; goalMetTimes?: Record<string, string> },
-      auditActionType?: AuditLogActionType // Optional parameter for specific audit logging
+      auditActionType?: AuditLogActionType
       ) => {
     if (!isClient) return {} as DailyWorkLog;
 
-    const existingLog = workLogs.find(l => l.id === logData.id || (l.date === logData.date && !l.isFinalized)); // Get previous state before saving
+    const existingLog = workLogs.find(l => l.id === logData.id || (l.date === logData.date && !l.isFinalized));
     const isCreating = !logData.id && !workLogs.find(l => l.date === logData.date && !l.isFinalized);
 
     try {
-        // saveWorkLog now ONLY saves data, no audit logging within it
         const savedLog = saveWorkLog(logData);
 
-        // Update local state immediately with the returned saved log
         setWorkLogs(prevLogs => {
             const existingIndex = prevLogs.findIndex(l => l.id === savedLog.id);
             let newLogs;
@@ -145,14 +199,12 @@ export default function Home() {
             } else {
                 newLogs = [...prevLogs, savedLog];
             }
-            // Ensure logs remain sorted by date descending
             return newLogs.sort((a, b) => b.date.localeCompare(a.date));
         });
 
-        setHasInitialData(true); // Assume data exists after save
-        setSampleDataActive(false); // Any save operation clears sample data status
+        setHasInitialData(true);
+        setSampleDataActive(false);
 
-        // --- Audit Logging handled here in the page component ---
         const actionToLog = auditActionType || (isCreating ? 'CREATE_WORK_LOG' : 'UPDATE_WORK_LOG');
         let details = '';
         const logDetails = `Docs: ${savedLog.documentsCompleted}, Videos: ${savedLog.videoSessionsCompleted}, Hours: ${savedLog.hoursWorked.toFixed(2)}.`;
@@ -171,7 +223,7 @@ export default function Home() {
                  const targetName = uphTargets.find(t => t.id === newTargetId)?.name || 'Unknown Target';
                  details = `Target "${targetName}" goal met time recorded for log ${savedLog.date}.`;
                  break;
-             case 'UPDATE_WORK_LOG': // Generic update (e.g., from form save) - avoid logging this for quick updates
+             case 'UPDATE_WORK_LOG':
                  if (auditActionType !== 'UPDATE_WORK_LOG_QUICK_COUNT') {
                     details = `Updated work log for ${savedLog.date}. `;
                     if (existingLog) {
@@ -186,26 +238,21 @@ export default function Home() {
                         if (existingLog.targetId !== savedLog.targetId) changes.push(`Target ID updated.`);
                         details += changes.join(', ') || 'No specific field changes detected.';
                     } else {
-                        details += logDetails; // Add details if it's an update but no existing log was found (edge case)
+                        details += logDetails;
                     }
-                    // Log the generic update action only if it wasn't a specific quick update
                     addAuditLog(actionToLog, 'WorkLog', details, savedLog.id, existingLog, savedLog);
                  }
                  break;
              default:
-                 // For other specific actions like BREAK, TRAINING, GOAL_MET, log them directly
                  addAuditLog(actionToLog, 'WorkLog', details, savedLog.id, existingLog, savedLog);
                  break;
         }
 
-        // If it was a quick count update, log it specifically
         if (actionToLog === 'UPDATE_WORK_LOG_QUICK_COUNT') {
            addAuditLog(actionToLog, 'WorkLog', details, savedLog.id, existingLog, savedLog);
         }
 
-
-        // Toast moved to the specific actions calling this handler for better context
-        return savedLog; // Return the saved log
+        return savedLog;
     } catch (error) {
         console.error('[Home] Error saving work log:', error);
         toast({
@@ -215,13 +262,13 @@ export default function Home() {
         });
         throw error;
     }
-  }, [toast, isClient, workLogs, uphTargets]); // Added workLogs and uphTargets dependencies for audit context
+  }, [toast, isClient, workLogs, uphTargets]);
 
   const handleDeleteWorkLog = useCallback((id: string) => {
      if (!isClient) return;
     try {
         deleteWorkLog(id);
-        loadData(false); // Reload data without main loading indicator
+        loadData(false);
         toast({ title: "Log Deleted", description: "Work log deleted successfully." });
     } catch (error) {
         console.error('[Home] Error deleting work log:', error);
@@ -234,14 +281,10 @@ export default function Home() {
     }
   }, [loadData, toast, isClient]);
 
-  // --- Quick Update Handlers ---
    const handleQuickUpdate = (field: 'documentsCompleted' | 'videoSessionsCompleted', value: number | string) => {
       if (!isClient) return;
-      const todayDateStr = formatDateISO(new Date());
-       // Find the non-finalized log for today
-      const currentTodayLog = workLogs.find(log => log.date === todayDateStr && !log.isFinalized);
-
-      if (!currentTodayLog) {
+      // Use calculatedTodayLog here
+      if (!calculatedTodayLog) {
           console.warn("[Home] Quick Update: No active log found for today to update.");
           toast({
               variant: "destructive",
@@ -251,97 +294,78 @@ export default function Home() {
           return;
       }
 
-      const originalLogState = { ...currentTodayLog }; // Capture state before update for audit log
+      const originalLogState = { ...calculatedTodayLog };
 
       let newValue: number;
-      // Preserve the other field's value
-      const currentDocValue = currentTodayLog.documentsCompleted || 0;
-      const currentVideoValue = currentTodayLog.videoSessionsCompleted || 0;
+      const currentDocValue = calculatedTodayLog.documentsCompleted || 0;
+      const currentVideoValue = calculatedTodayLog.videoSessionsCompleted || 0;
       const currentValue = field === 'documentsCompleted' ? currentDocValue : currentVideoValue;
 
       if (typeof value === 'string') {
-         // Treat empty string as 0, otherwise parse
          newValue = value.trim() === '' ? 0 : parseInt(value, 10);
          if (isNaN(newValue)) {
-              // Revert input if invalid number entered (e.g., non-numeric string)
               if (field === 'documentsCompleted') setDocInputValue(currentValue.toString());
               if (field === 'videoSessionsCompleted') setVideoInputValue(currentValue.toString());
               toast({ variant: "destructive", title: "Invalid Input", description: "Please enter a valid number." });
               return;
          }
       } else {
-            // If value is a number (from +/- buttons), add it to current value
             newValue = currentValue + value;
       }
 
-       // Ensure the result is non-negative
        if (newValue < 0) {
-            newValue = 0; // Set to 0 if it goes below zero
+            newValue = 0;
             toast({
                 variant: "default",
                 title: "Limit Reached",
                 description: `Cannot decrease ${field === 'documentsCompleted' ? 'documents' : 'videos'} below zero.`,
             });
-            // If the original action was a text input resulting in negative, reset input
             if (typeof value === 'string') {
                  if (field === 'documentsCompleted') setDocInputValue('0');
                  if (field === 'videoSessionsCompleted') setVideoInputValue('0');
             }
-           // For +/- buttons, just prevent going below 0, don't need to revert input display immediately
            return;
        }
 
-      // Construct partial log ensuring all necessary fields are present for saveWorkLog
-      // *** Include BOTH fields in the partial update ***
        const updatedLogPartial: Partial<DailyWorkLog> & { id: string; date: string; startTime: string; endTime: string; hoursWorked: number; goalMetTimes?: Record<string, string> } = {
-          id: currentTodayLog.id,
-          date: currentTodayLog.date,
-          startTime: currentTodayLog.startTime,
-          endTime: currentTodayLog.endTime,
-          hoursWorked: currentTodayLog.hoursWorked, // Pass existing hoursWorked
-          // Set the updated field and preserve the other field's value
+          id: calculatedTodayLog.id,
+          date: calculatedTodayLog.date,
+          startTime: calculatedTodayLog.startTime,
+          endTime: calculatedTodayLog.endTime,
+          hoursWorked: calculatedTodayLog.hoursWorked,
           documentsCompleted: field === 'documentsCompleted' ? newValue : currentDocValue,
           videoSessionsCompleted: field === 'videoSessionsCompleted' ? newValue : currentVideoValue,
-          // Include other essential fields
-          breakDurationMinutes: currentTodayLog.breakDurationMinutes,
-          trainingDurationMinutes: currentTodayLog.trainingDurationMinutes,
-          targetId: currentTodayLog.targetId,
-          notes: currentTodayLog.notes,
-          goalMetTimes: currentTodayLog.goalMetTimes || {}, // Ensure goalMetTimes is preserved
-          isFinalized: currentTodayLog.isFinalized, // Preserve finalized status
+          breakDurationMinutes: calculatedTodayLog.breakDurationMinutes,
+          trainingDurationMinutes: calculatedTodayLog.trainingDurationMinutes,
+          targetId: calculatedTodayLog.targetId,
+          notes: calculatedTodayLog.notes,
+          goalMetTimes: calculatedTodayLog.goalMetTimes || {},
+          isFinalized: calculatedTodayLog.isFinalized,
       };
 
 
       try {
-           // Pass the complete object required by saveWorkLog
-           // **Pass the specific audit action type**
-           const savedLog = handleSaveWorkLog(updatedLogPartial as any, 'UPDATE_WORK_LOG_QUICK_COUNT'); // Type assertion might be needed
-           // Inputs will update via the useEffect watching workLogs
+           const savedLog = handleSaveWorkLog(updatedLogPartial as any, 'UPDATE_WORK_LOG_QUICK_COUNT');
            toast({ title: "Count Updated", description: `Today's ${field === 'documentsCompleted' ? 'document' : 'video'} count set to ${newValue}.` });
 
-           // Audit logging is now handled within handleSaveWorkLog using the passed type
-
       } catch(error) {
-           // Revert input on error if it was direct text entry
            if (typeof value === 'string') {
                 if (field === 'documentsCompleted') setDocInputValue(currentValue.toString());
                 if (field === 'videoSessionsCompleted') setVideoInputValue(currentValue.toString());
            }
-           // Error toast is handled within handleSaveWorkLog
       }
   };
 
-  // --- Sample Data / Clear Data Handlers ---
   const handleLoadSampleData = () => {
      if (!isClient) return;
     try {
-      const loaded = loadSampleData(); // This action now handles its own audit log
+      const loaded = loadSampleData();
       if (loaded) {
         toast({
           title: "Sample Data Loaded",
           description: "Sample work logs and targets have been added.",
         });
-        loadData(); // Reload data after loading samples
+        loadData();
       } else {
         toast({
           title: "Sample Data Skipped",
@@ -358,32 +382,15 @@ export default function Home() {
     }
   };
 
-   // Handler for the "Clear Sample Data & Start Fresh" button
   const handleClearSampleAndStart = () => {
     if (!isClient) return;
     try {
-      clearAllData(); // Clears logs, targets, settings, and the sample data flag
+      clearAllData();
       toast({
         title: "Data Cleared",
         description: "Sample data removed. Starting fresh!",
       });
-      // Immediately try to start a new day after clearing
-      // Note: handleStartNewDay depends on having an active target.
-      // Since clearAllData removes targets, we need to guide the user.
-      // It's better to reload and let the "No Active Target" state guide them.
-      loadData(); // Reload to show the initial state after clearing
-
-      // Instead of auto-starting, prompt user:
-      // setTimeout(() => { // Delay slightly for UI update
-      //   toast({
-      //     title: "Next Step",
-      //     description: "Please go to 'Log / Targets' to set up your first UPH target.",
-      //     duration: 5000,
-      //   });
-      // }, 500);
-       // Or directly navigate, though letting the user control is better UX
-       // router.push('/log-input');
-
+      loadData();
     } catch (error) {
       console.error('[Home] Error clearing sample data:', error);
       toast({
@@ -394,11 +401,9 @@ export default function Home() {
     }
   };
 
-
-  // --- Start/End Day Handlers ---
   const handleStartNewDay = useCallback(() => {
-    if (!isClient) return;
-    const activeTargetCheck = getActiveUPHTarget(); // Re-fetch active target state directly
+    if (!isClient || !userSettings) return;
+    const activeTargetCheck = getActiveUPHTarget();
     if (!activeTargetCheck) {
       toast({
         variant: "destructive",
@@ -409,7 +414,6 @@ export default function Home() {
     }
 
     const todayDateStr = formatDateISO(new Date());
-    // Check if an active (non-finalized) log already exists for today
     const existingActiveLog = workLogs.find(log => log.date === todayDateStr && !log.isFinalized);
     if (existingActiveLog) {
         toast({
@@ -419,17 +423,12 @@ export default function Home() {
         return;
     }
 
-
-    // Get user-defined defaults or fallback defaults
-    const userSettings = getDefaultSettings();
     const defaultStartTime = userSettings.defaultStartTime || '14:00';
     const defaultEndTime = userSettings.defaultEndTime || '22:30';
-    // Start with 0 break/training minutes for a new day
-    const defaultBreakMinutes = 0; // Start day with 0 break
-    const defaultTrainingMinutes = 0; // Start day with 0 training
-    const totalNonWorkMinutes = defaultBreakMinutes + defaultTrainingMinutes; // Should be 0
+    const defaultBreakMinutes = userSettings.defaultBreakMinutes ?? 0;
+    const defaultTrainingMinutes = userSettings.defaultTrainingMinutes ?? 0;
+    const totalNonWorkMinutes = defaultBreakMinutes + defaultTrainingMinutes;
 
-    // Calculate hours based on fetched or fallback defaults
     const defaultHoursWorked = calculateHoursWorked(todayDateStr, defaultStartTime, defaultEndTime, totalNonWorkMinutes);
 
     const newLog: Omit<DailyWorkLog, 'id'> & { hoursWorked: number; goalMetTimes?: Record<string, string>; isFinalized?: boolean } = {
@@ -441,24 +440,22 @@ export default function Home() {
       hoursWorked: defaultHoursWorked,
       documentsCompleted: 0,
       videoSessionsCompleted: 0,
-      targetId: activeTargetCheck.id, // Use the fetched active target ID
+      targetId: activeTargetCheck.id,
       notes: 'New day started from dashboard.',
-      goalMetTimes: {}, // Initialize empty goal met times
-      isFinalized: false, // Explicitly set as not finalized
+      goalMetTimes: {},
+      isFinalized: false,
     };
 
     try {
-      // Pass 'CREATE_WORK_LOG' as the audit action type
-      handleSaveWorkLog(newLog as any, 'CREATE_WORK_LOG'); // Need type assertion here
+      handleSaveWorkLog(newLog as any, 'CREATE_WORK_LOG');
       toast({
         title: "New Day Started",
         description: `Work log for ${todayDateStr} created with default times.`,
       });
-      // Input fields will update via useEffect watching workLogs
     } catch (error) {
       // Error handling is within handleSaveWorkLog
     }
-  }, [handleSaveWorkLog, toast, isClient, workLogs]); // Added workLogs
+  }, [handleSaveWorkLog, toast, isClient, workLogs, userSettings]);
 
   const handleEndDay = useCallback(() => {
      if (!isClient) return;
@@ -472,19 +469,17 @@ export default function Home() {
       return;
     }
 
-     // Confirmation dialog
-    if (!window.confirm("Are you sure you want to finalize today's log? You won't be able to make further quick updates or add break/training time from the dashboard.")) {
+    if (typeof window !== 'undefined' && !window.confirm("Are you sure you want to finalize today's log? You won't be able to make further quick updates or add break/training time from the dashboard.")) {
         return;
     }
 
-
-    const finalizedLog = archiveTodayLog(); // This function is in actions.ts
+    const finalizedLog = archiveTodayLog();
     if (finalizedLog) {
         toast({
             title: "Day Finalized",
             description: `Log for ${finalizedLog.date} has been finalized. View in 'Previous Logs'.`,
         });
-        loadData(false); // Reload data to reflect the change (todayLog should become null)
+        loadData(false);
     } else {
          toast({
             variant: "destructive",
@@ -494,11 +489,8 @@ export default function Home() {
     }
   }, [workLogs, loadData, toast, isClient]);
 
-
-  // --- Input Handlers ---
   const handleDocInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    // Allow empty string or only digits
     if (/^\d*$/.test(val)) {
        setDocInputValue(val);
     }
@@ -510,48 +502,40 @@ export default function Home() {
      }
   };
 
-   // Handle saving when input loses focus (onBlur)
   const handleDocInputBlur = () => {
        if (!isClient) return;
-       const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()) && !log.isFinalized);
-       const currentValStr = todayLog?.documentsCompleted?.toString() ?? '0';
-       // Treat empty input as 0 for comparison and saving
+       const currentValStr = calculatedTodayLog?.documentsCompleted?.toString() ?? '0';
        const inputValStr = docInputValue.trim() === '' ? '0' : docInputValue.trim();
 
        if (inputValStr === '') {
-         setDocInputValue('0'); // Ensure '0' is displayed if cleared
+         setDocInputValue('0');
        }
 
-       if (todayLog && inputValStr !== currentValStr) {
+       if (calculatedTodayLog && inputValStr !== currentValStr) {
             handleQuickUpdate('documentsCompleted', inputValStr);
-       } else if (!todayLog && inputValStr !== '0') {
-           // Don't attempt update if no log exists and input is not 0
-           // (e.g., user typed something then deleted before starting day)
-           setDocInputValue(''); // Clear the orphaned input
+       } else if (!calculatedTodayLog && inputValStr !== '0') {
+           setDocInputValue('');
        }
    };
   const handleVideoInputBlur = () => {
         if (!isClient) return;
-       const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()) && !log.isFinalized);
-       const currentValStr = todayLog?.videoSessionsCompleted?.toString() ?? '0';
+       const currentValStr = calculatedTodayLog?.videoSessionsCompleted?.toString() ?? '0';
        const inputValStr = videoInputValue.trim() === '' ? '0' : videoInputValue.trim();
 
         if (inputValStr === '') {
-         setVideoInputValue('0'); // Ensure '0' is displayed if cleared
+         setVideoInputValue('0');
        }
 
-       if (todayLog && inputValStr !== currentValStr) {
+       if (calculatedTodayLog && inputValStr !== currentValStr) {
             handleQuickUpdate('videoSessionsCompleted', inputValStr);
-       } else if (!todayLog && inputValStr !== '0') {
-            setVideoInputValue(''); // Clear the orphaned input
+       } else if (!calculatedTodayLog && inputValStr !== '0') {
+            setVideoInputValue('');
        }
   };
 
-  // --- Break/Training Handlers ---
   const handleAddBreak = useCallback((breakMinutes: number) => {
     if (!isClient) return;
-    const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()) && !log.isFinalized);
-    if (!todayLog) {
+    if (!calculatedTodayLog) {
       toast({
         variant: "destructive",
         title: "Cannot Add Break",
@@ -559,11 +543,8 @@ export default function Home() {
       });
       return;
     }
-    // Capture state before update - addBreakTimeToLog handles its own audit
     try {
-      // This function logs its own specific audit action
-      const updatedLog = addBreakTimeToLog(todayLog.id, breakMinutes);
-      // Update local state immediately
+      const updatedLog = addBreakTimeToLog(calculatedTodayLog.id, breakMinutes);
       setWorkLogs(prevLogs => {
           const index = prevLogs.findIndex(l => l.id === updatedLog.id);
           if (index > -1) {
@@ -571,7 +552,7 @@ export default function Home() {
               newLogs[index] = updatedLog;
               return newLogs;
           }
-          return prevLogs; // Should always find the log
+          return prevLogs;
       });
       toast({
         title: "Break Added",
@@ -586,12 +567,11 @@ export default function Home() {
         description: error instanceof Error ? error.message : "Could not add break time.",
       });
     }
-  }, [workLogs, toast, isClient]); // Depends on workLogs to find todayLog
+  }, [calculatedTodayLog, toast, isClient, workLogs]); // Use calculatedTodayLog
 
   const handleAddTraining = useCallback((trainingMinutes: number) => {
     if (!isClient) return;
-    const todayLog = workLogs.find(log => log.date === formatDateISO(new Date()) && !log.isFinalized);
-    if (!todayLog) {
+    if (!calculatedTodayLog) {
       toast({
         variant: "destructive",
         title: "Cannot Add Training",
@@ -599,11 +579,8 @@ export default function Home() {
       });
       return;
     }
-    // Capture state before update - addTrainingTimeToLog handles its own audit
     try {
-      // This function logs its own specific audit action
-      const updatedLog = addTrainingTimeToLog(todayLog.id, trainingMinutes);
-      // Update local state immediately
+      const updatedLog = addTrainingTimeToLog(calculatedTodayLog.id, trainingMinutes);
         setWorkLogs(prevLogs => {
             const index = prevLogs.findIndex(l => l.id === updatedLog.id);
             if (index > -1) {
@@ -611,7 +588,7 @@ export default function Home() {
                 newLogs[index] = updatedLog;
                 return newLogs;
             }
-            return prevLogs; // Should always find the log
+            return prevLogs;
         });
       toast({
         title: "Training Time Added",
@@ -625,79 +602,63 @@ export default function Home() {
         description: error instanceof Error ? error.message : "Could not add training time.",
       });
     }
-  }, [workLogs, toast, isClient]); // Depends on workLogs to find todayLog
+  }, [calculatedTodayLog, toast, isClient, workLogs]); // Use calculatedTodayLog
 
-  // --- Goal Met Handler ---
   const handleGoalMet = useCallback((targetId: string, metAt: Date) => {
      if (!isClient) return;
      console.log(`[Home] Received goal met notification for target ${targetId} at ${metAt.toISOString()}`);
-     // Use a functional update for setWorkLogs to ensure we're working with the latest state
     setWorkLogs(prevLogs => {
-        // Find the non-finalized log for today
         const todayLogIndex = prevLogs.findIndex(log => log.date === formatDateISO(new Date()) && !log.isFinalized);
 
         if (todayLogIndex > -1) {
-            const todayLog = prevLogs[todayLogIndex];
-             // Ensure metAt is a valid Date object before converting to ISO string
+            const currentTodayLog = prevLogs[todayLogIndex]; // Use a different name to avoid conflict with outer scope calculatedTodayLog
             if (!metAt || !(metAt instanceof Date) || isNaN(metAt.getTime())) {
                 console.error("[Home] Goal met handler received invalid 'metAt' date:", metAt);
-                return prevLogs; // Return previous state if date is invalid
+                return prevLogs;
             }
             const metAtISO = metAt.toISOString();
 
-            // Check if met time for THIS target is already recorded in the log we have
-            if (!(todayLog.goalMetTimes && todayLog.goalMetTimes[targetId])) {
+            if (!(currentTodayLog.goalMetTimes && currentTodayLog.goalMetTimes[targetId])) {
                 console.log(`[Home] Persisting goal met time for target ${targetId}...`);
-                const newGoalMetTimes = { ...(todayLog.goalMetTimes || {}), [targetId]: metAtISO };
-
-                // Construct the payload for saving
-                // Important: ensure all required fields for saveWorkLog are included
+                const newGoalMetTimes = { ...(currentTodayLog.goalMetTimes || {}), [targetId]: metAtISO };
                  const payloadToSave: Partial<DailyWorkLog> & { id: string; date: string; startTime: string; endTime: string; hoursWorked: number; goalMetTimes?: Record<string, string> } = {
-                    id: todayLog.id, // Pass the ID for update
-                    date: todayLog.date,
-                    startTime: todayLog.startTime,
-                    endTime: todayLog.endTime,
-                    breakDurationMinutes: todayLog.breakDurationMinutes,
-                    trainingDurationMinutes: todayLog.trainingDurationMinutes,
-                    hoursWorked: todayLog.hoursWorked,
-                    documentsCompleted: todayLog.documentsCompleted,
-                    videoSessionsCompleted: todayLog.videoSessionsCompleted,
-                    targetId: todayLog.targetId,
-                    notes: todayLog.notes,
-                    goalMetTimes: newGoalMetTimes, // The updated goalMetTimes
-                    isFinalized: todayLog.isFinalized, // Preserve finalized status
+                    id: currentTodayLog.id,
+                    date: currentTodayLog.date,
+                    startTime: currentTodayLog.startTime,
+                    endTime: currentTodayLog.endTime,
+                    breakDurationMinutes: currentTodayLog.breakDurationMinutes,
+                    trainingDurationMinutes: currentTodayLog.trainingDurationMinutes,
+                    hoursWorked: currentTodayLog.hoursWorked,
+                    documentsCompleted: currentTodayLog.documentsCompleted,
+                    videoSessionsCompleted: currentTodayLog.videoSessionsCompleted,
+                    targetId: currentTodayLog.targetId,
+                    notes: currentTodayLog.notes,
+                    goalMetTimes: newGoalMetTimes,
+                    isFinalized: currentTodayLog.isFinalized,
                  };
 
-
                 try {
-                    // Call handleSaveWorkLog from page context, specifying the audit type
                     const savedLog = handleSaveWorkLog(payloadToSave, 'UPDATE_WORK_LOG_GOAL_MET');
-
-                    // Update the log within the current state array
                     const updatedLogs = [...prevLogs];
-                    updatedLogs[todayLogIndex] = savedLog; // Use the log returned by saveWorkLog
-                    return updatedLogs.sort((a, b) => b.date.localeCompare(a.date)); // Return the updated, sorted array
+                    updatedLogs[todayLogIndex] = savedLog;
+                    return updatedLogs.sort((a, b) => b.date.localeCompare(a.date));
                 } catch (error) {
                     console.error(`[Home] Error saving goal met time for target ${targetId}:`, error);
-                    // Toast handled in handleSaveWorkLog
-                    return prevLogs; // Return previous state on error
+                    return prevLogs;
                 }
             } else {
                  console.log(`[Home] Goal met time already recorded for target ${targetId}. Ignoring redundant notification.`);
-                 return prevLogs; // Return previous state if no update needed
+                 return prevLogs;
             }
         } else {
             console.warn("[Home] Goal met handler called, but no active log found for today.");
-            return prevLogs; // No log for today, return previous state
+            return prevLogs;
         }
     });
-  // Depends on handleSaveWorkLog from page context now
   }, [isClient, handleSaveWorkLog]);
 
-
-  // --- Set Active Target Handler ---
   const handleSetActiveTarget = useCallback((id: string) => {
-     if (!isClient || activeTarget?.id === id) return {} as UPHTarget; // Prevent update if already active
+     if (!isClient || activeTarget?.id === id) return {} as UPHTarget;
     try {
       const newActiveTarget = setActiveUPHTarget(id);
       setUphTargets(prev => prev.map(t => ({...t, isActive: t.id === newActiveTarget.id})));
@@ -713,22 +674,14 @@ export default function Home() {
        });
       throw error;
     }
-  }, [toast, isClient, activeTarget]); // Add activeTarget dependency
-
-  // Determine the log to display for today (must not be finalized)
-  const todayLog = useMemo(() => {
-     const todayDateStr = formatDateISO(new Date());
-     return workLogs.find(log => log.date === todayDateStr && !log.isFinalized) || null;
-  }, [workLogs]);
+  }, [toast, isClient, activeTarget]);
 
 
-  // --- Render Logic ---
   if (!isClient || isLoading) {
     return (
       <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
         <h1 className="text-3xl md:text-4xl font-bold mb-6 md:mb-8 text-center">Daily Dashboard</h1>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Adjust skeleton spans */}
           <Skeleton className="h-[250px] md:col-span-2 lg:col-span-2 w-full" />
           <Skeleton className="h-[250px] w-full" />
         </div>
@@ -752,7 +705,7 @@ export default function Home() {
           </Button>
            <Button asChild size="lg" variant="outline">
             <Link href="/log-input">
-                <Edit3 className="mr-2 h-5 w-5" /> Set Up & Start Tracking
+                <Edit3 className="mr-2 h-5 w-5" /> Set Up &amp; Start Tracking
             </Link>
           </Button>
         </div>
@@ -766,11 +719,11 @@ export default function Home() {
     );
   }
 
+
   return (
     <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 md:mb-8">
             <h1 className="text-3xl md:text-4xl font-bold text-center sm:text-left">Daily Dashboard</h1>
-             {/* Conditionally render "Clear Sample Data" button */}
              {sampleDataActive && (
                 <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -794,20 +747,18 @@ export default function Home() {
                     </AlertDialogContent>
                  </AlertDialog>
              )}
-             {/* Keep the end day button if today's ACTIVE log exists */}
-            {todayLog && !sampleDataActive && ( // Only show End Day if not in sample mode AND active log exists
+            {calculatedTodayLog && !sampleDataActive && (
                     <Button onClick={handleEndDay} variant="outline" size="sm" disabled={isLoading}>
                         <Archive className="mr-2 h-4 w-4" /> Finalize Today&apos;s Log
                     </Button>
              )}
         </div>
 
-         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start"> {/* Use items-start */}
-             {/* Quick Update Card - span 2 columns */}
+         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
             <Card className="md:col-span-2">
                 <CardHeader>
                     <CardTitle>Quick Update Today&apos;s Counts</CardTitle>
-                    {todayLog ? (
+                    {calculatedTodayLog ? (
                         <CardDescription>
                             Log Date: {formatDateISO(new Date())} (Active Log)
                         </CardDescription>
@@ -817,22 +768,22 @@ export default function Home() {
                          </CardDescription>
                      )}
                 </CardHeader>
-                <CardContent className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-center justify-center py-6"> {/* Centered items */}
+                <CardContent className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-center justify-center py-6">
                     <div className="flex flex-col items-center gap-2">
                         <Label htmlFor="quick-update-docs-input" className="min-w-[80px] sm:min-w-[auto]">Documents:</Label>
                         <div className="flex items-center gap-2">
                             <Button
                                 id="quick-update-docs-minus" aria-label="Decrease document count" variant="outline" size="icon" className="h-8 w-8"
-                                onClick={() => handleQuickUpdate('documentsCompleted', -1)} disabled={isLoading || !todayLog}
+                                onClick={() => handleQuickUpdate('documentsCompleted', -1)} disabled={isLoading || !calculatedTodayLog}
                             > <Minus className="h-4 w-4"/> </Button>
                              <Input
                                 id="quick-update-docs-input" type="text" inputMode="numeric" pattern="[0-9]*" value={docInputValue} onChange={handleDocInputChange} onBlur={handleDocInputBlur}
                                 className="h-9 w-16 text-center tabular-nums text-lg font-medium appearance-none"
-                                disabled={isLoading || !todayLog} aria-label="Document count input"
+                                disabled={isLoading || !calculatedTodayLog} aria-label="Document count input"
                              />
                             <Button
                                 id="quick-update-docs-plus" aria-label="Increase document count" variant="outline" size="icon" className="h-8 w-8"
-                                onClick={() => handleQuickUpdate('documentsCompleted', 1)} disabled={isLoading || !todayLog}
+                                onClick={() => handleQuickUpdate('documentsCompleted', 1)} disabled={isLoading || !calculatedTodayLog}
                             > <Plus className="h-4 w-4"/> </Button>
                         </div>
                     </div>
@@ -841,16 +792,16 @@ export default function Home() {
                          <div className="flex items-center gap-2">
                             <Button
                                 id="quick-update-videos-minus" aria-label="Decrease video count" variant="outline" size="icon" className="h-8 w-8"
-                                onClick={() => handleQuickUpdate('videoSessionsCompleted', -1)} disabled={isLoading || !todayLog}
+                                onClick={() => handleQuickUpdate('videoSessionsCompleted', -1)} disabled={isLoading || !calculatedTodayLog}
                             > <Minus className="h-4 w-4"/> </Button>
                              <Input
                                  id="quick-update-videos-input" type="text" inputMode="numeric" pattern="[0-9]*" value={videoInputValue} onChange={handleVideoInputChange} onBlur={handleVideoInputBlur}
                                  className="h-9 w-16 text-center tabular-nums text-lg font-medium appearance-none"
-                                 disabled={isLoading || !todayLog} aria-label="Video count input"
+                                 disabled={isLoading || !calculatedTodayLog} aria-label="Video count input"
                               />
                             <Button
                                 id="quick-update-videos-plus" aria-label="Increase video count" variant="outline" size="icon" className="h-8 w-8"
-                                onClick={() => handleQuickUpdate('videoSessionsCompleted', 1)} disabled={isLoading || !todayLog}
+                                onClick={() => handleQuickUpdate('videoSessionsCompleted', 1)} disabled={isLoading || !calculatedTodayLog}
                             > <Plus className="h-4 w-4"/> </Button>
                         </div>
                     </div>
@@ -858,42 +809,39 @@ export default function Home() {
                  <CardFooter className="flex flex-col items-center gap-2 pt-2 pb-4">
                     <Label className="text-sm font-medium">Log Non-Work Time</Label>
                     <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => handleAddBreak(15)} disabled={isLoading || !todayLog}>
+                        <Button variant="outline" size="sm" onClick={() => handleAddBreak(15)} disabled={isLoading || !calculatedTodayLog}>
                             <Coffee className="mr-2 h-4 w-4" /> Break (15m)
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleAddBreak(30)} disabled={isLoading || !todayLog}>
+                        <Button variant="outline" size="sm" onClick={() => handleAddBreak(30)} disabled={isLoading || !calculatedTodayLog}>
                             <Coffee className="mr-2 h-4 w-4" /> Lunch (30m)
                         </Button>
-                         <Button variant="outline" size="sm" onClick={() => handleAddTraining(5)} disabled={isLoading || !todayLog}>
+                         <Button variant="outline" size="sm" onClick={() => handleAddTraining(5)} disabled={isLoading || !calculatedTodayLog}>
                             <Brain className="mr-2 h-4 w-4" /> Train (5m)
                         </Button>
                     </div>
-                    {todayLog && (
+                    {calculatedTodayLog && (
                          <p className="text-xs text-muted-foreground mt-1">
-                            Current Break: {formatDurationFromMinutes(todayLog.breakDurationMinutes * 60)}
-                            {todayLog.trainingDurationMinutes && todayLog.trainingDurationMinutes > 0 &&
-                                ` | Training: ${formatDurationFromMinutes(todayLog.trainingDurationMinutes * 60)}`
+                            Current Break: {formatDurationFromMinutes(calculatedTodayLog.breakDurationMinutes * 60)}
+                            {calculatedTodayLog.trainingDurationMinutes && calculatedTodayLog.trainingDurationMinutes > 0 &&
+                                ` | Training: ${formatDurationFromMinutes(calculatedTodayLog.trainingDurationMinutes * 60)}`
                             }
                          </p>
                     )}
                 </CardFooter>
             </Card>
 
-
-            {/* Weekly Average Card */}
              <WeeklyAverages
                 allWorkLogs={workLogs}
                 targets={uphTargets}
                 activeTarget={activeTarget}
             />
 
-             {/* Start New Day Card - Conditionally Rendered */}
-             {!todayLog && (
-                 <Card className="border-dashed border-muted-foreground md:col-span-3"> {/* Span all columns */}
+             {!calculatedTodayLog && (
+                 <Card className="border-dashed border-muted-foreground md:col-span-3">
                     <CardHeader>
                         <CardTitle className="text-muted-foreground">Start Your Day</CardTitle>
                     </CardHeader>
-                     <CardContent className="flex flex-col items-center justify-center min-h-[150px] py-6 text-muted-foreground gap-4"> {/* Adjusted height */}
+                     <CardContent className="flex flex-col items-center justify-center min-h-[150px] py-6 text-muted-foreground gap-4">
                          <Info className="h-8 w-8" />
                          <p className="text-center max-w-xs">
                              No active work log found for today ({formatDateISO(new Date())}).
@@ -907,33 +855,28 @@ export default function Home() {
              )}
         </div>
 
-         {/* Daily Progress Indicator - Only show if todayLog (active one) exists */}
-         {todayLog && activeTarget && (
+         {calculatedTodayLog && activeTarget && (
              <DailyProgressIndicator
-                 todayLog={todayLog}
+                 todayLog={calculatedTodayLog}
                  activeTarget={activeTarget}
              />
          )}
 
-        {/* Productivity Dashboard (Today's Metrics Breakdown) - Only show if todayLog (active one) exists */}
-        {todayLog && (
+        {calculatedTodayLog && (
             <ProductivityDashboard
-                initialWorkLogs={todayLog ? [todayLog] : []} // Pass only today's ACTIVE log
+                initialWorkLogs={calculatedTodayLog ? [calculatedTodayLog] : []}
                 initialUphTargets={uphTargets}
-                initialActiveTarget={activeTarget} // Pass active target for context
-                deleteWorkLogAction={handleDeleteWorkLog} // Pass delete action
-                setActiveUPHTargetAction={handleSetActiveTarget} // Pass set active action
-                onGoalMet={handleGoalMet} // Pass the callback
+                initialActiveTarget={activeTarget}
+                deleteWorkLogAction={handleDeleteWorkLog}
+                setActiveUPHTargetAction={handleSetActiveTarget}
+                onGoalMet={handleGoalMet}
             />
         )}
 
-         {/* Message if no log for today but data exists and log hasn't been created yet */}
-         {!todayLog && hasInitialData && !isLoading && (
-             // This message might be redundant now with the "Start New Day" card
+         {!calculatedTodayLog && hasInitialData && !isLoading && (
              <></>
         )}
     </div>
   );
 }
-
 

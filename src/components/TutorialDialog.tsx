@@ -11,7 +11,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { HelpCircle, ChevronLeft, ChevronRight, History, Settings, LayoutDashboard, List, BarChart, Trash2, Archive } from 'lucide-react'; // Added Archive icon
+import { HelpCircle, ChevronLeft, ChevronRight, History, Settings, LayoutDashboard, List, BarChart, Trash2, Archive, Zap } from 'lucide-react'; // Added Archive, Zap icon
 
 const tutorialPages = [
  {
@@ -30,7 +30,7 @@ const tutorialPages = [
         <ol className="list-decimal pl-5 space-y-3 mb-4">
           <li>
             <strong className="block mb-1">Load Sample Data:</strong>
-            <p>Click the &quot;Load Sample Data&quot; button on the dashboard. This will populate the app with example work logs and UPH targets, allowing you to explore all features immediately. You can easily clear this sample data later from the dashboard using the &quot;Clear Sample Data &amp; Start Fresh&quot; button (<Trash2 className="inline-block h-3.5 w-3.5 align-text-bottom" /> icon) when you&apos;re ready to input your own information.</p>
+            <p>Click the &quot;Load Sample Data&quot; button on the dashboard. This will populate the app with example work logs and UPH targets, allowing you to explore all features immediately. You can easily clear this sample data later from the dashboard using the &quot;Clear Sample Data &amp; Start Fresh&quot; button (<RefreshCcw className="inline-block h-3.5 w-3.5 align-text-bottom" /> icon) when you&apos;re ready to input your own information.</p>
           </li>
           <li>
             <strong className="block mb-1">Set Up & Start Tracking Manually:</strong>
@@ -95,7 +95,7 @@ const tutorialPages = [
             </ul>
           </li>
           <li>
-            <strong>Today's Metrics:</strong> A summary of your performance against all defined UPH targets for the current day, offering a comprehensive view of your productivity in individual cards per target. You can click a target's card to make it the active target for dashboard calculations.
+            <strong>Today's Metrics:</strong> A summary of your performance against all defined UPH targets for the current day, offering a comprehensive view of your productivity in individual cards per target. You can click a target's card to make it the active target for dashboard calculations (unless auto-switch is enabled).
           </li>
         </ul>
         <h4 className="font-medium text-md mt-4 mb-1">Data Management:</h4>
@@ -160,7 +160,7 @@ const tutorialPages = [
     )
   },
   {
-    title: "Previous Logs, Settings & Audit", // Combined Title
+    title: "Previous Logs, Settings & Audit", 
     content: (
       <>
         <h3 className="font-semibold text-lg mb-3">4. Previous Logs Page (<History className="inline-block h-4 w-4 align-text-bottom" />)</h3>
@@ -197,7 +197,10 @@ const tutorialPages = [
             <strong>Default Durations:</strong> Set the default Break and Training durations (in minutes) that will be pre-filled when starting a new day or resetting the log input form. Set these to 0 if you prefer to log them manually each day.
           </li>
           <li>
-            <strong>Usage:</strong> These defaults are used when you click "Start New Day" on the dashboard or "Reset to Today's Defaults" on the Log Input page.
+            <strong>Auto-Switch Active Target (<Zap className="inline-block h-4 w-4 align-text-bottom" />):</strong> Enable this to have the dashboard automatically select the UPH target whose progress is closest to being &quot;On Schedule&quot; as the active target. This helps dynamically focus on the most relevant target based on current performance.
+          </li>
+          <li>
+            <strong>Usage:</strong> Default times/durations are used when you click "Start New Day" on the dashboard or "Reset to Today's Defaults" on the Log Input page.
           </li>
            <li>
              <strong>Clear All Application Data:</strong> A button to permanently delete all stored work logs, UPH targets, and saved settings. Use with caution!
@@ -330,5 +333,3 @@ const TutorialDialog: React.FC<TutorialDialogProps> = ({ contextualTriggerText }
 };
 
 export default TutorialDialog;
-
-    

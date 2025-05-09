@@ -79,4 +79,5 @@ export interface UserSettings {
   defaultEndTime: string; // Format: 'HH:mm'
   defaultBreakMinutes: number; // Default break time in minutes
   defaultTrainingMinutes: number; // Default training time in minutes
+  autoSwitchTargetBySchedule?: boolean; // New setting for auto-switching targets
 }

@@ -1,7 +1,7 @@
 
 // src/lib/actions.ts
 import type { DailyWorkLog, UPHTarget, AuditLogEntry, AuditLogActionType, UserSettings } from '@/types';
-import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
+import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes, calculateTimeAheadBehindSchedule } from '@/lib/utils';
 import { sampleWorkLogs, sampleUPHTargets, sampleAuditLogs } from './sample-data';
 import { parseISO, isValid, startOfDay, isBefore, isSameDay } from 'date-fns'; // Import date-fns functions
 
@@ -571,6 +571,7 @@ export function loadSampleData(): boolean {
             defaultEndTime: '22:30',
             defaultBreakMinutes: 0, // Start with 0 break
             defaultTrainingMinutes: 0, // Start with 0 training
+            autoSwitchTargetBySchedule: false, // Default for new setting
           });
           // Note: saveDefaultSettings logs its own audit entry
         }
@@ -641,6 +642,7 @@ export function getDefaultSettings(): UserSettings {
     defaultEndTime: '22:30',
     defaultBreakMinutes: 0, // Default break to 0
     defaultTrainingMinutes: 0, // Default training to 0
+    autoSwitchTargetBySchedule: false, // Default for new setting
   };
   return getFromLocalStorage<UserSettings>(SETTINGS_KEY, defaultSettings);
 }
@@ -675,16 +677,26 @@ export function saveDefaultSettings(settings: UserSettings): UserSettings {
       ...settings,
       defaultBreakMinutes: breakMinutes,
       defaultTrainingMinutes: trainingMinutes,
-  }
+      autoSwitchTargetBySchedule: settings.autoSwitchTargetBySchedule ?? false, // Ensure it defaults to false if undefined
+  };
 
 
   const previousSettings = getDefaultSettings();
   saveToLocalStorage(SETTINGS_KEY, validatedSettings);
   saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // Mark that real data exists
+
+  const changes: string[] = [];
+  if (previousSettings.defaultStartTime !== validatedSettings.defaultStartTime) changes.push(`Start Time: ${previousSettings.defaultStartTime} -> ${validatedSettings.defaultStartTime}`);
+  if (previousSettings.defaultEndTime !== validatedSettings.defaultEndTime) changes.push(`End Time: ${previousSettings.defaultEndTime} -> ${validatedSettings.defaultEndTime}`);
+  if (previousSettings.defaultBreakMinutes !== validatedSettings.defaultBreakMinutes) changes.push(`Break: ${previousSettings.defaultBreakMinutes}m -> ${validatedSettings.defaultBreakMinutes}m`);
+  if (previousSettings.defaultTrainingMinutes !== validatedSettings.defaultTrainingMinutes) changes.push(`Training: ${previousSettings.defaultTrainingMinutes}m -> ${validatedSettings.defaultTrainingMinutes}m`);
+  if ((previousSettings.autoSwitchTargetBySchedule ?? false) !== (validatedSettings.autoSwitchTargetBySchedule ?? false)) changes.push(`Auto Switch Target: ${(previousSettings.autoSwitchTargetBySchedule ?? false)} -> ${(validatedSettings.autoSwitchTargetBySchedule ?? false)}`);
+
+
   addAuditLog(
     'UPDATE_SETTINGS',
     'Settings',
-    `Updated default settings. Start: ${validatedSettings.defaultStartTime}, End: ${validatedSettings.defaultEndTime}, Break: ${validatedSettings.defaultBreakMinutes}m, Training: ${validatedSettings.defaultTrainingMinutes}m.`,
+    `Updated default settings. ${changes.join(', ') || 'No changes.'}`,
     undefined,
     previousSettings,
     validatedSettings
