@@ -405,7 +405,7 @@ export default function AnalyticsPage() {
                      <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs" isAnimationActive={false}> {/* Disabled animation */}
                        <LabelList
                          dataKey="documents"
-                         position="insideTop" // Changed from center to insideTop
+                         position="middle" // Changed from insideTop to middle
                          fill="hsl(var(--background))"
                          fontSize={10}
                          formatter={(value: number) => (value > 0 ? String(value) : '')} // Show count if > 0
@@ -414,7 +414,7 @@ export default function AnalyticsPage() {
                      <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos" isAnimationActive={false}> {/* Top bar gets radius, disabled animation */}
                        <LabelList
                          dataKey="videos"
-                         position="insideTop" // Changed from center to insideTop
+                         position="middle" // Changed from insideTop to middle
                          fill="hsl(var(--background))"
                          fontSize={10}
                          formatter={(value: number) => (value > 0 ? String(value) : '')} // Show count if > 0
