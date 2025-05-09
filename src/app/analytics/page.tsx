@@ -6,7 +6,7 @@ import type { DailyWorkLog, UPHTarget, AuditLogEntry } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LabelList, ReferenceLine, Label } from 'recharts'; // Added ReferenceLine and Label
-import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, getHours, isSameDay, parse, setHours, setMinutes, setSeconds, isAfter, addDays, addHours } from 'date-fns';
+import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, getHours, isSameDay, parse, setHours, setMinutes, setSeconds, isAfter, addDays, addHours, getDayOfYear, getYear } from 'date-fns'; // Added getDayOfYear, getYear
 import { DateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -102,7 +102,9 @@ export default function AnalyticsPage() {
     return null; // No single date selected or range spans multiple days
   }, [filterDateRange, isSingleDaySelected]);
 
-   // Find the work log for the selected date
+   // **This is no longer the primary driver for the hourly chart calculation**
+   // It's kept here mainly for potential future use or display purposes,
+   // but hourlyActivityChartData now relies directly on audit logs.
   const selectedDayLog = useMemo(() => {
     if (!selectedDateForHourlyChart) return null;
     const selectedDateStr = format(selectedDateForHourlyChart, 'yyyy-MM-dd');
@@ -133,43 +135,75 @@ export default function AnalyticsPage() {
     });
   }, [filteredLogs, targets, activeTarget]);
 
-  // Prepare data for hourly completions chart (based on audit log)
+  // Prepare data for hourly completions chart (based ONLY on audit log)
   const hourlyActivityChartData = useMemo(() => {
-     if (!selectedDateForHourlyChart || !selectedDayLog || !auditLogs || auditLogs.length === 0) {
-       return []; // Cannot calculate if no log, no date, or no audit logs
+     // Only needs a selected date and audit logs
+     if (!selectedDateForHourlyChart || !auditLogs || auditLogs.length === 0) {
+       return [];
      }
 
-     const selectedDateStr = format(selectedDateForHourlyChart, 'yyyy-MM-dd');
      const startOfSelectedDay = startOfDay(selectedDateForHourlyChart);
      const endOfSelectedDay = endOfDay(selectedDateForHourlyChart);
+     const selectedDayIdentifier = `${getYear(selectedDateForHourlyChart)}-${getDayOfYear(selectedDateForHourlyChart)}`;
 
      // 1. Filter relevant WorkLog audit logs for the selected day
      const relevantAuditLogs = auditLogs
        .filter(log => {
          if (log.entityType !== 'WorkLog') return false;
-         if (log.entityId !== selectedDayLog.id) return false; // Filter by the specific log ID for the day
          const logTimestamp = parseISO(log.timestamp);
-         return isValid(logTimestamp) && logTimestamp >= startOfSelectedDay && logTimestamp <= endOfSelectedDay;
+         if (!isValid(logTimestamp)) return false;
+          // Check if the log's timestamp falls within the selected day
+         if (!(logTimestamp >= startOfSelectedDay && logTimestamp <= endOfSelectedDay)) {
+            return false;
+         }
+          // Additional check: Ensure the log pertains to the correct *day*
+          // This helps if a log entry was somehow created with a future date but timestamped today
+          let logDateFromEntry: string | null = null;
+          if (log.newState && typeof log.newState === 'object' && 'date' in log.newState && typeof log.newState.date === 'string') {
+             logDateFromEntry = log.newState.date;
+          } else if (log.previousState && typeof log.previousState === 'object' && 'date' in log.previousState && typeof log.previousState.date === 'string') {
+              logDateFromEntry = log.previousState.date;
+          }
+
+           if (logDateFromEntry) {
+               const parsedLogDate = parseISO(logDateFromEntry + 'T00:00:00');
+               if (isValid(parsedLogDate)) {
+                  const logDayIdentifier = `${getYear(parsedLogDate)}-${getDayOfYear(parsedLogDate)}`;
+                  if (logDayIdentifier !== selectedDayIdentifier) {
+                     // console.log(`Skipping log ${log.id}: date mismatch (${logDateFromEntry} vs selected ${format(selectedDateForHourlyChart, 'yyyy-MM-dd')})`);
+                      return false; // Mismatched date within the log data itself
+                  }
+               }
+           }
+
+         return true; // If timestamp matches and date (if available) matches
        })
        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()); // Sort chronologically
 
       if (relevantAuditLogs.length === 0) {
-          console.log(`[AnalyticsPage] No relevant audit logs found for ${selectedDateStr}`);
+          console.log(`[AnalyticsPage] No relevant audit logs found for ${format(selectedDateForHourlyChart, 'yyyy-MM-dd')}`);
           return [];
       }
 
      // 2. Track hourly states based on newState in audit logs
      const hourlyStates: Record<number, { documents: number; videos: number; timestamp: string }> = {};
+     let minHour = 24;
+     let maxHour = -1;
+
      for (const auditEntry of relevantAuditLogs) {
+         // Focus on newState as it reflects the state *after* the action
          if (auditEntry.newState && typeof auditEntry.newState === 'object') {
              const newState = auditEntry.newState as Partial<DailyWorkLog>;
-             // Check if newState contains count information (for QUICK_COUNT or regular UPDATE)
+             // Check if newState contains count information
              if (newState.documentsCompleted !== undefined || newState.videoSessionsCompleted !== undefined) {
                  const timestamp = parseISO(auditEntry.timestamp);
                  if (isValid(timestamp)) {
                      const hour = getHours(timestamp);
+                     minHour = Math.min(minHour, hour);
+                     maxHour = Math.max(maxHour, hour);
+
                      // Update the state for this hour with the latest known counts from this log entry
-                     // Ensure we handle potential null/undefined from newState
+                     // Use previous state for the hour if current entry doesn't have a specific count
                      hourlyStates[hour] = {
                          documents: newState.documentsCompleted ?? hourlyStates[hour]?.documents ?? 0,
                          videos: newState.videoSessionsCompleted ?? hourlyStates[hour]?.videos ?? 0,
@@ -178,67 +212,72 @@ export default function AnalyticsPage() {
                  }
              }
          }
+         // Also consider previousState for edge cases (like first entry might only have previous)
+         else if (auditEntry.previousState && typeof auditEntry.previousState === 'object') {
+             const prevState = auditEntry.previousState as Partial<DailyWorkLog>;
+             if (prevState.documentsCompleted !== undefined || prevState.videoSessionsCompleted !== undefined) {
+                  const timestamp = parseISO(auditEntry.timestamp);
+                 if (isValid(timestamp)) {
+                     const hour = getHours(timestamp);
+                     minHour = Math.min(minHour, hour);
+                     maxHour = Math.max(maxHour, hour);
+                     // Only set if not already set by newState for this hour
+                     if (!hourlyStates[hour]) {
+                         hourlyStates[hour] = {
+                            documents: prevState.documentsCompleted ?? 0,
+                            videos: prevState.videoSessionsCompleted ?? 0,
+                            timestamp: auditEntry.timestamp, // Use the timestamp of this audit entry
+                         };
+                     }
+                 }
+             }
+         }
+     }
+
+      // Handle case where no count updates were found
+     if (minHour > maxHour) {
+        console.log(`[AnalyticsPage] No audit logs with count updates found for ${format(selectedDateForHourlyChart, 'yyyy-MM-dd')}`);
+        return [];
      }
 
 
      // 3. Calculate hourly deltas
-     const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
-     const startMatch = selectedDayLog.startTime.match(timeRegex);
-     const endMatch = selectedDayLog.endTime.match(timeRegex);
-
-     if (!startMatch || !endMatch) {
-       console.warn('Invalid start or end time format in log for hourly chart:', selectedDayLog);
-       return [];
-     }
-
-     const startHour = parseInt(startMatch[1], 10);
-     const endHour = parseInt(endMatch[1], 10);
-
      const hourlyDeltas: Record<number, { documents: number; videos: number }> = {};
      let lastKnownCounts = { documents: 0, videos: 0 };
 
-     // Find initial state from the first relevant log if available
-       const firstLogState = relevantAuditLogs[0]?.previousState as Partial<DailyWorkLog> ?? relevantAuditLogs[0]?.newState as Partial<DailyWorkLog>;
-       if (firstLogState) {
-           lastKnownCounts = {
-               documents: firstLogState.documentsCompleted ?? 0,
-               videos: firstLogState.videoSessionsCompleted ?? 0,
-           };
-            // Assign initial counts to the start hour if they occurred before or during the start hour
-            const firstLogTimestamp = parseISO(relevantAuditLogs[0].timestamp);
-            if (isValid(firstLogTimestamp) && getHours(firstLogTimestamp) <= startHour) {
-                // Use the state recorded for the start hour if available, else use the derived lastKnownCounts
-                const initialHourState = hourlyStates[startHour] ?? lastKnownCounts;
-                 hourlyDeltas[startHour] = {
-                    documents: Math.max(0, initialHourState.documents - 0), // Delta from 0
-                    videos: Math.max(0, initialHourState.videos - 0),     // Delta from 0
-                };
-                lastKnownCounts = initialHourState; // Update last known counts based on the state used
-            }
-       }
+     // Attempt to establish baseline from the very first relevant audit entry's previousState
+      const firstRelevantEntry = relevantAuditLogs[0];
+      if (firstRelevantEntry?.previousState && typeof firstRelevantEntry.previousState === 'object') {
+        const prevState = firstRelevantEntry.previousState as Partial<DailyWorkLog>;
+        lastKnownCounts = {
+            documents: prevState.documentsCompleted ?? 0,
+            videos: prevState.videoSessionsCompleted ?? 0,
+        };
+        console.log(`[AnalyticsPage] Initial baseline counts from first log's previousState:`, lastKnownCounts);
+      } else {
+         console.log(`[AnalyticsPage] Could not establish baseline from first log's previousState. Starting at 0.`);
+      }
 
 
-     // Iterate through hours of the shift
-     for (let hour = startHour; hour <= endHour; hour++) {
-        // Skip initializing if already done for the start hour
-        if (hour === startHour && hourlyDeltas[startHour]) {
-             continue;
+     // Iterate through hours found in logs
+     for (let hour = minHour; hour <= maxHour; hour++) {
+        const currentHourState = hourlyStates[hour];
+
+        // If state exists for this hour, use it; otherwise, carry over from last known
+        const currentHourCounts = currentHourState
+            ? { documents: currentHourState.documents, videos: currentHourState.videos }
+            : lastKnownCounts;
+
+        // Calculate the difference from the last known counts
+        const deltaDocs = Math.max(0, currentHourCounts.documents - lastKnownCounts.documents);
+        const deltaVideos = Math.max(0, currentHourCounts.videos - lastKnownCounts.videos);
+
+        hourlyDeltas[hour] = { documents: deltaDocs, videos: deltaVideos };
+
+        // Update last known counts for the next iteration *only if a state was found for this hour*
+        if (currentHourState) {
+             lastKnownCounts = currentHourCounts;
         }
-
-       const currentHourState = hourlyStates[hour];
-       // If no update occurred in this hour, the counts remain the same as the last known counts
-       const currentHourCounts = currentHourState
-         ? { documents: currentHourState.documents, videos: currentHourState.videos }
-         : lastKnownCounts;
-
-       // Calculate the difference from the last known state
-       const deltaDocs = Math.max(0, currentHourCounts.documents - lastKnownCounts.documents);
-       const deltaVideos = Math.max(0, currentHourCounts.videos - lastKnownCounts.videos);
-
-       hourlyDeltas[hour] = { documents: deltaDocs, videos: deltaVideos };
-
-       // Update last known counts for the next iteration
-       lastKnownCounts = currentHourCounts;
      }
 
      // 4. Format for Chart
@@ -249,11 +288,11 @@ export default function AnalyticsPage() {
          documents: counts.documents,
          videos: counts.videos,
        }))
-       .sort((a, b) => a.hour - b.hour)
-       .filter(item => item.documents > 0 || item.videos > 0); // Optionally filter out hours with zero activity
+       .sort((a, b) => a.hour - b.hour);
+       // Keep hours with zero activity for now, could filter later if needed
+       // .filter(item => item.documents > 0 || item.videos > 0);
 
-
-   }, [selectedDayLog, selectedDateForHourlyChart, auditLogs]);
+   }, [selectedDateForHourlyChart, auditLogs]);
 
 
   // Chart Configurations
@@ -378,7 +417,10 @@ export default function AnalyticsPage() {
                          fill="hsl(var(--foreground))"
                          fontSize={10}
                          formatter={(value: number, entry: any) => {
-                           const total = (entry?.documents ?? 0) + (entry?.videos ?? 0);
+                           // Access payload data directly from the entry object provided by LabelList
+                           const payload = entry;
+                           if (!payload) return '';
+                           const total = (payload.documents || 0) + (payload.videos || 0);
                            return total > 0 ? total : ''; // Show total if > 0
                          }}
                        />
@@ -718,3 +760,5 @@ export default function AnalyticsPage() {
     </div>
   );
 }
+
+    
