@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -330,7 +329,7 @@ export default function AnalyticsPage() {
               hourlyActivityChartData.length > 0 ? (
                 <ChartContainer config={hourlyActivityChartConfig} className="h-[300px] w-full">
                   {/* Use stacked BarChart */}
-                  <BarChart data={hourlyActivityChartData} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}> {/* Increased top margin for total label */}
+                  <BarChart data={hourlyActivityChartData} margin={{ top: 20, right: 20, left: -10, bottom: 5 }} isAnimationActive={false}> {/* Increased top margin for total label, disabled animation */}
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis
                       dataKey="hourLabel"
@@ -355,7 +354,7 @@ export default function AnalyticsPage() {
                        content={<></>} // Use empty fragment to disable content
                      />
                      {/* Define Bars for documents and videos */}
-                     <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs">
+                     <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs" isAnimationActive={false}> {/* Disabled animation */}
                        {/* ADD LabelList for documents count */}
                        <LabelList
                          position="center" // Position inside the bar segment
@@ -364,7 +363,7 @@ export default function AnalyticsPage() {
                          formatter={(value: number) => (value > 0 ? value : '')} // Show count if > 0
                        />
                      </Bar>
-                     <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos"> {/* Top bar gets radius */}
+                     <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos" isAnimationActive={false}> {/* Top bar gets radius, disabled animation */}
                        {/* ADD LabelList for videos count */}
                        <LabelList
                          position="center" // Position inside the bar segment
@@ -378,8 +377,7 @@ export default function AnalyticsPage() {
                          offset={5} // Add some offset above the bar
                          fill="hsl(var(--foreground))"
                          fontSize={10}
-                         formatter={(value: number, entry: any) => { // Changed props to entry
-                           // Access the full data entry object directly
+                         formatter={(value: number, entry: any) => {
                            const total = (entry?.documents ?? 0) + (entry?.videos ?? 0);
                            return total > 0 ? total : ''; // Show total if > 0
                          }}
@@ -414,6 +412,7 @@ export default function AnalyticsPage() {
                 <LineChart
                   data={dailyWorkChartData}
                   margin={{ top: 5, right: 20, left: -10, bottom: 5 }}
+                  isAnimationActive={false} // Disable animation
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))"/>
                   <XAxis
@@ -492,10 +491,10 @@ export default function AnalyticsPage() {
                        />
                      }
                    />
-                  <Line yAxisId="left" type="monotone" dataKey="documents" stroke={CHART_COLORS.documents} strokeWidth={2} dot={false} name="documents" />
-                  <Line yAxisId="left" type="monotone" dataKey="videos" stroke={CHART_COLORS.videos} strokeWidth={2} dot={false} name="videos" />
+                  <Line yAxisId="left" type="monotone" dataKey="documents" stroke={CHART_COLORS.documents} strokeWidth={2} dot={false} name="documents" isAnimationActive={false} /> {/* Disable animation */}
+                  <Line yAxisId="left" type="monotone" dataKey="videos" stroke={CHART_COLORS.videos} strokeWidth={2} dot={false} name="videos" isAnimationActive={false} /> {/* Disable animation */}
                   {/* Hours Worked Line associated with the right axis */}
-                   <Line yAxisId="right" type="monotone" dataKey="hoursWorked" stroke={CHART_COLORS.hoursWorked} strokeWidth={2} strokeDasharray="5 5" dot={false} name="hoursWorked" />
+                   <Line yAxisId="right" type="monotone" dataKey="hoursWorked" stroke={CHART_COLORS.hoursWorked} strokeWidth={2} strokeDasharray="5 5" dot={false} name="hoursWorked" isAnimationActive={false} /> {/* Disable animation */}
                    <ChartLegend content={<ChartLegendContent />} />
                 </LineChart>
               </ChartContainer>
@@ -524,7 +523,7 @@ export default function AnalyticsPage() {
           <CardContent>
             {dailyWorkChartData.length > 0 ? (
                 <ChartContainer config={dailyUPHChartConfig} className="h-[300px] w-full">
-                    <BarChart data={dailyWorkChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                    <BarChart data={dailyWorkChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }} isAnimationActive={false}> {/* Disable animation */}
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))"/>
                         <XAxis
                             dataKey="date"
@@ -546,7 +545,7 @@ export default function AnalyticsPage() {
                            content={<ChartTooltipContent hideLabel />}
                         />
                         {/* Actual UPH Bar */}
-                        <Bar dataKey="uph" fill={CHART_COLORS.uph} radius={4} name="Actual UPH"/>
+                        <Bar dataKey="uph" fill={CHART_COLORS.uph} radius={4} name="Actual UPH" isAnimationActive={false}/> {/* Disable animation */}
 
                         {/* Add Reference Line for Active Target UPH */}
                         {activeTarget && activeTarget.targetUPH > 0 && (
@@ -555,6 +554,7 @@ export default function AnalyticsPage() {
                                 stroke={CHART_COLORS.targetUPHLine}
                                 strokeDasharray="3 3"
                                 strokeWidth={1.5}
+                                isAnimationActive={false} // Disable animation
                              >
                                 {/* Optional: Add a label to the line */}
                                  <Label
