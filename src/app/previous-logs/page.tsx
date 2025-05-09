@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -17,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FileSpreadsheet, Filter, X, Calendar as CalendarIcon } from 'lucide-react'; // Removed ArrowUpDown, BookOpen, Clock, Video, TargetIcon
+import { FileSpreadsheet, Filter, X, Calendar as CalendarIcon, ArrowUpDown } from 'lucide-react'; // Added ArrowUpDown
 import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, isBefore } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { Separator } from '@/components/ui/separator';
@@ -25,8 +24,9 @@ import { Separator } from '@/components/ui/separator';
 // Pagination settings
 const ITEMS_PER_PAGE = 10;
 
-// Default sort by date descending (applied in getWorkLogs or initial load)
-const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'desc';
+// Sorting types
+type SortableColumn = keyof Pick<DailyWorkLog, 'date' | 'hoursWorked' | 'documentsCompleted' | 'videoSessionsCompleted'> | 'avgUPH';
+type SortDirection = 'asc' | 'desc';
 
 export default function PreviousLogsPage() {
   const [allLogs, setAllLogs] = useState<DailyWorkLog[]>([]);
@@ -38,6 +38,10 @@ export default function PreviousLogsPage() {
   const [filterTerm, setFilterTerm] = useState('');
   const [filterDateRange, setFilterDateRange] = useState<DateRange | undefined>(undefined);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+
+  // Sorting State
+  const [sortColumn, setSortColumn] = useState<SortableColumn | null>('date'); // Default sort by date
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc'); // Default descending
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -52,7 +56,7 @@ export default function PreviousLogsPage() {
     console.log('[PreviousLogsPage] Loading data...');
     setIsLoading(true);
     try {
-      const loadedLogs = getWorkLogs(); // getWorkLogs now returns all logs, sorted by date descending by default
+      const loadedLogs = getWorkLogs(); // getWorkLogs returns all logs, sorted by date descending by default
       const loadedTargets = getUPHTargets();
       setAllLogs(loadedLogs); // Store all logs initially
       setUphTargets(loadedTargets);
@@ -93,11 +97,11 @@ export default function PreviousLogsPage() {
   }, [toast, loadData]);
 
 
-  // Filtering Logic
-  const filteredLogs = useMemo(() => {
+  // Filtering and Sorting Logic
+  const filteredAndSortedLogs = useMemo(() => {
     const todayStart = startOfDay(new Date()); // Get start of today
 
-    let logsToFilter = allLogs.filter(log => {
+    let logsToProcess = allLogs.filter(log => {
         const logDateObj = parseISO(log.date + 'T00:00:00');
         if (!isValid(logDateObj)) return false;
 
@@ -108,7 +112,7 @@ export default function PreviousLogsPage() {
     });
 
     if (filterTerm) {
-        logsToFilter = logsToFilter.filter(log => {
+        logsToProcess = logsToProcess.filter(log => {
             const searchTerm = filterTerm.toLowerCase();
             const logTarget = uphTargets.find(t => t.id === log.targetId) ?? activeTarget;
             const logDateObj = parseISO(log.date + 'T00:00:00');
@@ -128,40 +132,90 @@ export default function PreviousLogsPage() {
     }
 
     if (filterDateRange?.from) {
-        logsToFilter = logsToFilter.filter(log => {
+        logsToProcess = logsToProcess.filter(log => {
             const logDateObj = parseISO(log.date + 'T00:00:00');
             return isValid(logDateObj) && logDateObj >= startOfDay(filterDateRange.from!);
         });
     }
     if (filterDateRange?.to) {
-        logsToFilter = logsToFilter.filter(log => {
+        logsToProcess = logsToProcess.filter(log => {
             const logDateObj = parseISO(log.date + 'T00:00:00');
             return isValid(logDateObj) && logDateObj <= endOfDay(filterDateRange.to!);
         });
     }
-    // Logs are already sorted by date descending from getWorkLogs
-    return logsToFilter;
-  }, [allLogs, filterTerm, filterDateRange, activeTarget, uphTargets]);
 
-  // Pagination Logic - directly uses filteredLogs as sorting is removed
+    // Sorting Logic
+    if (sortColumn) {
+        logsToProcess.sort((a, b) => {
+            let valA: string | number | Date;
+            let valB: string | number | Date;
+
+            if (sortColumn === 'date') {
+                valA = parseISO(a.date + 'T00:00:00');
+                valB = parseISO(b.date + 'T00:00:00');
+            } else if (sortColumn === 'avgUPH') {
+                 const targetA = uphTargets.find(t => t.id === a.targetId) ?? activeTarget;
+                 const targetB = uphTargets.find(t => t.id === b.targetId) ?? activeTarget;
+                 valA = targetA ? calculateDailyUPH(a, targetA) : 0;
+                 valB = targetB ? calculateDailyUPH(b, targetB) : 0;
+            } else {
+                valA = a[sortColumn as keyof DailyWorkLog] ?? 0; // Handle potential undefined
+                valB = b[sortColumn as keyof DailyWorkLog] ?? 0;
+            }
+
+            let comparison = 0;
+            if (valA instanceof Date && valB instanceof Date) {
+                comparison = valA.getTime() - valB.getTime();
+            } else if (typeof valA === 'number' && typeof valB === 'number') {
+                comparison = valA - valB;
+            } else if (typeof valA === 'string' && typeof valB === 'string') {
+                 comparison = valA.localeCompare(valB);
+            } else {
+                 comparison = String(valA).localeCompare(String(valB)); // Fallback comparison
+            }
+
+            return sortDirection === 'asc' ? comparison : -comparison;
+        });
+    }
+
+
+    return logsToProcess;
+  }, [allLogs, filterTerm, filterDateRange, sortColumn, sortDirection, activeTarget, uphTargets]);
+
+  // Pagination Logic - uses filteredAndSortedLogs
   const paginatedLogs = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredLogs.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [filteredLogs, currentPage]);
+    return filteredAndSortedLogs.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredAndSortedLogs, currentPage]);
 
-  const totalPages = useMemo(() => Math.ceil(filteredLogs.length / ITEMS_PER_PAGE), [filteredLogs]);
+  const totalPages = useMemo(() => Math.ceil(filteredAndSortedLogs.length / ITEMS_PER_PAGE), [filteredAndSortedLogs]);
 
 
   // Handlers
   const handleResetFilters = () => {
      setFilterTerm('');
      setFilterDateRange(undefined);
+     setSortColumn('date'); // Reset sort to default
+     setSortDirection('desc');
      setCurrentPage(1);
-     // No sorting reset needed
   };
 
-  // Check if filters are active
-  const hasActiveFilters = filterTerm || filterDateRange;
+   // Handle Sorting
+  const handleSort = useCallback((column: SortableColumn) => {
+    if (sortColumn === column) {
+      // If clicking the same column, toggle direction
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      // If clicking a new column, set column and default to ascending
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+    setCurrentPage(1); // Reset to first page on sort change
+  }, [sortColumn]);
+
+
+  // Check if filters or custom sort are active
+  const hasActiveFilters = filterTerm || filterDateRange || sortColumn !== 'date' || sortDirection !== 'desc';
 
 
   // Preset Date Range Handlers
@@ -252,7 +306,7 @@ export default function PreviousLogsPage() {
   }, [toast]);
 
   const handleExportData = useCallback(() => {
-    if (filteredLogs.length === 0) { // Use filteredLogs for export
+    if (filteredAndSortedLogs.length === 0) { // Use filteredAndSortedLogs for export
       toast({
         title: "No Data to Export",
         description: "There are no logs matching the current filters to export.",
@@ -260,7 +314,7 @@ export default function PreviousLogsPage() {
       return;
     }
     try {
-      const csvData = generateCSVContent(filteredLogs, uphTargets); // Use filteredLogs
+      const csvData = generateCSVContent(filteredAndSortedLogs, uphTargets); // Use filteredAndSortedLogs
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       downloadCSV(csvData, `metric_daily_previous_logs_${timestamp}.csv`);
       toast({
@@ -277,7 +331,18 @@ export default function PreviousLogsPage() {
       });
        addAuditLog('SYSTEM_EXPORT_DATA_FAILED', 'System', `Failed to export previous work logs to CSV. Error: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [filteredLogs, uphTargets, generateCSVContent, downloadCSV, toast]); // Use filteredLogs
+  }, [filteredAndSortedLogs, uphTargets, generateCSVContent, downloadCSV, toast]); // Use filteredAndSortedLogs
+
+
+  // Helper to render sort icon
+  const renderSortIcon = (column: SortableColumn) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="ml-1 h-3 w-3 opacity-30" />;
+    }
+    return sortDirection === 'asc' ?
+      <ArrowUpDown className="ml-1 h-3 w-3 transform rotate-180" /> : // Up arrow (conceptually)
+      <ArrowUpDown className="ml-1 h-3 w-3" />; // Down arrow (conceptually)
+  };
 
 
   if (isLoading) {
@@ -292,18 +357,18 @@ export default function PreviousLogsPage() {
     <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 md:mb-8">
         <h1 className="text-3xl md:text-4xl font-bold text-center sm:text-left">Previous Work Logs</h1>
-        <Button onClick={handleExportData} disabled={filteredLogs.length === 0}>
-          <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Filtered ({filteredLogs.length})
+        <Button onClick={handleExportData} disabled={filteredAndSortedLogs.length === 0}>
+          <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Filtered ({filteredAndSortedLogs.length})
         </Button>
       </div>
 
-      {/* Filter Controls Card */}
+      {/* Filter and Sort Controls Card */}
       <Card className="shadow-sm">
         <CardHeader>
              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <Filter className="h-5 w-5" /> Filter Logs
+                <Filter className="h-5 w-5" /> Filter & Sort Logs
              </CardTitle>
-             <CardDescription>Refine the list of previous work logs. Default order is most recent first.</CardDescription>
+             <CardDescription>Refine and order the list of previous work logs.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-2">
             {/* Search and Date Filter Row */}
@@ -384,13 +449,22 @@ export default function PreviousLogsPage() {
                  </Popover>
             </div>
 
-             {/* Removed Sorting Buttons Row */}
+             {/* Sorting Buttons Row */}
+             <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground mr-2">Sort by:</span>
+                <Button variant={sortColumn === 'date' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleSort('date')}>Date {renderSortIcon('date')}</Button>
+                <Button variant={sortColumn === 'hoursWorked' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleSort('hoursWorked')}>Hours {renderSortIcon('hoursWorked')}</Button>
+                <Button variant={sortColumn === 'documentsCompleted' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleSort('documentsCompleted')}>Docs {renderSortIcon('documentsCompleted')}</Button>
+                <Button variant={sortColumn === 'videoSessionsCompleted' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleSort('videoSessionsCompleted')}>Videos {renderSortIcon('videoSessionsCompleted')}</Button>
+                <Button variant={sortColumn === 'avgUPH' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleSort('avgUPH')}>Avg UPH {renderSortIcon('avgUPH')}</Button>
+             </div>
+
 
               {/* Show reset button if filters are active */}
               {hasActiveFilters && (
                  <div className="flex justify-end">
                     <Button variant="link" size="sm" onClick={handleResetFilters} className="p-0 h-auto text-muted-foreground hover:text-foreground">
-                        <X className="mr-1 h-3 w-3" /> Reset Filters
+                        <X className="mr-1 h-3 w-3" /> Reset Filters & Sort
                     </Button>
                  </div>
               )}
@@ -399,7 +473,7 @@ export default function PreviousLogsPage() {
 
       {/* Render logs using TargetMetricsDisplay with Accordion */}
       <TargetMetricsDisplay
-        allWorkLogs={paginatedLogs} // Pass only the logs for the current page
+        allWorkLogs={paginatedLogs} // Pass sorted and filtered logs for the current page
         targets={uphTargets}
         deleteWorkLogAction={handleDeleteWorkLog}
         showTodaySection={false} // Ensure today's section is not shown here
@@ -431,7 +505,7 @@ export default function PreviousLogsPage() {
         </div>
       )}
 
-       {filteredLogs.length === 0 && !isLoading && (
+       {filteredAndSortedLogs.length === 0 && !isLoading && (
           <p className="text-center text-muted-foreground py-10">
             {allLogs.filter(l => l.isFinalized || isBefore(parseISO(l.date + 'T00:00:00'), startOfDay(new Date()))).length === 0
               ? "No previous work logs found."

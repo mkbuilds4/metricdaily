@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { DailyWorkLog, UPHTarget } from '@/types';
 import { isValid, parse } from 'date-fns';
@@ -9,20 +8,22 @@ import { Button } from './ui/button'; // Import Button
 interface PreviousLogTriggerSummaryProps {
   log: DailyWorkLog;
   allTargets: UPHTarget[]; // Pass all targets to find the correct one
+  activeTarget: UPHTarget | null; // Pass active target for fallback calculation
   onDelete: (id: string) => void; // Add delete handler prop
 }
 
-const PreviousLogTriggerSummary: React.FC<PreviousLogTriggerSummaryProps> = ({ log, allTargets, onDelete }) => {
+const PreviousLogTriggerSummary: React.FC<PreviousLogTriggerSummaryProps> = ({ log, allTargets = [], activeTarget, onDelete }) => {
   const logDate = parse(log.date, 'yyyy-MM-dd', new Date());
   const formattedLogDate = isValid(logDate) ? formatFriendlyDate(logDate) : log.date;
 
-  // Find the specific target associated with this log, or fallback to active if necessary
+  // Find the specific target associated with this log
   const logTarget = allTargets.find(t => t.id === log.targetId);
-  const activeTarget = allTargets.find(t => t.isActive);
-  const displayTarget = logTarget ?? activeTarget; // Target used for calculation/display context
 
-  // Calculate Avg UPH based on the displayTarget
-  const avgUPH = displayTarget ? calculateDailyUPH(log, displayTarget) : null;
+  // Determine the target to use for summary calculation (log's target or active target)
+  const targetForSummaryCalc = logTarget ?? activeTarget;
+
+  // Calculate Avg UPH based on the determined target
+  const avgUPH = targetForSummaryCalc ? calculateDailyUPH(log, targetForSummaryCalc) : null;
 
 
   return (
@@ -33,9 +34,9 @@ const PreviousLogTriggerSummary: React.FC<PreviousLogTriggerSummaryProps> = ({ l
              <span className="font-medium">{formattedLogDate}</span>
              <span className="text-muted-foreground">({log.hoursWorked.toFixed(2)} hrs)</span>
              {/* Indicate target used for calculation */}
-             {displayTarget ? (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground" title={`Calculated with: ${displayTarget.name}`}>
-                    (<TargetIcon className="h-3 w-3" /> {displayTarget.name})
+             {targetForSummaryCalc ? (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground" title={`Calculated with: ${targetForSummaryCalc.name}`}>
+                    (<TargetIcon className="h-3 w-3" /> {targetForSummaryCalc.name}{!logTarget && activeTarget ? ' (Active)' : ''})
                 </span>
              ) : (
                 <span className="flex items-center gap-1 text-xs text-destructive ml-2" title={`Target ID "${log.targetId || 'None'}" not found`}>
@@ -56,7 +57,7 @@ const PreviousLogTriggerSummary: React.FC<PreviousLogTriggerSummaryProps> = ({ l
              </div>
               {/* Display SINGLE Average UPH based on the determined target */}
              {avgUPH !== null && avgUPH > 0 && (
-                <div className="flex items-center gap-1" title={`Avg UPH (Based on ${displayTarget?.name || 'N/A'})`}>
+                <div className="flex items-center gap-1" title={`Avg UPH (Based on ${targetForSummaryCalc?.name || 'N/A'})`}>
                     <Clock className="h-4 w-4" />
                     <span>{avgUPH.toFixed(2)}</span>
                 </div>
@@ -84,4 +85,3 @@ const PreviousLogTriggerSummary: React.FC<PreviousLogTriggerSummaryProps> = ({ l
 };
 
 export default PreviousLogTriggerSummary;
-
