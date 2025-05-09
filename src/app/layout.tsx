@@ -1,3 +1,4 @@
+
 'use client'; // Required for usePathname
 
 import type { Metadata } from 'next';
@@ -16,6 +17,7 @@ import {
   SidebarMenuButton,
   SidebarProvider,
   SidebarTrigger,
+  SidebarGroupLabel, // Added SidebarGroupLabel
 } from '@/components/ui/sidebar';
 import { Home, Settings, List, History, BarChart3, HelpCircle, Upload } from 'lucide-react'; // Added Upload
 import { usePathname } from 'next/navigation';
