@@ -23,35 +23,50 @@ interface DailyUPHEntry {
   formattedDate: string; // e.g., 'Mon', 'Tue'
 }
 
+const WEEKLY_AVERAGE_SELECTED_TARGET_ID_KEY = 'weeklyAverageSelectedTargetId';
+
 const WeeklyAverages: React.FC<WeeklyAveragesProps> = ({
   allWorkLogs = [],
   targets = [],
   activeTarget,
 }) => {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  const [selectedTargetIdForAverage, setSelectedTargetIdForAverage] = useState<string | undefined>(activeTarget?.id);
+  const [selectedTargetIdForAverage, setSelectedTargetIdForAverageState] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     // Ensure this runs only on the client to avoid hydration mismatch for current date
     setCurrentDate(new Date());
-  }, []);
 
-  useEffect(() => {
-    // Initialize or update selected target ID based on activeTarget or available targets
-    if (activeTarget?.id && targets.some(t => t.id === activeTarget.id && (t.isDisplayed ?? true))) {
-        setSelectedTargetIdForAverage(activeTarget.id);
-    } else {
-        const firstDisplayedTarget = targets.find(t => t.isDisplayed ?? true);
-        if (firstDisplayedTarget) {
-            setSelectedTargetIdForAverage(firstDisplayedTarget.id);
-        } else if (targets.length > 0) {
-            setSelectedTargetIdForAverage(targets[0].id); // Fallback to first target if none are 'displayed' but list exists
-        }
-         else {
-            setSelectedTargetIdForAverage(undefined);
-        }
+    // Initialize selectedTargetIdForAverage from local storage or defaults
+    if (typeof window !== 'undefined') {
+      const storedTargetId = localStorage.getItem(WEEKLY_AVERAGE_SELECTED_TARGET_ID_KEY);
+      const displayedTargets = targets.filter(t => t.isDisplayed ?? true);
+
+      if (storedTargetId && displayedTargets.some(t => t.id === storedTargetId)) {
+        setSelectedTargetIdForAverageState(storedTargetId);
+      } else if (activeTarget?.id && displayedTargets.some(t => t.id === activeTarget.id)) {
+        setSelectedTargetIdForAverageState(activeTarget.id);
+      } else if (displayedTargets.length > 0) {
+        setSelectedTargetIdForAverageState(displayedTargets[0].id);
+      } else if (targets.length > 0) {
+        setSelectedTargetIdForAverageState(targets[0].id);
+      } else {
+        setSelectedTargetIdForAverageState(undefined);
+      }
     }
-  }, [activeTarget, targets]);
+  }, [activeTarget, targets]); // Rerun if activeTarget or targets list changes
+
+
+  const setSelectedTargetIdForAverage = useCallback((newTargetId: string | undefined) => {
+    setSelectedTargetIdForAverageState(newTargetId);
+    if (typeof window !== 'undefined') {
+      if (newTargetId) {
+        localStorage.setItem(WEEKLY_AVERAGE_SELECTED_TARGET_ID_KEY, newTargetId);
+      } else {
+        localStorage.removeItem(WEEKLY_AVERAGE_SELECTED_TARGET_ID_KEY);
+      }
+    }
+  }, []);
 
 
   const targetForAverageCalculation = useMemo(() => {
