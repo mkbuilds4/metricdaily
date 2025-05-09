@@ -1,18 +1,18 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import Link from 'next/link'; // Import Link
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as ShadcnFormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { getDefaultSettings, saveDefaultSettings, clearAllData } from '@/lib/actions'; // Import clearAllData
+import { getDefaultSettings, saveDefaultSettings, clearAllData } from '@/lib/actions';
 import type { UserSettings } from '@/types';
-import { Trash2, Settings as SettingsIcon, Info } from 'lucide-react'; // Added SettingsIcon, Info
+import { Trash2, Settings as SettingsIcon, Info, Upload } from 'lucide-react'; // Added Upload icon
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,8 +24,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Separator } from '@/components/ui/separator'; // Import Separator
-import { Switch } from '@/components/ui/switch'; // Import Switch
+import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 
 
 // Schema for settings form validation
@@ -34,14 +34,14 @@ const settingsSchema = z.object({
   defaultEndTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: "Invalid time format (HH:mm)" }),
   defaultBreakMinutes: z.coerce.number().nonnegative().int().default(0),
   defaultTrainingMinutes: z.coerce.number().nonnegative().int().default(0),
-  autoSwitchTargetBySchedule: z.boolean().optional().default(false), // New setting
+  autoSwitchTargetBySchedule: z.boolean().optional().default(false),
 });
 
 type SettingsFormData = z.infer<typeof settingsSchema>;
 
 export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const [isClearing, setIsClearing] = useState(false); // State for clearing data
+  const [isClearing, setIsClearing] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<SettingsFormData>({
@@ -55,13 +55,12 @@ export default function SettingsPage() {
     },
   });
 
-  // Load current settings when the component mounts
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const currentSettings = getDefaultSettings();
       form.reset({
         ...currentSettings,
-        autoSwitchTargetBySchedule: currentSettings.autoSwitchTargetBySchedule ?? false, // Ensure default
+        autoSwitchTargetBySchedule: currentSettings.autoSwitchTargetBySchedule ?? false,
       });
     }
   }, [form]);
@@ -70,7 +69,7 @@ export default function SettingsPage() {
     setIsLoading(true);
     try {
       const savedSettings = saveDefaultSettings(values);
-      form.reset(savedSettings); // Update form with saved (potentially cleaned) values
+      form.reset(savedSettings);
       toast({
         title: "Settings Updated",
         description: "Your default settings have been saved.",
@@ -87,17 +86,15 @@ export default function SettingsPage() {
     }
   };
 
-  // Handle clearing all data
   const handleClearAllDataAction = () => {
     if (typeof window === 'undefined') return;
     setIsClearing(true);
     try {
-      clearAllData(); // Call the action
+      clearAllData();
       toast({
         title: "Data Cleared",
         description: "All work logs, UPH targets, and settings have been removed.",
       });
-      // Reset the form to initial defaults after clearing
       form.reset({
          defaultStartTime: '14:00',
          defaultEndTime: '22:30',
@@ -226,19 +223,32 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Data Management Section */}
       <Card>
           <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Trash2 className="h-6 w-6" /> Data Management
+                <Upload className="h-6 w-6" /> Import & Export Data
               </CardTitle>
               <CardDescription>
-                  Manage application data. Be careful, these actions cannot be undone.
+                  Manage your application data by importing or exporting it.
               </CardDescription>
           </CardHeader>
           <CardContent>
                 <Separator className="mb-4" />
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                        <p className="font-medium">Import Application Data</p>
+                        <p className="text-sm text-muted-foreground">
+                            Upload a JSON file to restore your application data. This will overwrite existing data.
+                        </p>
+                    </div>
+                    <Button asChild variant="outline">
+                        <Link href="/import-data">
+                            <Upload className="mr-2 h-4 w-4" /> Go to Import Page
+                        </Link>
+                    </Button>
+                </div>
+                 <Separator className="my-6" />
+                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
                         <p className="font-medium">Clear All Application Data</p>
                         <p className="text-sm text-muted-foreground">

@@ -1,6 +1,6 @@
 // src/lib/actions.ts
-import type { DailyWorkLog, UPHTarget, AuditLogEntry, AuditLogActionType, UserSettings } from '@/types';
-import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils'; // Removed calculateTimeAheadBehindSchedule as it's not used here
+import type { DailyWorkLog, UPHTarget, AuditLogEntry, AuditLogActionType, UserSettings, ApplicationData } from '@/types';
+import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
 import { sampleWorkLogs, sampleUPHTargets, sampleAuditLogs } from './sample-data';
 import { parseISO, isValid, startOfDay, isBefore, isSameDay } from 'date-fns';
 
@@ -70,7 +70,7 @@ export function addAuditLog(
     newState: newState ?? undefined,
   };
   auditLogs.unshift(newLogEntry);
-  saveToLocalStorage(AUDIT_LOGS_KEY, auditLogs.slice(0, 1500)); // Increased limit
+  saveToLocalStorage(AUDIT_LOGS_KEY, auditLogs.slice(0, 1500));
   console.log('[Audit Log] Added:', newLogEntry);
 }
 
@@ -167,8 +167,13 @@ export function saveWorkLog(
   saveToLocalStorage(WORK_LOGS_KEY, logs);
   saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false);
 
-  // --- Refactored Audit Logging ---
-  const actionForAuditLog: AuditLogActionType = passedAuditActionType || (isCreating ? 'CREATE_WORK_LOG' : 'UPDATE_WORK_LOG');
+  let actionForAuditLog: AuditLogActionType;
+  if (passedAuditActionType) {
+    actionForAuditLog = passedAuditActionType;
+  } else {
+    actionForAuditLog = isCreating ? 'CREATE_WORK_LOG' : 'UPDATE_WORK_LOG';
+  }
+  
   let auditDetails: string = '';
   const logSummaryDetails = `Docs: ${savedLog.documentsCompleted}, Videos: ${savedLog.videoSessionsCompleted}, Hours: ${savedLog.hoursWorked.toFixed(2)}.`;
 
@@ -217,8 +222,6 @@ export function saveWorkLog(
       }
       break;
     default:
-      // This handles any other specific auditActionType that might have been passed via passedAuditActionType
-      // but wasn't explicitly cased above.
       if (passedAuditActionType) {
           auditDetails = `Performed action ${passedAuditActionType} for log ${savedLog.date}. ${logSummaryDetails}`;
       }
@@ -387,7 +390,7 @@ export function getActiveUPHTarget(): UPHTarget | null {
     return activeTarget;
   } else if (targets.length > 0) {
      console.warn("[Action] No active target found. Returning first target as fallback for display.");
-     return targets.find(t => t.isDisplayed ?? true) || targets[0]; // Prefer displayed or first
+     return targets.find(t => t.isDisplayed ?? true) || targets[0];
   }
   return null;
 }
@@ -534,13 +537,11 @@ export function archiveTodayLog(): DailyWorkLog | null {
 
     if (todayLogIndex > -1) {
         const finalizedLogData = { ...allLogs[todayLogIndex], isFinalized: true };
-        // Use saveWorkLog to handle update and audit logging for finalization
         const savedFinalizedLog = saveWorkLog(finalizedLogData, 'SYSTEM_ARCHIVE_TODAY_LOG');
         console.log(`[Action] Finalized log for ${savedFinalizedLog.date}`);
         return savedFinalizedLog;
     } else {
         console.warn(`[Action] Attempted to finalize today's log, but no active log found for ${todayDateStr}.`);
-        // Log this attempt even if no log is found, for audit purposes
         addAuditLog('SYSTEM_ARCHIVE_TODAY_LOG', 'System', `Attempt to finalize log for ${todayDateStr}: No active log found.`);
         return null;
     }
@@ -607,4 +608,55 @@ export function saveDefaultSettings(settings: UserSettings): UserSettings {
     validatedSettings
   );
   return validatedSettings;
+}
+
+// --- Data Import/Export Actions ---
+export function importApplicationData(jsonData: string): { success: boolean; error?: string } {
+  if (typeof window === 'undefined') {
+    return { success: false, error: 'Data import can only be done on the client-side.' };
+  }
+
+  try {
+    const parsedData = JSON.parse(jsonData) as Partial<ApplicationData>;
+
+    // Basic validation of the imported data structure
+    if (
+      !parsedData ||
+      typeof parsedData !== 'object' ||
+      !Array.isArray(parsedData.workLogs) ||
+      !Array.isArray(parsedData.uphTargets) ||
+      !Array.isArray(parsedData.auditLogs) ||
+      typeof parsedData.userSettings !== 'object' ||
+      parsedData.userSettings === null ||
+      typeof parsedData.sampleDataLoaded !== 'boolean'
+    ) {
+      throw new Error('Invalid JSON structure. Required keys: workLogs, uphTargets, auditLogs, userSettings, sampleDataLoaded.');
+    }
+
+    // TODO: Add more granular validation for each array/object item if necessary
+
+    saveToLocalStorage(WORK_LOGS_KEY, parsedData.workLogs);
+    saveToLocalStorage(UPH_TARGETS_KEY, parsedData.uphTargets);
+    
+    // Sort audit logs by timestamp descending after import and truncate
+    const sortedAuditLogs = parsedData.auditLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    saveToLocalStorage(AUDIT_LOGS_KEY, sortedAuditLogs.slice(0, 1500));
+
+    saveToLocalStorage(SETTINGS_KEY, parsedData.userSettings);
+    saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, parsedData.sampleDataLoaded);
+
+    addAuditLog('SYSTEM_IMPORT_DATA', 'System', 'Imported all application data from a JSON file.');
+    
+    // Trigger a refresh or notify user to refresh for changes to take full effect across all components
+    // For example, if settings changed, components relying on those settings might need a reload.
+    // This can be handled by a toast message prompting the user.
+    
+    return { success: true };
+
+  } catch (error) {
+    console.error("Error importing application data:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during data import.";
+    addAuditLog('SYSTEM_IMPORT_DATA', 'System', `Failed to import application data. Error: ${errorMessage}`);
+    return { success: false, error: errorMessage };
+  }
 }

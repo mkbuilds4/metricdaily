@@ -1,4 +1,5 @@
 
+
 /**
  * Represents a single day's work log entry.
  */
@@ -26,8 +27,8 @@ export interface UPHTarget {
   id: string; // Unique identifier for the target
   name: string; // User-friendly name (e.g., "Standard Shift", "Peak Hours")
   targetUPH: number; // The target units per hour rate
-  docsPerUnit: number; // How many documents are required to complete one unit *for this target*
-  videosPerUnit: number; // How many video sessions are required to complete one unit *for this target*
+  docsPerUnit: number; // Documents required to complete one unit *for this target*
+  videosPerUnit: number; // Video sessions required to complete one unit *for this target*
   isActive: boolean; // Indicates if this is the currently active target for calculations
   isDisplayed?: boolean; // Optional: Indicates if this target should be displayed on the dashboard/metrics views
 }
@@ -50,9 +51,10 @@ export type AuditLogActionType =
   | 'SET_ACTIVE_UPH_TARGET'
   | 'SYSTEM_LOAD_SAMPLE_DATA'
   | 'SYSTEM_CLEAR_ALL_DATA'
-  | 'SYSTEM_ARCHIVE_TODAY_LOG' // Renamed from SYSTEM_FINALIZE_TODAY_LOG
+  | 'SYSTEM_ARCHIVE_TODAY_LOG'
   | 'SYSTEM_EXPORT_DATA'
   | 'SYSTEM_EXPORT_DATA_FAILED'
+  | 'SYSTEM_IMPORT_DATA' // New action type for importing data
   | 'SYSTEM_VIEW_AUDIT_LOG'
   | 'UPDATE_SETTINGS';
 
@@ -64,11 +66,11 @@ export interface AuditLogEntry {
   id: string; // Unique ID for the audit log entry
   timestamp: string; // ISO string for the time of the action
   action: AuditLogActionType; // The type of action performed
-  entityType: 'WorkLog' | 'UPHTarget' | 'System' | 'Security' | 'Settings'; // Added 'Settings' type
+  entityType: 'WorkLog' | 'UPHTarget' | 'System' | 'Security' | 'Settings';
   entityId?: string; // The ID of the specific WorkLog or UPHTarget, if applicable
   details: string; // A human-readable description of the change
-  previousState?: Partial<DailyWorkLog | UPHTarget | UserSettings>; // Allow UserSettings
-  newState?: Partial<DailyWorkLog | UPHTarget | UserSettings>; // Allow UserSettings
+  previousState?: Partial<DailyWorkLog | UPHTarget | UserSettings>;
+  newState?: Partial<DailyWorkLog | UPHTarget | UserSettings>;
 }
 
 /**
@@ -79,5 +81,16 @@ export interface UserSettings {
   defaultEndTime: string; // Format: 'HH:mm'
   defaultBreakMinutes: number; // Default break time in minutes
   defaultTrainingMinutes: number; // Default training time in minutes
-  autoSwitchTargetBySchedule?: boolean; // New setting for auto-switching targets
+  autoSwitchTargetBySchedule?: boolean;
+}
+
+/**
+ * Represents the complete application data structure for import/export.
+ */
+export interface ApplicationData {
+  workLogs: DailyWorkLog[];
+  uphTargets: UPHTarget[];
+  auditLogs: AuditLogEntry[];
+  userSettings: UserSettings;
+  sampleDataLoaded: boolean;
 }
