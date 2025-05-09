@@ -366,9 +366,9 @@ export default function AnalyticsPage() {
                          offset={5} // Add some offset above the bar
                          fill="hsl(var(--foreground))"
                          fontSize={10}
-                         formatter={(value: number, props: any) => {
+                         formatter={(value: number, entry: any) => { // Changed props to entry
                            // Access the full payload for the bar to get both doc and video counts
-                           const payload = props.payload;
+                           const payload = entry.payload; // Access payload from entry
                            if (!payload) return '';
                            const total = (payload.documents || 0) + (payload.videos || 0);
                            return total > 0 ? total : ''; // Show total if > 0
@@ -443,7 +443,13 @@ export default function AnalyticsPage() {
                          labelFormatter={(label, payload) => {
                            // Display only the date label once per tooltip group
                             if (payload && payload.length > 0 && payload[0].payload?.fullDate) {
-                                return format(parseISO(payload[0].payload.fullDate), 'PPP');
+                                // Handle potential invalid date in payload
+                                try {
+                                    return format(parseISO(payload[0].payload.fullDate), 'PPP');
+                                } catch (e) {
+                                    console.warn("Invalid date in tooltip payload:", payload[0].payload.fullDate);
+                                    return label; // Fallback to original label
+                                }
                             }
                            return label;
                          }}
@@ -702,6 +708,3 @@ export default function AnalyticsPage() {
     </div>
   );
 }
-
-
-    
