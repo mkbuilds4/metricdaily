@@ -356,10 +356,22 @@ export default function AnalyticsPage() {
                      />
                      {/* Define Bars for documents and videos */}
                      <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs">
-                       {/* REMOVED LabelList for documents */}
+                       {/* ADD LabelList for documents count */}
+                       <LabelList
+                         position="center" // Position inside the bar segment
+                         fill="hsl(var(--background))" // White/light text on dark bar
+                         fontSize={10}
+                         formatter={(value: number) => (value > 0 ? value : '')} // Show count if > 0
+                       />
                      </Bar>
                      <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos"> {/* Top bar gets radius */}
-                       {/* REMOVED LabelList for videos */}
+                       {/* ADD LabelList for videos count */}
+                       <LabelList
+                         position="center" // Position inside the bar segment
+                         fill="hsl(var(--background))" // White/light text on dark bar
+                         fontSize={10}
+                         formatter={(value: number) => (value > 0 ? value : '')} // Show count if > 0
+                       />
                        {/* ADD LabelList for TOTAL count above the top bar */}
                        <LabelList
                          position="top"
@@ -706,6 +718,3 @@ export default function AnalyticsPage() {
     </div>
   );
 }
-
-
-  
