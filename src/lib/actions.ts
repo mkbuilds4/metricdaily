@@ -1,3 +1,4 @@
+
 // src/lib/actions.ts
 import type { DailyWorkLog, UPHTarget, AuditLogEntry, AuditLogActionType, UserSettings, ApplicationData } from '@/types';
 import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
@@ -168,42 +169,46 @@ export function saveWorkLog(
   saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false);
 
   let actionForAuditLog: AuditLogActionType;
-  if (passedAuditActionType) {
-    actionForAuditLog = passedAuditActionType;
-  } else {
-    actionForAuditLog = isCreating ? 'CREATE_WORK_LOG' : 'UPDATE_WORK_LOG';
-  }
-  
   let auditDetails: string = '';
   const logSummaryDetails = `Docs: ${savedLog.documentsCompleted}, Videos: ${savedLog.videoSessionsCompleted}, Hours: ${savedLog.hoursWorked.toFixed(2)}.`;
 
-  switch (actionForAuditLog) {
-    case 'CREATE_WORK_LOG':
+  if (passedAuditActionType) {
+    actionForAuditLog = passedAuditActionType;
+    // Generate specific details based on the passed action type
+    switch (actionForAuditLog) {
+      case 'UPDATE_WORK_LOG_QUICK_COUNT':
+        const prevDocs = previousState?.documentsCompleted ?? 0;
+        const prevVideos = previousState?.videoSessionsCompleted ?? 0;
+        const fieldUpdated = prevDocs !== savedLog.documentsCompleted ? 'document' : 'video';
+        const newValue = fieldUpdated === 'document' ? savedLog.documentsCompleted : savedLog.videoSessionsCompleted;
+        auditDetails = `Quick updated ${fieldUpdated} count to ${newValue} for log ${savedLog.date}.`;
+        break;
+      case 'UPDATE_WORK_LOG_BREAK':
+        auditDetails = `Added break time to log for ${savedLog.date}. Total break: ${formatDurationFromMinutes((savedLog.breakDurationMinutes || 0) * 60)}.`;
+        break;
+      case 'UPDATE_WORK_LOG_TRAINING':
+        auditDetails = `Added training time to log for ${savedLog.date}. Total training: ${formatDurationFromMinutes((savedLog.trainingDurationMinutes || 0) * 60)}.`;
+        break;
+      case 'UPDATE_WORK_LOG_GOAL_MET':
+        const newTargetId = Object.keys(savedLog.goalMetTimes || {}).find(key => !(previousState?.goalMetTimes || {})[key]);
+        const targets = getUPHTargets();
+        const targetName = targets.find(t => t.id === newTargetId)?.name || 'Unknown Target';
+        auditDetails = `Target "${targetName}" goal met time recorded for log ${savedLog.date}.`;
+        break;
+      case 'SYSTEM_ARCHIVE_TODAY_LOG':
+        auditDetails = `Finalized log for ${savedLog.date}. ${logSummaryDetails}`;
+        break;
+      // Add other specific cases if needed
+      default:
+        // If a specific type was passed but not handled above, create a generic message for it
+        auditDetails = `Performed action ${actionForAuditLog} for log ${savedLog.date}. ${logSummaryDetails}`;
+    }
+  } else {
+    // No specific action type passed, determine if CREATE or generic UPDATE
+    actionForAuditLog = isCreating ? 'CREATE_WORK_LOG' : 'UPDATE_WORK_LOG';
+    if (actionForAuditLog === 'CREATE_WORK_LOG') {
       auditDetails = `Created work log for ${savedLog.date}. ${logSummaryDetails}`;
-      break;
-    case 'UPDATE_WORK_LOG_QUICK_COUNT':
-      const prevDocs = previousState?.documentsCompleted ?? 0;
-      const prevVideos = previousState?.videoSessionsCompleted ?? 0;
-      const fieldUpdated = prevDocs !== savedLog.documentsCompleted ? 'document' : 'video';
-      const newValue = fieldUpdated === 'document' ? savedLog.documentsCompleted : savedLog.videoSessionsCompleted;
-      auditDetails = `Quick updated ${fieldUpdated} count to ${newValue} for log ${savedLog.date}.`;
-      break;
-    case 'UPDATE_WORK_LOG_BREAK':
-      auditDetails = `Added break time to log for ${savedLog.date}. Total break: ${formatDurationFromMinutes((savedLog.breakDurationMinutes || 0) * 60)}.`;
-      break;
-    case 'UPDATE_WORK_LOG_TRAINING':
-      auditDetails = `Added training time to log for ${savedLog.date}. Total training: ${formatDurationFromMinutes((savedLog.trainingDurationMinutes || 0) * 60)}.`;
-      break;
-    case 'UPDATE_WORK_LOG_GOAL_MET':
-      const newTargetId = Object.keys(savedLog.goalMetTimes || {}).find(key => !(previousState?.goalMetTimes || {})[key]);
-      const targetsForGoalMet = getUPHTargets();
-      const targetNameGoalMet = targetsForGoalMet.find(t => t.id === newTargetId)?.name || 'Unknown Target';
-      auditDetails = `Target "${targetNameGoalMet}" goal met time recorded for log ${savedLog.date}.`;
-      break;
-    case 'SYSTEM_ARCHIVE_TODAY_LOG':
-      auditDetails = `Finalized log for ${savedLog.date}. ${logSummaryDetails}`;
-      break;
-    case 'UPDATE_WORK_LOG': // Generic update
+    } else { // Generic UPDATE_WORK_LOG
       auditDetails = `Updated work log for ${savedLog.date}. `;
       if (previousState) {
         const changes: string[] = [];
@@ -220,14 +225,10 @@ export function saveWorkLog(
       } else {
         auditDetails += logSummaryDetails;
       }
-      break;
-    default:
-      if (passedAuditActionType) {
-          auditDetails = `Performed action ${passedAuditActionType} for log ${savedLog.date}. ${logSummaryDetails}`;
-      }
+    }
   }
 
-  if (auditDetails) {
+  if (auditDetails && actionForAuditLog) {
     addAuditLog(actionForAuditLog, 'WorkLog', auditDetails, savedLog.id, previousState, savedLog);
   }
 

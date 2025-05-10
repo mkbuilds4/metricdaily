@@ -180,14 +180,14 @@ export default function Home() {
 
   const handleSaveWorkLog = useCallback((
       logData: Partial<Omit<DailyWorkLog, 'id' | 'hoursWorked'>> & { id?: string; hoursWorked?: number; date: string; startTime: string; endTime: string; goalMetTimes?: Record<string, string> },
-      auditActionType?: AuditLogActionType // This auditActionType is passed to actions.ts#saveWorkLog
+      auditActionType?: AuditLogActionType
       ) => {
     if (!isClient) return {} as DailyWorkLog;
 
     try {
-        // Call the saveWorkLog action from lib/actions.ts, passing the specific auditActionType
-        const savedLog = saveWorkLog(logData, auditActionType);
+        const savedLog = saveWorkLog(logData, auditActionType); // Call the action
 
+        // Update workLogs state based on the returned savedLog from the action
         setWorkLogs(prevLogs => {
             const existingIndex = prevLogs.findIndex(l => l.id === savedLog.id);
             let newLogs;
@@ -199,13 +199,17 @@ export default function Home() {
             }
             return newLogs.sort((a, b) => b.date.localeCompare(a.date));
         });
-
+        
         setHasInitialData(true);
-        // saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, false); // This is handled in actions.ts#saveWorkLog
 
-        // Audit logging is now centralized in actions.ts#saveWorkLog
-        // No need for addAuditLog call or details generation here.
-
+        // Toasting logic, avoid for goal met as it's handled by handleGoalMet
+        if (auditActionType !== 'UPDATE_WORK_LOG_GOAL_MET') {
+            if (logData.id === calculatedTodayLog?.id ) {
+                 toast({ title: "Log Updated", description: `Today's log (${logData.date}) was updated.` });
+            } else if (isCreatingLog(logData, workLogs)) {
+                 toast({ title: "Log Created", description: `Log for ${logData.date} created.`});
+            }
+        }
         return savedLog;
     } catch (error) {
         console.error('[Home] Error saving work log:', error);
@@ -216,7 +220,16 @@ export default function Home() {
         });
         throw error;
     }
-  }, [toast, isClient]); // Dependencies updated
+  }, [toast, isClient, calculatedTodayLog, workLogs]);
+
+  // Helper to determine if a log is being created (for toast message distinction)
+  const isCreatingLog = (logData: Partial<DailyWorkLog>, currentLogs: DailyWorkLog[]): boolean => {
+    if (logData.id) {
+        return !currentLogs.some(log => log.id === logData.id);
+    }
+    return !currentLogs.some(log => log.date === logData.date && !log.isFinalized);
+  };
+
 
   const handleDeleteWorkLog = useCallback((id: string) => {
      if (!isClient) return;
@@ -296,7 +309,6 @@ export default function Home() {
 
 
       try {
-           // Pass 'UPDATE_WORK_LOG_QUICK_COUNT' as the specific audit action type
            const savedLog = handleSaveWorkLog(updatedLogPartial as any, 'UPDATE_WORK_LOG_QUICK_COUNT');
            toast({ title: "Count Updated", description: `Today's ${field === 'documentsCompleted' ? 'document' : 'video'} count set to ${newValue}.` });
 
@@ -399,7 +411,6 @@ export default function Home() {
     };
 
     try {
-      // Pass 'CREATE_WORK_LOG' as the specific audit action type
       handleSaveWorkLog(newLog as any, 'CREATE_WORK_LOG');
       toast({
         title: "New Day Started",
@@ -564,44 +575,50 @@ export default function Home() {
         const todayLogIndex = prevLogs.findIndex(log => log.date === formatDateISO(new Date()) && !log.isFinalized);
 
         if (todayLogIndex > -1) {
-            const currentTodayLog = prevLogs[todayLogIndex];
+            const currentTodayLogFromState = prevLogs[todayLogIndex];
             if (!metAt || !(metAt instanceof Date) || isNaN(metAt.getTime())) {
                 console.error("[Home] Goal met handler received invalid 'metAt' date:", metAt);
                 return prevLogs;
             }
             const metAtISO = metAt.toISOString();
 
-            if (!(currentTodayLog.goalMetTimes && currentTodayLog.goalMetTimes[targetId])) {
+            if (!(currentTodayLogFromState.goalMetTimes && currentTodayLogFromState.goalMetTimes[targetId])) {
                 console.log(`[Home] Persisting goal met time for target ${targetId}...`);
-                const newGoalMetTimes = { ...(currentTodayLog.goalMetTimes || {}), [targetId]: metAtISO };
-                 const payloadToSave: Partial<DailyWorkLog> & { id: string; date: string; startTime: string; endTime: string; hoursWorked: number; goalMetTimes?: Record<string, string> } = {
-                    id: currentTodayLog.id,
-                    date: currentTodayLog.date,
-                    startTime: currentTodayLog.startTime,
-                    endTime: currentTodayLog.endTime,
-                    breakDurationMinutes: currentTodayLog.breakDurationMinutes,
-                    trainingDurationMinutes: currentTodayLog.trainingDurationMinutes,
-                    hoursWorked: currentTodayLog.hoursWorked,
-                    documentsCompleted: currentTodayLog.documentsCompleted,
-                    videoSessionsCompleted: currentTodayLog.videoSessionsCompleted,
-                    targetId: currentTodayLog.targetId,
-                    notes: currentTodayLog.notes,
+                const newGoalMetTimes = { ...(currentTodayLogFromState.goalMetTimes || {}), [targetId]: metAtISO };
+                
+                // Construct the full log object expected by saveWorkLog action
+                const payloadToSave: DailyWorkLog = {
+                    ...currentTodayLogFromState, // Spread all properties of current log
                     goalMetTimes: newGoalMetTimes,
-                    isFinalized: currentTodayLog.isFinalized,
                  };
 
                 try {
-                    // Pass 'UPDATE_WORK_LOG_GOAL_MET' as the specific audit action type
-                    const savedLog = handleSaveWorkLog(payloadToSave, 'UPDATE_WORK_LOG_GOAL_MET');
+                    // Directly call the action, not the page's wrapper
+                    const actualSavedLogFromAction = saveWorkLog(payloadToSave, 'UPDATE_WORK_LOG_GOAL_MET');
+                    
                     const updatedLogs = [...prevLogs];
-                    updatedLogs[todayLogIndex] = savedLog;
+                    updatedLogs[todayLogIndex] = actualSavedLogFromAction;
+                    
+                    const targets = getUPHTargets();
+                    const targetDetails = targets.find(t => t.id === targetId);
+                    const targetName = targetDetails ? targetDetails.name : targetId;
+                    toast({
+                        title: "🎉 Goal Met!",
+                        description: `You've met the goal for target: "${targetName}"!`
+                    });
+
                     return updatedLogs.sort((a, b) => b.date.localeCompare(a.date));
                 } catch (error) {
                     console.error(`[Home] Error saving goal met time for target ${targetId}:`, error);
+                     toast({
+                        variant: "destructive",
+                        title: "Goal Met Update Failed",
+                        description: `Could not record that goal for "${targetId}" was met.`,
+                    });
                     return prevLogs;
                 }
             } else {
-                 console.log(`[Home] Goal met time already recorded for target ${targetId}. Ignoring redundant notification.`);
+                 console.log(`[Home] Goal met time ALREADY recorded for target ${targetId} in log's goalMetTimes. Ignoring redundant notification.`);
                  return prevLogs;
             }
         } else {
@@ -609,7 +626,8 @@ export default function Home() {
             return prevLogs;
         }
     });
-  }, [isClient, handleSaveWorkLog]);
+  }, [isClient, toast]);
+
 
   const handleSetActiveTarget = useCallback((id: string) => {
      if (!isClient || activeTarget?.id === id) return {} as UPHTarget;
@@ -833,4 +851,6 @@ export default function Home() {
     </div>
   );
 }
+
+    
 
