@@ -62,9 +62,9 @@ export default function Home() {
   useEffect(() => {
     setIsClient(true);
     if (typeof window !== 'undefined') {
-        setCurrentTime(new Date());
-        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-        return () => clearInterval(timer);
+        setCurrentTime(new Date()); // Set initial time
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000); // Update every second
+        return () => clearInterval(timer); // Cleanup timer on unmount
     }
   }, []);
 
@@ -128,9 +128,13 @@ export default function Home() {
 
    useEffect(() => {
     if (!isClient) return;
-    setDocInputValue(calculatedTodayLog?.documentsCompleted?.toString() ?? '');
-    setVideoInputValue(calculatedTodayLog?.videoSessionsCompleted?.toString() ?? '');
-  }, [workLogs, isClient, calculatedTodayLog]);
+    // This calculatedTodayLog is based on the current workLogs state
+    const todayDateStr = formatDateISO(new Date());
+    const currentTodayLogForInputs = workLogs.find(log => log.date === todayDateStr && !log.isFinalized) || null;
+
+    setDocInputValue(currentTodayLogForInputs?.documentsCompleted?.toString() ?? '');
+    setVideoInputValue(currentTodayLogForInputs?.videoSessionsCompleted?.toString() ?? '');
+  }, [workLogs, isClient]);
 
 
   useEffect(() => {
@@ -204,7 +208,8 @@ export default function Home() {
 
         // Toasting logic, avoid for goal met as it's handled by handleGoalMet
         if (auditActionType !== 'UPDATE_WORK_LOG_GOAL_MET') {
-            if (logData.id === calculatedTodayLog?.id ) {
+             const currentLogForToast = workLogs.find(l => l.date === formatDateISO(new Date()) && !l.isFinalized) || null;
+            if (logData.id === currentLogForToast?.id ) { // Use the derived currentLogForToast for comparison
                  toast({ title: "Log Updated", description: `Today's log (${logData.date}) was updated.` });
             } else if (isCreatingLog(logData, workLogs)) {
                  toast({ title: "Log Created", description: `Log for ${logData.date} created.`});
@@ -220,7 +225,7 @@ export default function Home() {
         });
         throw error;
     }
-  }, [toast, isClient, calculatedTodayLog, workLogs]);
+  }, [toast, isClient, workLogs]); // Removed calculatedTodayLog from dependencies, use derived one inside if needed
 
   // Helper to determine if a log is being created (for toast message distinction)
   const isCreatingLog = (logData: Partial<DailyWorkLog>, currentLogs: DailyWorkLog[]): boolean => {
@@ -250,7 +255,9 @@ export default function Home() {
 
    const handleQuickUpdate = (field: 'documentsCompleted' | 'videoSessionsCompleted', value: number | string) => {
       if (!isClient) return;
-      if (!calculatedTodayLog) {
+      const logForUpdate = workLogs.find(l => l.date === formatDateISO(new Date()) && !l.isFinalized) || null;
+
+      if (!logForUpdate) {
           console.warn("[Home] Quick Update: No active log found for today to update.");
           toast({
               variant: "destructive",
@@ -261,8 +268,8 @@ export default function Home() {
       }
 
       let newValue: number;
-      const currentDocValue = calculatedTodayLog.documentsCompleted || 0;
-      const currentVideoValue = calculatedTodayLog.videoSessionsCompleted || 0;
+      const currentDocValue = logForUpdate.documentsCompleted || 0;
+      const currentVideoValue = logForUpdate.videoSessionsCompleted || 0;
       const currentValue = field === 'documentsCompleted' ? currentDocValue : currentVideoValue;
 
       if (typeof value === 'string') {
@@ -292,19 +299,19 @@ export default function Home() {
        }
 
        const updatedLogPartial: Partial<DailyWorkLog> & { id: string; date: string; startTime: string; endTime: string; hoursWorked: number; goalMetTimes?: Record<string, string> } = {
-          id: calculatedTodayLog.id,
-          date: calculatedTodayLog.date,
-          startTime: calculatedTodayLog.startTime,
-          endTime: calculatedTodayLog.endTime,
-          hoursWorked: calculatedTodayLog.hoursWorked,
+          id: logForUpdate.id,
+          date: logForUpdate.date,
+          startTime: logForUpdate.startTime,
+          endTime: logForUpdate.endTime,
+          hoursWorked: logForUpdate.hoursWorked,
           documentsCompleted: field === 'documentsCompleted' ? newValue : currentDocValue,
           videoSessionsCompleted: field === 'videoSessionsCompleted' ? newValue : currentVideoValue,
-          breakDurationMinutes: calculatedTodayLog.breakDurationMinutes,
-          trainingDurationMinutes: calculatedTodayLog.trainingDurationMinutes,
-          targetId: calculatedTodayLog.targetId,
-          notes: calculatedTodayLog.notes,
-          goalMetTimes: calculatedTodayLog.goalMetTimes || {},
-          isFinalized: calculatedTodayLog.isFinalized,
+          breakDurationMinutes: logForUpdate.breakDurationMinutes,
+          trainingDurationMinutes: logForUpdate.trainingDurationMinutes,
+          targetId: logForUpdate.targetId,
+          notes: logForUpdate.notes,
+          goalMetTimes: logForUpdate.goalMetTimes || {},
+          isFinalized: logForUpdate.isFinalized,
       };
 
 
@@ -468,38 +475,41 @@ export default function Home() {
 
   const handleDocInputBlur = () => {
        if (!isClient) return;
-       const currentValStr = calculatedTodayLog?.documentsCompleted?.toString() ?? '0';
+       const currentTodayLogFromState = workLogs.find(l => l.date === formatDateISO(new Date()) && !l.isFinalized) || null;
+       const currentValStr = currentTodayLogFromState?.documentsCompleted?.toString() ?? '0';
        const inputValStr = docInputValue.trim() === '' ? '0' : docInputValue.trim();
 
        if (inputValStr === '') {
          setDocInputValue('0');
        }
 
-       if (calculatedTodayLog && inputValStr !== currentValStr) {
+       if (currentTodayLogFromState && inputValStr !== currentValStr) {
             handleQuickUpdate('documentsCompleted', inputValStr);
-       } else if (!calculatedTodayLog && inputValStr !== '0') {
+       } else if (!currentTodayLogFromState && inputValStr !== '0') {
            setDocInputValue('');
        }
    };
   const handleVideoInputBlur = () => {
         if (!isClient) return;
-       const currentValStr = calculatedTodayLog?.videoSessionsCompleted?.toString() ?? '0';
+       const currentTodayLogFromState = workLogs.find(l => l.date === formatDateISO(new Date()) && !l.isFinalized) || null;
+       const currentValStr = currentTodayLogFromState?.videoSessionsCompleted?.toString() ?? '0';
        const inputValStr = videoInputValue.trim() === '' ? '0' : videoInputValue.trim();
 
         if (inputValStr === '') {
          setVideoInputValue('0');
        }
 
-       if (calculatedTodayLog && inputValStr !== currentValStr) {
+       if (currentTodayLogFromState && inputValStr !== currentValStr) {
             handleQuickUpdate('videoSessionsCompleted', inputValStr);
-       } else if (!calculatedTodayLog && inputValStr !== '0') {
+       } else if (!currentTodayLogFromState && inputValStr !== '0') {
             setVideoInputValue('');
        }
   };
 
   const handleAddBreak = useCallback((breakMinutes: number) => {
     if (!isClient) return;
-    if (!calculatedTodayLog) {
+    const logForBreak = workLogs.find(l => l.date === formatDateISO(new Date()) && !l.isFinalized) || null;
+    if (!logForBreak) {
       toast({
         variant: "destructive",
         title: "Cannot Add Break",
@@ -508,7 +518,7 @@ export default function Home() {
       return;
     }
     try {
-      const updatedLog = addBreakTimeToLog(calculatedTodayLog.id, breakMinutes);
+      const updatedLog = addBreakTimeToLog(logForBreak.id, breakMinutes);
       setWorkLogs(prevLogs => {
           const index = prevLogs.findIndex(l => l.id === updatedLog.id);
           if (index > -1) {
@@ -531,11 +541,12 @@ export default function Home() {
         description: error instanceof Error ? error.message : "Could not add break time.",
       });
     }
-  }, [calculatedTodayLog, toast, isClient, workLogs]);
+  }, [toast, isClient, workLogs]);
 
   const handleAddTraining = useCallback((trainingMinutes: number) => {
     if (!isClient) return;
-    if (!calculatedTodayLog) {
+    const logForTraining = workLogs.find(l => l.date === formatDateISO(new Date()) && !l.isFinalized) || null;
+    if (!logForTraining) {
       toast({
         variant: "destructive",
         title: "Cannot Add Training",
@@ -544,7 +555,7 @@ export default function Home() {
       return;
     }
     try {
-      const updatedLog = addTrainingTimeToLog(calculatedTodayLog.id, trainingMinutes);
+      const updatedLog = addTrainingTimeToLog(logForTraining.id, trainingMinutes);
         setWorkLogs(prevLogs => {
             const index = prevLogs.findIndex(l => l.id === updatedLog.id);
             if (index > -1) {
@@ -566,7 +577,7 @@ export default function Home() {
         description: error instanceof Error ? error.message : "Could not add training time.",
       });
     }
-  }, [calculatedTodayLog, toast, isClient, workLogs]);
+  }, [toast, isClient, workLogs]);
 
   const handleGoalMet = useCallback((targetId: string, metAt: Date) => {
      if (!isClient) return;
@@ -827,10 +838,11 @@ export default function Home() {
              )}
         </div>
 
-         {calculatedTodayLog && activeTarget && (
+         {calculatedTodayLog && activeTarget && currentTime && (
              <DailyProgressIndicator
                  todayLog={calculatedTodayLog}
                  activeTarget={activeTarget}
+                 currentTime={currentTime} 
              />
          )}
 
@@ -853,4 +865,5 @@ export default function Home() {
 }
 
     
+
 
