@@ -80,14 +80,11 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       if (showTodaySection && log.date === todayDateStr && !log.isFinalized && !foundTodayLog) {
         foundTodayLog = log;
       } else if (isBefore(logDateObj, todayStart) || (log.date === todayDateStr && log.isFinalized)) {
-        // For previous logs, ensure we only take one log per date.
-        // If multiple logs exist for the same past date (e.g. one finalized, one not - though this shouldn't happen for past days),
-        // prioritize the finalized one, or simply the one encountered.
         if (!prevLogsMap[log.date] || (prevLogsMap[log.date] && !prevLogsMap[log.date].isFinalized && log.isFinalized)) {
              prevLogsMap[log.date] = log;
         } else if (prevLogsMap[log.date] && prevLogsMap[log.date].isFinalized && !log.isFinalized) {
             // Do nothing, keep the finalized one.
-        } else if (!prevLogsMap[log.date]) { // If no entry for this date yet
+        } else if (!prevLogsMap[log.date]) { 
             prevLogsMap[log.date] = log;
         }
       }
@@ -116,7 +113,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     }
     const currentGoalMetTimes = todayLog.goalMetTimes || {};
     targets.forEach(target => {
-      if (!(target.isDisplayed ?? true)) return; // Skip if not displayed
+      if (!(target.isDisplayed ?? true)) return; 
 
       const { currentUnits } = calculateCurrentMetrics(todayLog, target, currentTime);
       const targetUnitsForShift = calculateRequiredUnitsForTarget(todayLog.hoursWorked, target.targetUPH);
@@ -154,6 +151,8 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     let currentMetrics = { currentUnits: 0, currentUPH: 0 };
     let timeAheadBehindSeconds: number | null = null;
     let unitsToGoal = 0;
+    let docsNeeded = 0;
+    let videosNeeded = 0;
 
     const goalMetTimeISO = log.goalMetTimes?.[target.id];
     const goalMetTime = goalMetTimeISO ? parseISO(goalMetTimeISO) : null;
@@ -163,13 +162,18 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
       timeAheadBehindSeconds = 0;
       projectedHitTimeFormatted = '-';
       unitsToGoal = 0;
+      docsNeeded = 0;
+      videosNeeded = 0;
     } else if (isToday && currentTime) {
       currentMetrics = calculateCurrentMetrics(log, target, currentTime);
-      unitsToGoal = totalRequiredUnits - currentMetrics.currentUnits;
+      unitsToGoal = Math.max(0, totalRequiredUnits - currentMetrics.currentUnits);
+      docsNeeded = target.docsPerUnit > 0 ? parseFloat((unitsToGoal * target.docsPerUnit).toFixed(1)) : 0;
+      videosNeeded = target.videosPerUnit > 0 ? parseFloat((unitsToGoal * target.videosPerUnit).toFixed(1)) : 0;
       timeAheadBehindSeconds = calculateTimeAheadBehindSchedule(log, target, currentTime);
       projectedHitTimeFormatted = calculateProjectedGoalHitTime(log, target, timeAheadBehindSeconds, currentTime);
     } else if (!isToday) {
-      unitsToGoal = totalRequiredUnits - totalActualUnits;
+      unitsToGoal = Math.max(0, totalRequiredUnits - totalActualUnits);
+      // Docs/Videos needed are not relevant for past logs in this card detail view
       timeAheadBehindSeconds = calculateTimeAheadBehindSchedule(log, target, null);
       projectedHitTimeFormatted = '-';
     }
@@ -230,6 +234,14 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
               <div>
                 <p className="text-muted-foreground">Current UPH</p>
                 <p className="font-medium tabular-nums">{currentMetrics.currentUPH.toFixed(2)}</p>
+              </div>
+               <div>
+                  <p className="text-muted-foreground">Docs to Goal</p>
+                  <p className="font-medium tabular-nums">{isGoalMet ? '-' : docsNeeded.toFixed(1)}</p>
+              </div>
+              <div>
+                  <p className="text-muted-foreground">Videos to Goal</p>
+                  <p className="font-medium tabular-nums">{isGoalMet ? '-' : videosNeeded.toFixed(1)}</p>
               </div>
               <div className="col-span-1">
                 <p className="text-muted-foreground">Schedule Status</p>
@@ -348,3 +360,4 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 };
 
 export default TargetMetricsDisplay;
+
