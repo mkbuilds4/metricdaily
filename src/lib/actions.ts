@@ -71,7 +71,7 @@ export function addAuditLog(
     newState: newState ?? undefined,
   };
   auditLogs.unshift(newLogEntry);
-  saveToLocalStorage(AUDIT_LOGS_KEY, auditLogs.slice(0, 1500));
+  saveToLocalStorage(AUDIT_LOGS_KEY, auditLogs.slice(0, 2500)); // Increased limit to 2500
   console.log('[Audit Log] Added:', newLogEntry);
 }
 
@@ -641,7 +641,7 @@ export function importApplicationData(jsonData: string): { success: boolean; err
     
     // Sort audit logs by timestamp descending after import and truncate
     const sortedAuditLogs = parsedData.auditLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    saveToLocalStorage(AUDIT_LOGS_KEY, sortedAuditLogs.slice(0, 1500));
+    saveToLocalStorage(AUDIT_LOGS_KEY, sortedAuditLogs.slice(0, 2500)); // Increased limit
 
     saveToLocalStorage(SETTINGS_KEY, parsedData.userSettings);
     saveToLocalStorage(SAMPLE_DATA_LOADED_KEY, parsedData.sampleDataLoaded);
