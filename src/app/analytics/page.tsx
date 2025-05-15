@@ -398,15 +398,17 @@ export default function AnalyticsPage() {
                          offset={5}
                          fill="hsl(var(--foreground))"
                          fontSize={10}
-                         formatter={(_value: unknown, entry: any) => {
-                            const dataPoint = entry.payload ?? entry;
-                            const docCount = typeof dataPoint.documents === 'number' ? dataPoint.documents : 0;
-                            const videoCount = typeof dataPoint.videos === 'number' ? dataPoint.videos : 0;
-                            
-                            if (typeof dataPoint.documents === 'undefined' && typeof dataPoint.videos === 'undefined') {
-                                return ''; 
+                         formatter={(_value: unknown, entryObject: any) => {
+                            // Guard against entryObject being null, undefined, or not an object
+                            if (!entryObject || typeof entryObject !== 'object') {
+                                return '';
                             }
+                            // Assuming entryObject is the data item like { hour: 10, documents: 5, videos: 3, ... }
+                            const docCount = typeof entryObject.documents === 'number' ? entryObject.documents : 0;
+                            const videoCount = typeof entryObject.videos === 'number' ? entryObject.videos : 0;
+                            
                             const total = docCount + videoCount;
+                            // Only render a label if the total is greater than 0.
                             return total > 0 ? String(total) : '';
                          }}
                        />
