@@ -374,7 +374,7 @@ export default function AnalyticsPage() {
                     />
                      <ChartTooltip
                        cursor={false}
-                       content={<></>}
+                       content={<ChartTooltipContent indicator="line" />}
                      />
                      <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs" isAnimationActive={false}>
                        <LabelList
@@ -398,16 +398,16 @@ export default function AnalyticsPage() {
                          offset={5}
                          fill="hsl(var(--foreground))"
                          fontSize={10}
-                         formatter={(_value, entry: any) => {
-                           if (!entry) {
-                               return '';
-                           }
-                           const dataPayload = entry.payload ?? entry;
-                           if (!dataPayload || typeof dataPayload.documents === 'undefined' || typeof dataPayload.videos === 'undefined') {
-                               return '';
-                           }
-                           const total = (dataPayload.documents || 0) + (dataPayload.videos || 0);
-                           return total > 0 ? String(total) : '';
+                         formatter={(_value: unknown, entry: any) => {
+                            const dataPoint = entry.payload ?? entry;
+                            const docCount = typeof dataPoint.documents === 'number' ? dataPoint.documents : 0;
+                            const videoCount = typeof dataPoint.videos === 'number' ? dataPoint.videos : 0;
+                            
+                            if (typeof dataPoint.documents === 'undefined' && typeof dataPoint.videos === 'undefined') {
+                                return ''; 
+                            }
+                            const total = docCount + videoCount;
+                            return total > 0 ? String(total) : '';
                          }}
                        />
                      </Bar>
@@ -749,4 +749,3 @@ export default function AnalyticsPage() {
   );
 }
 
-    
