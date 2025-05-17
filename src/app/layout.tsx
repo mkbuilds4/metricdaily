@@ -17,18 +17,29 @@ import {
   SidebarMenuButton,
   SidebarProvider,
   SidebarTrigger,
-  SidebarGroupLabel, // Added SidebarGroupLabel
+  SidebarGroupLabel,
 } from '@/components/ui/sidebar';
-import { Home, Settings, List, History, BarChart3, HelpCircle, Upload, Download } from 'lucide-react'; // Added Upload, Download
+import { Home, Settings, List, History, BarChart3, HelpCircle, Upload, Download, Loader2 } from 'lucide-react'; // Added Loader2 for loading state
 import { usePathname } from 'next/navigation';
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import TutorialDialog from '@/components/TutorialDialog';
+import dynamic from 'next/dynamic';
+import { Button } from '@/components/ui/button'; // Import Button for loading state
 
 const fontSans = FontSans({
   subsets: ['latin'],
   variable: '--font-sans',
+});
+
+// Lazy load TutorialDialog
+const TutorialDialog = dynamic(() => import('@/components/TutorialDialog'), {
+  ssr: false, // It's a client-side dialog
+  loading: () => ( // Optional: Show a placeholder while loading
+    <Button variant="ghost" size="icon" disabled>
+      <Loader2 className="h-5 w-5 animate-spin" />
+    </Button>
+  ),
 });
 
 export default function RootLayout({
@@ -125,4 +136,3 @@ export default function RootLayout({
     </html>
   );
 }
-
