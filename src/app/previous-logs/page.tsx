@@ -23,6 +23,8 @@ import { Upload, Filter, X, Calendar as CalendarIcon, ArrowUpDown } from 'lucide
 import { format, parseISO, isValid, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, subWeeks, isBefore } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { Separator } from '@/components/ui/separator';
+import { getUserWorkLogs, deleteWorkLogFromFirestore } from '@/lib/firestore';
+import { useAuth } from '@/lib/AuthContext';
 
 // Pagination settings
 const ITEMS_PER_PAGE = 10;
@@ -31,11 +33,31 @@ const ITEMS_PER_PAGE = 10;
 type SortableColumn = keyof Pick<DailyWorkLog, 'date' | 'hoursWorked' | 'documentsCompleted' | 'videoSessionsCompleted'> | 'avgUPH';
 type SortDirection = 'asc' | 'desc';
 
+// Helper to map Firestore log to DailyWorkLog
+function mapFirestoreLogToDailyWorkLog(log: any): DailyWorkLog {
+  return {
+    id: log.id,
+    date: log.date && typeof log.date.toDate === 'function' ? formatDateISO(log.date.toDate()) : (typeof log.date === 'string' ? log.date : ''),
+    startTime: log.startTime ?? '',
+    endTime: log.endTime ?? '',
+    breakDurationMinutes: log.breakDurationMinutes ?? 0,
+    trainingDurationMinutes: log.trainingDurationMinutes ?? 0,
+    hoursWorked: log.hoursWorked ?? 0,
+    documentsCompleted: log.documentsProcessed ?? 0,
+    videoSessionsCompleted: log.videosProcessed ?? 0,
+    targetId: log.targetId ?? '',
+    notes: log.notes ?? '',
+    goalMetTimes: log.goalMetTimes ?? {},
+    isFinalized: log.isFinalized ?? false,
+  };
+}
+
 export default function PreviousLogsPage() {
   const [allLogs, setAllLogs] = useState<DailyWorkLog[]>([]);
   const [uphTargets, setUphTargets] = useState<UPHTarget[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   // Filtering State
   const [filterTerm, setFilterTerm] = useState('');
@@ -82,22 +104,23 @@ export default function PreviousLogsPage() {
     }
   }, [loadData]);
 
-  const handleDeleteWorkLog = useCallback((id: string) => {
-     if (typeof window === 'undefined') return;
+  const handleDeleteWorkLog = useCallback(async (id: string) => {
+    if (!user) return;
     try {
-      deleteWorkLog(id);
-      loadData(); // Reload all data to reflect the deletion
-      toast({ title: "Log Deleted", description: "Previous work log deleted successfully." });
+      await deleteWorkLogFromFirestore(id);
+      const updatedLogs = (await getUserWorkLogs(user.uid)).map(mapFirestoreLogToDailyWorkLog);
+      setAllLogs(updatedLogs);
+      toast({ title: "Log Deleted", description: "Previous work log deleted from the cloud." });
     } catch (error) {
-      console.error('[PreviousLogsPage] Error deleting work log:', error);
+      console.error('[PreviousLogsPage] Error deleting work log from Firestore:', error);
       toast({
-            variant: "destructive",
-            title: "Deletion Failed",
-            description: error instanceof Error ? error.message : "Could not delete the work log.",
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: error instanceof Error ? error.message : "Could not delete the work log from Firestore.",
       });
       throw error;
     }
-  }, [toast, loadData]);
+  }, [toast, user]);
 
 
   // Filtering and Sorting Logic

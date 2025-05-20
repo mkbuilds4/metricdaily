@@ -45,6 +45,7 @@ import TutorialDialog from '@/components/TutorialDialog';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
+import { createWorkLog, getUserWorkLogs, deleteWorkLogFromFirestore } from '@/lib/firestore';
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -197,51 +198,74 @@ export default function Home() {
     }
   }, [isClient, userSettings, calculatedTodayLog, activeTarget, currentTime, uphTargets, toast]);
 
+  // Helper to map Firestore log to DailyWorkLog
+  function mapFirestoreLogToDailyWorkLog(log: any): DailyWorkLog {
+    return {
+      id: log.id,
+      date: log.date && typeof log.date.toDate === 'function' ? formatDateISO(log.date.toDate()) : (typeof log.date === 'string' ? log.date : ''),
+      startTime: log.startTime ?? '',
+      endTime: log.endTime ?? '',
+      breakDurationMinutes: log.breakDurationMinutes ?? 0,
+      trainingDurationMinutes: log.trainingDurationMinutes ?? 0,
+      hoursWorked: log.hoursWorked ?? 0,
+      documentsCompleted: log.documentsProcessed ?? 0,
+      videoSessionsCompleted: log.videosProcessed ?? 0,
+      targetId: log.targetId ?? '',
+      notes: log.notes ?? '',
+      goalMetTimes: log.goalMetTimes ?? {},
+      isFinalized: log.isFinalized ?? false,
+    };
+  }
 
-  const handleSaveWorkLog = useCallback((
-      logData: Partial<Omit<DailyWorkLog, 'id' | 'hoursWorked'>> & { id?: string; hoursWorked?: number; date: string; startTime: string; endTime: string; goalMetTimes?: Record<string, string> },
-      auditActionType?: AuditLogActionType
-      ) => {
-    if (!isClient) return {} as DailyWorkLog;
-
+  const handleSaveWorkLog = useCallback(async (
+    logData: Partial<Omit<DailyWorkLog, 'id' | 'hoursWorked'>> & { id?: string; hoursWorked?: number; date: string; startTime: string; endTime: string; goalMetTimes?: Record<string, string> },
+    auditActionType?: AuditLogActionType
+  ) => {
+    if (!isClient || !user) return {} as DailyWorkLog;
     try {
-        const savedLog = saveWorkLog(logData, auditActionType); // Call the action
+      // Map to Firestore schema, including all fields needed for the UI
+      const firestoreLogData: any = {
+        ...logData,
+        date: new Date(logData.date),
+        id: undefined,
+        documentsProcessed: logData.documentsCompleted ?? 0,
+        videosProcessed: logData.videoSessionsCompleted ?? 0,
+        startTime: logData.startTime ?? '',
+        endTime: logData.endTime ?? '',
+        breakDurationMinutes: logData.breakDurationMinutes ?? 0,
+        trainingDurationMinutes: logData.trainingDurationMinutes ?? 0,
+        hoursWorked: logData.hoursWorked ?? 0,
+        targetId: logData.targetId ?? '',
+        notes: logData.notes ?? '',
+        goalMetTimes: logData.goalMetTimes ?? {},
+        isFinalized: logData.isFinalized ?? false,
+      };
+      delete firestoreLogData.documentsCompleted;
+      delete firestoreLogData.videoSessionsCompleted;
 
-        // Update workLogs state based on the returned savedLog from the action
-        setWorkLogs(prevLogs => {
-            const existingIndex = prevLogs.findIndex(l => l.id === savedLog.id);
-            let newLogs;
-            if (existingIndex > -1) {
-                newLogs = [...prevLogs];
-                newLogs[existingIndex] = savedLog;
-            } else {
-                newLogs = [...prevLogs, savedLog];
-            }
-            return newLogs.sort((a, b) => b.date.localeCompare(a.date));
-        });
-        
-        setHasInitialData(true);
+      await createWorkLog(user.uid, firestoreLogData);
 
-        // Toasting logic, avoid for goal met as it's handled by handleGoalMet
-        if (auditActionType !== 'UPDATE_WORK_LOG_GOAL_MET') {
-             const currentLogForToast = workLogs.find(l => l.date === formatDateISO(new Date()) && !l.isFinalized) || null;
-            if (logData.id === currentLogForToast?.id ) { // Use the derived currentLogForToast for comparison
-                 toast({ title: "Log Updated", description: `Today's log (${logData.date}) was updated.` });
-            } else if (isCreatingLog(logData, workLogs)) {
-                 toast({ title: "Log Created", description: `Log for ${logData.date} created.`});
-            }
-        }
-        return savedLog;
+      // Fetch from Firestore and map back to app shape
+      const updatedLogs = (await getUserWorkLogs(user.uid)).map(mapFirestoreLogToDailyWorkLog);
+
+      setWorkLogs(updatedLogs);
+      setHasInitialData(updatedLogs.length > 0);
+      toast({
+        title: "Work Log Saved",
+        description: `Entry for ${logData.date} has been added/updated in the cloud.`,
+      });
+
+      return updatedLogs.find(l => l.date === logData.date) || {} as DailyWorkLog;
     } catch (error) {
-        console.error('[Home] Error saving work log:', error);
-        toast({
-            variant: "destructive",
-            title: "Save Failed",
-            description: error instanceof Error ? error.message : "Could not save the work log.",
-        });
-        throw error;
+      console.error('[Home] Error saving work log to Firestore:', error);
+      toast({
+        variant: "destructive",
+        title: "Save Failed",
+        description: error instanceof Error ? error.message : "Could not save the work log to Firestore.",
+      });
+      throw error;
     }
-  }, [toast, isClient, workLogs]); // Removed calculatedTodayLog from dependencies, use derived one inside if needed
+  }, [toast, isClient, user]);
 
   // Helper to determine if a log is being created (for toast message distinction)
   const isCreatingLog = (logData: Partial<DailyWorkLog>, currentLogs: DailyWorkLog[]): boolean => {
@@ -252,24 +276,26 @@ export default function Home() {
   };
 
 
-  const handleDeleteWorkLog = useCallback((id: string) => {
-     if (!isClient) return;
+  const handleDeleteWorkLog = useCallback(async (id: string) => {
+    if (!isClient || !user) return;
     try {
-        deleteWorkLog(id);
-        loadData(false);
-        toast({ title: "Log Deleted", description: "Work log deleted successfully." });
+      await deleteWorkLogFromFirestore(id);
+      const updatedLogs = (await getUserWorkLogs(user.uid)).map(mapFirestoreLogToDailyWorkLog);
+      setWorkLogs(updatedLogs);
+      setHasInitialData(updatedLogs.length > 0);
+      toast({ title: "Log Deleted", description: "Work log deleted from the cloud." });
     } catch (error) {
-        console.error('[Home] Error deleting work log:', error);
-        toast({
-            variant: "destructive",
-            title: "Deletion Failed",
-            description: error instanceof Error ? error.message : "Could not delete the work log.",
-        });
-        throw error;
+      console.error('[Home] Error deleting work log from Firestore:', error);
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: error instanceof Error ? error.message : "Could not delete the work log from Firestore.",
+      });
+      throw error;
     }
-  }, [loadData, toast, isClient]);
+  }, [isClient, user, toast]);
 
-   const handleQuickUpdate = (field: 'documentsCompleted' | 'videoSessionsCompleted', value: number | string) => {
+   const handleQuickUpdate = async (field: 'documentsCompleted' | 'videoSessionsCompleted', value: number | string) => {
       if (!isClient) return;
       const logForUpdate = workLogs.find(l => l.date === formatDateISO(new Date()) && !l.isFinalized) || null;
 
@@ -332,7 +358,7 @@ export default function Home() {
 
 
       try {
-           const savedLog = handleSaveWorkLog(updatedLogPartial as any, 'UPDATE_WORK_LOG_QUICK_COUNT');
+           const savedLog = await handleSaveWorkLog(updatedLogPartial as any, 'UPDATE_WORK_LOG_QUICK_COUNT');
            toast({ title: "Count Updated", description: `Today's ${field === 'documentsCompleted' ? 'document' : 'video'} count set to ${newValue}.` });
 
       } catch(error) {
@@ -388,7 +414,7 @@ export default function Home() {
     }
   };
 
-  const handleStartNewDay = useCallback(() => {
+  const handleStartNewDay = useCallback(async () => {
     if (!isClient || !userSettings) return;
     const activeTargetCheck = getActiveUPHTarget();
     if (!activeTargetCheck) {
@@ -434,7 +460,7 @@ export default function Home() {
     };
 
     try {
-      handleSaveWorkLog(newLog as any, 'CREATE_WORK_LOG');
+      await handleSaveWorkLog(newLog as any, 'CREATE_WORK_LOG');
       toast({
         title: "New Day Started",
         description: `Work log for ${todayDateStr} created with default times.`,

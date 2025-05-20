@@ -27,6 +27,7 @@ import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button'; // Import Button for loading state
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
+import { DataMigration } from '@/components/DataMigration';
 
 const fontSans = FontSans({
   subsets: ['latin'],
@@ -171,23 +172,19 @@ export default function RootLayout({
         <title>Metric Daily</title>
         <meta name="description" content="Track your daily metrics." />
       </head>
-      <body
-        className={cn(
-          "min-h-screen bg-background font-sans antialiased overflow-hidden",
-          fontSans.variable
-        )}
-      >
-        <AuthProvider>
-          <ThemeProvider
-            defaultTheme="system"
-            storageKey="metric-daily-theme"
-          >
+      <body className={cn('min-h-screen bg-background font-sans antialiased', fontSans.variable)}>
+        <ThemeProvider
+          defaultTheme="system"
+          storageKey="metric-daily-theme"
+        >
+          <AuthProvider>
             <AppContent>
               {children}
             </AppContent>
+            <DataMigration />
             <Toaster />
-          </ThemeProvider>
-        </AuthProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

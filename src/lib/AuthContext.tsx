@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth';
 import { auth } from './firebase';
 import { createUserProfile, getUserSettings, updateUserSettings, migrateUserSettings, UserSettings } from './firebase';
+import { migrateUPHTargets } from './migration';
 
 interface AuthContextType {
   user: User | null;
@@ -71,6 +72,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           
           if (userSettings) {
             setSettings(userSettings);
+          }
+
+          // Migrate UPH targets to new structure
+          try {
+            await migrateUPHTargets(user.uid);
+          } catch (error) {
+            console.error('Error migrating UPH targets:', error);
           }
         } catch (error) {
           console.error('Error loading user settings:', error);
