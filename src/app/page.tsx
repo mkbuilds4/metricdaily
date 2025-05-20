@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -29,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Minus, Plus, Info, Trash2, BarChart, PlayCircle, Coffee, Brain, Edit3, HelpCircle, Archive, RefreshCcw, Settings as SettingsIcon, Zap } from 'lucide-react';
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertDialog,
@@ -43,9 +42,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import TutorialDialog from '@/components/TutorialDialog';
-
+import { useAuth } from '@/lib/AuthContext';
+import { useRouter } from 'next/navigation';
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
 
 export default function Home() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
   const [workLogs, setWorkLogs] = useState<DailyWorkLog[]>([]);
   const [uphTargets, setUphTargets] = useState<UPHTarget[]>([]);
   const [activeTarget, setActiveTarget] = useState<UPHTarget | null>(null);
@@ -60,13 +63,26 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
-    setIsClient(true);
-    if (typeof window !== 'undefined') {
-        setCurrentTime(new Date()); // Set initial time
-        const timer = setInterval(() => setCurrentTime(new Date()), 1000); // Update every second
-        return () => clearInterval(timer); // Cleanup timer on unmount
+    if (!loading) {
+      if (!user) {
+        console.log('[Home] No user found, redirecting to login');
+        router.replace('/login');
+      } else {
+        console.log('[Home] User found:', user.email);
+      }
     }
-  }, []);
+  }, [user, loading, router]);
+
+  useEffect(() => {
+    if (!loading && user) {
+      setIsClient(true);
+      if (typeof window !== 'undefined') {
+        setCurrentTime(new Date());
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+      }
+    }
+  }, [loading, user]);
 
   const loadData = useCallback((showLoadingIndicator = true) => {
     if (!isClient) return;
@@ -660,6 +676,18 @@ export default function Home() {
   }, [toast, isClient, activeTarget]);
 
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null; // Let the router handle the redirect
+  }
+
   if (!isClient || isLoading) {
     return (
       <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
@@ -704,7 +732,8 @@ export default function Home() {
 
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
+    <ProtectedRoute>
+      <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-6 lg:p-8">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 md:mb-8">
             <h1 className="text-3xl md:text-4xl font-bold text-center sm:text-left">Daily Dashboard</h1>
              {sampleDataActive && (
@@ -861,6 +890,7 @@ export default function Home() {
              <></>
         )}
     </div>
+  </ProtectedRoute>
   );
 }
 
