@@ -10,6 +10,8 @@ import {
   orderBy,
   Timestamp,
   DocumentData,
+  deleteDoc,
+  updateDoc,
 } from 'firebase/firestore';
 
 // Types
@@ -32,9 +34,12 @@ export interface WorkLog {
 
 export interface UPHTarget {
   userId: string;
-  documentsPerHour: number;
-  videosPerHour: number;
+  name: string;
+  unitsPerHour: number;
+  docsPerUnit: number;
+  videosPerUnit: number;
   isActive: boolean;
+  isDisplayed: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -91,6 +96,11 @@ export const getUserWorkLogs = async (userId: string) => {
   })) as (WorkLog & { id: string })[];
 };
 
+export const deleteWorkLogFromFirestore = async (logId: string) => {
+  const logRef = doc(db, 'workLogs', logId);
+  await deleteDoc(logRef);
+};
+
 // UPH Target Operations
 export const createUPHTarget = async (userId: string, targetData: Omit<UPHTarget, 'userId' | 'createdAt' | 'updatedAt'>) => {
   const targetsRef = collection(db, 'uphTargets');
@@ -106,17 +116,37 @@ export const createUPHTarget = async (userId: string, targetData: Omit<UPHTarget
 };
 
 export const getUserUPHTargets = async (userId: string) => {
-  const targetsRef = collection(db, 'uphTargets');
-  const q = query(
-    targetsRef,
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc')
-  );
-  const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  })) as (UPHTarget & { id: string })[];
+  try {
+    console.log('Fetching UPH targets for user:', userId);
+    const targetsRef = collection(db, 'uphTargets');
+    const q = query(
+      targetsRef,
+      where('userId', '==', userId)
+    );
+    const querySnapshot = await getDocs(q);
+    const targets = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as (UPHTarget & { id: string })[];
+    console.log('Found targets:', targets);
+    return targets;
+  } catch (error) {
+    console.error('Error fetching UPH targets:', error);
+    throw error;
+  }
+};
+
+export const updateUPHTargetInFirestore = async (targetId: string, data: Partial<UPHTarget>) => {
+  const targetRef = doc(db, 'uphTargets', targetId);
+  await updateDoc(targetRef, {
+    ...data,
+    updatedAt: Timestamp.now(),
+  });
+};
+
+export const deleteUPHTargetFromFirestore = async (targetId: string) => {
+  const targetRef = doc(db, 'uphTargets', targetId);
+  await deleteDoc(targetRef);
 };
 
 // User Settings Operations

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -46,11 +45,12 @@ type TargetFormData = z.infer<typeof targetFormSchema>;
 
 interface UPHTargetManagerProps {
   targets: UPHTarget[];
-  addUPHTargetAction: (data: Omit<UPHTarget, 'id' | 'isActive'>) => UPHTarget;
-  updateUPHTargetAction: (data: UPHTarget) => UPHTarget;
-  deleteUPHTargetAction: (id: string) => void;
-  setActiveUPHTargetAction: (id: string) => UPHTarget;
-  duplicateUPHTargetAction: (id: string) => UPHTarget;
+  addUPHTargetAction: (data: Omit<UPHTarget, 'id' | 'isActive'>) => Promise<UPHTarget | void>;
+  updateUPHTargetAction: (data: UPHTarget) => Promise<UPHTarget | void>;
+  deleteUPHTargetAction: (id: string) => Promise<void>;
+  setActiveUPHTargetAction: (id: string) => Promise<void>;
+  duplicateUPHTargetAction: (id: string) => Promise<void>;
+  asyncHandlers?: boolean;
 }
 
 type SortableColumn = keyof Pick<UPHTarget, 'name' | 'targetUPH' | 'docsPerUnit' | 'videosPerUnit' | 'isDisplayed'>; // Added isDisplayed
@@ -71,6 +71,9 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
   const [localTargets, setLocalTargets] = useState<UPHTarget[]>(initialTargets);
   const [sortColumn, setSortColumn] = useState<SortableColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  // Debug output to confirm data flow
+  console.log('UPHTargetManager received targets:', initialTargets);
 
   useEffect(() => {
     setLocalTargets(initialTargets);
@@ -140,7 +143,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     setIsDialogOpen(true);
   };
 
- const handleFormSubmit = (values: TargetFormData) => {
+ const handleFormSubmit = async (values: TargetFormData) => {
     setIsLoading(true);
     try {
       if (editingTarget) {
@@ -149,18 +152,14 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
           ...values,
           isDisplayed: values.isDisplayed ?? editingTarget.isDisplayed ?? true,
         };
-        const updatedTarget = updateUPHTargetAction(updatedTargetData);
-        setLocalTargets(prev =>
-          prev.map(t => (t.id === editingTarget.id ? updatedTarget : t))
-        );
+        await updateUPHTargetAction(updatedTargetData);
         toast({ title: "Target Updated", description: `"${values.name}" has been updated.` });
       } else {
         const newTargetData: Omit<UPHTarget, 'id' | 'isActive'> = {
             ...values,
             isDisplayed: values.isDisplayed ?? true,
         };
-        const actualNewTarget = addUPHTargetAction(newTargetData);
-        setLocalTargets(prev => [...prev, actualNewTarget]);
+        await addUPHTargetAction(newTargetData);
         toast({ title: "Target Added", description: `"${values.name}" has been added.` });
       }
       setIsDialogOpen(false);
@@ -178,14 +177,11 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     }
   };
 
- const handleSetActive = (id: string) => {
+ const handleSetActive = async (id: string) => {
     setIsLoading(true);
     try {
-      const newActiveTarget = setActiveUPHTargetAction(id);
-      setLocalTargets(prev =>
-          prev.map(t => ({ ...t, isActive: t.id === newActiveTarget.id }))
-      );
-      toast({ title: "Target Activated", description: `"${newActiveTarget.name}" is now the active target.` });
+      await setActiveUPHTargetAction(id);
+      toast({ title: "Target Activated", description: `Target is now active.` });
     } catch (error) {
       console.error("Failed to set active target:", error);
       toast({
@@ -198,7 +194,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     }
   };
 
- const handleDelete = (id: string, name: string) => {
+ const handleDelete = async (id: string, name: string) => {
     const targetToDelete = localTargets.find(t => t.id === id);
     if (!targetToDelete) return;
 
@@ -215,8 +211,7 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     }
     setIsLoading(true);
     try {
-      deleteUPHTargetAction(id);
-      setLocalTargets(prev => prev.filter(t => t.id !== id));
+      await deleteUPHTargetAction(id);
       toast({ title: "Target Deleted", description: `"${name}" has been deleted.` });
     } catch (error) {
        console.error("Failed to delete target:", error);
@@ -230,12 +225,11 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     }
   };
 
-  const handleDuplicate = (id: string) => {
+  const handleDuplicate = async (id: string) => {
     setIsLoading(true);
     try {
-      const duplicatedTarget = duplicateUPHTargetAction(id);
-      setLocalTargets(prev => [...prev, duplicatedTarget]);
-      toast({ title: "Target Duplicated", description: `"${duplicatedTarget.name}" has been created as a copy.` });
+      await duplicateUPHTargetAction(id);
+      toast({ title: "Target Duplicated", description: `Target has been duplicated.` });
     } catch (error) {
       console.error("Failed to duplicate target:", error);
       toast({
@@ -248,11 +242,11 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
     }
   };
 
-  const handleToggleDisplay = (target: UPHTarget) => {
+  const handleToggleDisplay = async (target: UPHTarget) => {
     setIsLoading(true);
     const updatedTarget = { ...target, isDisplayed: !(target.isDisplayed ?? true) };
     try {
-        const savedTarget = updateUPHTargetAction(updatedTarget);
+        const savedTarget = await updateUPHTargetAction(updatedTarget) as UPHTarget;
         setLocalTargets(prev => prev.map(t => t.id === savedTarget.id ? savedTarget : t));
         toast({ title: "Display Updated", description: `Display for "${savedTarget.name}" set to ${savedTarget.isDisplayed}.`});
     } catch (error) {
@@ -411,12 +405,26 @@ const UPHTargetManager: React.FC<UPHTargetManagerProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedTargets.length === 0 && (
-                     <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground h-24">No UPH targets defined yet.</TableCell> {/* Adjusted colSpan */}
-                    </TableRow>
+                {isLoading && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8">
+                      <div className="flex justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 )}
-                {sortedTargets.map((target) => (
+                {!isLoading && sortedTargets.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8">
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <p className="text-muted-foreground">No UPH targets defined yet.</p>
+                        <Button variant="outline" onClick={openAddDialog}>Add Your First Target</Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!isLoading && sortedTargets.map((target) => (
                   <TableRow key={target.id} className={cn(target.isActive ? 'bg-accent/10' : '', !(target.isDisplayed ?? true) && 'opacity-50 hover:opacity-75')}>
                     <TableCell className="text-center">
                       {target.isActive ? (
