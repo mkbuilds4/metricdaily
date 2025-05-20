@@ -1,4 +1,3 @@
-
 // src/lib/actions.ts
 import type { DailyWorkLog, UPHTarget, AuditLogEntry, AuditLogActionType, UserSettings, ApplicationData } from '@/types';
 import { formatDateISO, calculateHoursWorked, formatDurationFromMinutes } from '@/lib/utils';
@@ -353,20 +352,13 @@ export function deleteUPHTarget(id: string): void {
 }
 
 export function setActiveUPHTarget(id: string): UPHTarget {
-  let targets = getUPHTargets();
-  let activatedTarget: UPHTarget | null = null;
-  let previouslyActiveTarget: UPHTarget | null = targets.find(t => t.isActive) || null;
-
-  const updatedTargets = targets.map((t) => {
-    const shouldBeActive = t.id === id;
-    if (shouldBeActive) {
-      activatedTarget = { ...t, isActive: true };
-      return activatedTarget;
-    } else if (t.isActive) {
-      return { ...t, isActive: false };
-    }
-    return t;
-  });
+  const targets = getUPHTargets();
+  const previouslyActiveTarget = targets.find(t => t.isActive);
+  const updatedTargets = targets.map(t => ({
+    ...t,
+    isActive: t.id === id
+  }));
+  const activatedTarget = updatedTargets.find(t => t.id === id);
 
   if (!activatedTarget) throw new Error(`Target with ID ${id} not found.`);
 
@@ -377,7 +369,7 @@ export function setActiveUPHTarget(id: string): UPHTarget {
     'UPHTarget',
     `Set UPH target "${activatedTarget.name}" as active.${previouslyActiveTarget ? ` Previously active: "${previouslyActiveTarget.name}".` : ''}`,
     activatedTarget.id,
-    previouslyActiveTarget,
+    previouslyActiveTarget || null,
     activatedTarget
   );
   return activatedTarget;

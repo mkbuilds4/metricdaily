@@ -6,9 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "deploy": "next build && firebase deploy"
   },
   "dependencies": {
+    "@genkit-ai/googleai": "^1.9.0",
     "@google-cloud/firestore": "^7.8.0",
     "@hookform/resolvers": "^3.6.0",
     "@radix-ui/react-accordion": "^1.1.2",
@@ -34,7 +36,9 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
     "date-fns": "^3.6.0",
-    "firebase": "^10.12.2",
+    "firebase": "^10.14.1",
+    "firebase-admin": "^13.4.0",
+    "genkit": "^1.9.0",
     "lucide-react": "^0.390.0",
     "next": "14.2.3",
     "next-themes": "^0.3.0",

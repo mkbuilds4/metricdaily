@@ -1,4 +1,3 @@
-
 // src/lib/sample-data.ts
 import type { DailyWorkLog, UPHTarget, AuditLogEntry, AuditLogActionType } from '@/types';
 import { format, subDays, addDays, setHours, setMinutes, setSeconds, parseISO } from 'date-fns';
@@ -185,8 +184,8 @@ export const sampleAuditLogs: AuditLogEntry[] = [
     {
         id: 'audit-1',
         timestamp: setSeconds(setMinutes(setHours(todayLogDate, 14), 55), 10).toISOString(),
-        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
-        entityType: 'WorkLog',
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT' as const,
+        entityType: 'WorkLog' as const,
         entityId: todayLogId,
         details: `Quick updated document count to 8 for log ${formatDateISO(today)}.`,
         previousState: { ...baseLogState, documentsCompleted: 0, videoSessionsCompleted: 0 },
@@ -196,8 +195,8 @@ export const sampleAuditLogs: AuditLogEntry[] = [
     {
         id: 'audit-2',
         timestamp: setSeconds(setMinutes(setHours(todayLogDate, 15), 30), 25).toISOString(),
-        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
-        entityType: 'WorkLog',
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT' as const,
+        entityType: 'WorkLog' as const,
         entityId: todayLogId,
         details: `Quick updated video count to 12 for log ${formatDateISO(today)}.`,
         previousState: { ...baseLogState, documentsCompleted: 8, videoSessionsCompleted: 0 },
@@ -207,8 +206,8 @@ export const sampleAuditLogs: AuditLogEntry[] = [
     {
         id: 'audit-3',
         timestamp: setSeconds(setMinutes(setHours(todayLogDate, 16), 15), 5).toISOString(),
-        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
-        entityType: 'WorkLog',
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT' as const,
+        entityType: 'WorkLog' as const,
         entityId: todayLogId,
         details: `Quick updated document count to 15 for log ${formatDateISO(today)}.`,
         previousState: { ...baseLogState, documentsCompleted: 8, videoSessionsCompleted: 12 },
@@ -218,8 +217,8 @@ export const sampleAuditLogs: AuditLogEntry[] = [
     {
         id: 'audit-4',
         timestamp: setSeconds(setMinutes(setHours(todayLogDate, 17), 40), 0).toISOString(),
-        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
-        entityType: 'WorkLog',
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT' as const,
+        entityType: 'WorkLog' as const,
         entityId: todayLogId,
         details: `Quick updated video count to 30 for log ${formatDateISO(today)}.`,
         previousState: { ...baseLogState, documentsCompleted: 15, videoSessionsCompleted: 12 },
@@ -229,8 +228,8 @@ export const sampleAuditLogs: AuditLogEntry[] = [
     {
         id: 'audit-5',
         timestamp: setSeconds(setMinutes(setHours(todayLogDate, 18), 5), 15).toISOString(),
-        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
-        entityType: 'WorkLog',
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT' as const,
+        entityType: 'WorkLog' as const,
         entityId: todayLogId,
         details: `Quick updated document count to 25 for log ${formatDateISO(today)}.`,
         previousState: { ...baseLogState, documentsCompleted: 15, videoSessionsCompleted: 30 },
@@ -240,8 +239,8 @@ export const sampleAuditLogs: AuditLogEntry[] = [
     {
         id: 'audit-6',
         timestamp: setSeconds(setMinutes(setHours(todayLogDate, 19), 20), 40).toISOString(),
-        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
-        entityType: 'WorkLog',
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT' as const,
+        entityType: 'WorkLog' as const,
         entityId: todayLogId,
         details: `Quick updated video count to 55 for log ${formatDateISO(today)}.`,
         previousState: { ...baseLogState, documentsCompleted: 25, videoSessionsCompleted: 30 },
@@ -251,8 +250,8 @@ export const sampleAuditLogs: AuditLogEntry[] = [
     {
         id: 'audit-7',
         timestamp: setSeconds(setMinutes(setHours(todayLogDate, 20), 10), 55).toISOString(),
-        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
-        entityType: 'WorkLog',
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT' as const,
+        entityType: 'WorkLog' as const,
         entityId: todayLogId,
         details: `Quick updated document count to 40 for log ${formatDateISO(today)}.`,
         previousState: { ...baseLogState, documentsCompleted: 25, videoSessionsCompleted: 55 },
@@ -262,8 +261,8 @@ export const sampleAuditLogs: AuditLogEntry[] = [
     {
         id: 'audit-8',
         timestamp: setSeconds(setMinutes(setHours(todayLogDate, 21), 35), 5).toISOString(),
-        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
-        entityType: 'WorkLog',
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT' as const,
+        entityType: 'WorkLog' as const,
         entityId: todayLogId,
         details: `Quick updated video count to 70 for log ${formatDateISO(today)}.`,
         previousState: { ...baseLogState, documentsCompleted: 40, videoSessionsCompleted: 55 },
@@ -273,8 +272,8 @@ export const sampleAuditLogs: AuditLogEntry[] = [
     {
         id: 'audit-9',
         timestamp: setSeconds(setMinutes(setHours(todayLogDate, 22), 25), 0).toISOString(),
-        action: 'UPDATE_WORK_LOG_QUICK_COUNT',
-        entityType: 'WorkLog',
+        action: 'UPDATE_WORK_LOG_QUICK_COUNT' as const,
+        entityType: 'WorkLog' as const,
         entityId: todayLogId,
         details: `Quick updated document count to 62 and video count to 85 for log ${formatDateISO(today)}.`,
         previousState: { ...baseLogState, documentsCompleted: 40, videoSessionsCompleted: 70 },

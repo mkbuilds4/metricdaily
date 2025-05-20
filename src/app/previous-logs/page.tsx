@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -169,8 +168,22 @@ export default function PreviousLogsPage() {
                  valB = targetB ? calculateDailyUPH(b, targetB) : 0;
                  // --- End of correction ---
             } else {
-                valA = a[sortColumn as keyof DailyWorkLog] ?? 0; // Handle potential undefined
-                valB = b[sortColumn as keyof DailyWorkLog] ?? 0;
+                const rawA = a[sortColumn as keyof DailyWorkLog];
+                const rawB = b[sortColumn as keyof DailyWorkLog];
+                if (typeof rawA === 'boolean') {
+                  valA = rawA ? 1 : 0;
+                } else if (typeof rawA === 'object') {
+                  valA = 0;
+                } else {
+                  valA = rawA ?? 0;
+                }
+                if (typeof rawB === 'boolean') {
+                  valB = rawB ? 1 : 0;
+                } else if (typeof rawB === 'object') {
+                  valB = 0;
+                } else {
+                  valB = rawB ?? 0;
+                }
             }
 
             let comparison = 0;

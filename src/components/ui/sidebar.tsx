@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -584,8 +583,13 @@ const SidebarMenuButton = React.forwardRef<
     // Determine the component type based on whether href is provided
     const Comp = asChild ? Slot : (href ? NextLink : 'button')
 
+    // Split props for anchor and button
+    const { onToggle, ...restProps } = props as any;
+    const anchorProps = href ? { ...restProps, href } : undefined;
+    const buttonProps = !href ? restProps : undefined;
+
     const buttonContent = (
-      <Comp ref={ref as any} {...commonProps} {...(href ? { href } : {})}>
+      <Comp ref={ref as any} {...commonProps} {...(href ? anchorProps : buttonProps)}>
         {children}
       </Comp>
     );

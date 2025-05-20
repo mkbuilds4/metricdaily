@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -59,7 +58,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
   const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isClient, setIsClient] = useState(false);
-  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [expandedLogId, setExpandedLogId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     setIsClient(true);
@@ -67,7 +66,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
 
   const activeTarget = useMemo(() => targets.find(t => t.isActive) ?? (targets.length > 0 ? targets.find(t => t.isDisplayed ?? true) || targets[0] : null), [targets]);
 
-  const { todayLog, previousLogsByDate } = useMemo(() => {
+  const { todayLog, previousLogsByDate }: { todayLog: DailyWorkLog | null, previousLogsByDate: { date: string, log: DailyWorkLog }[] } = useMemo(() => {
     const todayDateStr = formatDateISO(new Date());
     const todayStart = startOfDay(new Date());
     let foundTodayLog: DailyWorkLog | null = null;
@@ -94,7 +93,7 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
                               .map(log => ({ date: log.date, log: log })) 
                               .sort((a, b) => b.date.localeCompare(a.date)); 
 
-    return { todayLog: foundTodayLog, previousLogsByDate: prevLogsGrouped };
+    return { todayLog: foundTodayLog, previousLogsByDate: prevLogsGrouped } as { todayLog: DailyWorkLog | null, previousLogsByDate: { date: string, log: DailyWorkLog }[] };
   }, [allWorkLogs, showTodaySection]);
 
   useEffect(() => {
@@ -111,18 +110,20 @@ const TargetMetricsDisplay: React.FC<TargetMetricsDisplayProps> = ({
     if (!showTodaySection || !currentTime || !todayLog || !isClient || !onGoalMet) {
       return;
     }
-    const currentGoalMetTimes = todayLog.goalMetTimes || {};
-    targets.forEach(target => {
-      if (!(target.isDisplayed ?? true)) return; 
+    if (todayLog) {
+      const currentGoalMetTimes = todayLog.goalMetTimes || {};
+      targets.forEach(target => {
+        if (!(target.isDisplayed ?? true)) return; 
 
-      const { currentUnits } = calculateCurrentMetrics(todayLog, target, currentTime);
-      const targetUnitsForShift = calculateRequiredUnitsForTarget(todayLog.hoursWorked, target.targetUPH);
-      const isCurrentlyMet = currentUnits >= targetUnitsForShift && targetUnitsForShift > 0;
-      const isAlreadyRecorded = !!currentGoalMetTimes[target.id];
-      if (isCurrentlyMet && !isAlreadyRecorded) {
-        onGoalMet(target.id, currentTime);
-      }
-    });
+        const { currentUnits } = calculateCurrentMetrics(todayLog, target, currentTime);
+        const targetUnitsForShift = calculateRequiredUnitsForTarget(todayLog.hoursWorked, target.targetUPH);
+        const isCurrentlyMet = currentUnits >= targetUnitsForShift && targetUnitsForShift > 0;
+        const isAlreadyRecorded = !!currentGoalMetTimes[target.id];
+        if (isCurrentlyMet && !isAlreadyRecorded) {
+          onGoalMet(target.id, currentTime);
+        }
+      });
+    }
   }, [todayLog, targets, currentTime, showTodaySection, isClient, onGoalMet]);
 
   const sortedTargetsByUPH = useMemo(() => 

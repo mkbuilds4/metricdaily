@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -346,7 +345,7 @@ export default function AnalyticsPage() {
             {selectedDateForHourlyChart ? (
               hourlyActivityChartData.length > 0 ? (
                 <ChartContainer config={hourlyActivityChartConfig} className="h-[300px] w-full">
-                  <BarChart data={hourlyActivityChartData} margin={{ top: 20, right: 20, left: -10, bottom: 5 }} isAnimationActive={false}>
+                  <BarChart data={hourlyActivityChartData} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis
                       dataKey="hourLabel"
@@ -376,43 +375,8 @@ export default function AnalyticsPage() {
                        cursor={false}
                        content={<ChartTooltipContent indicator="line" />}
                      />
-                     <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs" isAnimationActive={false}>
-                       <LabelList
-                         dataKey="documents"
-                         position="middle"
-                         fill="hsl(var(--background))"
-                         fontSize={10}
-                         formatter={(value: number) => (value > 0 ? String(value) : '')}
-                       />
-                     </Bar>
-                     <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos" isAnimationActive={false}>
-                       <LabelList
-                         dataKey="videos"
-                         position="middle"
-                         fill="hsl(var(--background))"
-                         fontSize={10}
-                         formatter={(value: number) => (value > 0 ? String(value) : '')}
-                       />
-                       <LabelList
-                         position="top"
-                         offset={5}
-                         fill="hsl(var(--foreground))"
-                         fontSize={10}
-                         formatter={(_value: unknown, entryObject: any) => {
-                            // Guard against entryObject being null, undefined, or not an object
-                            if (!entryObject || typeof entryObject !== 'object') {
-                                return '';
-                            }
-                            // Assuming entryObject is the data item like { hour: 10, documents: 5, videos: 3, ... }
-                            const docCount = typeof entryObject.documents === 'number' ? entryObject.documents : 0;
-                            const videoCount = typeof entryObject.videos === 'number' ? entryObject.videos : 0;
-                            
-                            const total = docCount + videoCount;
-                            // Only render a label if the total is greater than 0.
-                            return total > 0 ? String(total) : '';
-                         }}
-                       />
-                     </Bar>
+                     <Bar dataKey="documents" stackId="a" fill={CHART_COLORS.hourlyDocuments} radius={[0, 0, 0, 0]} name="Docs" />
+                     <Bar dataKey="videos" stackId="a" fill={CHART_COLORS.hourlyVideos} radius={[4, 4, 0, 0]} name="Videos" />
                     <ChartLegend content={<ChartLegendContent />} />
                   </BarChart>
                 </ChartContainer>
@@ -442,7 +406,6 @@ export default function AnalyticsPage() {
                 <LineChart
                   data={dailyWorkChartData}
                   margin={{ top: 5, right: 20, left: -10, bottom: 5 }}
-                  isAnimationActive={false}
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))"/>
                   <XAxis
@@ -515,9 +478,9 @@ export default function AnalyticsPage() {
                        />
                      }
                    />
-                  <Line yAxisId="left" type="monotone" dataKey="documents" stroke={CHART_COLORS.documents} strokeWidth={2} dot={false} name="documents" isAnimationActive={false} />
-                  <Line yAxisId="left" type="monotone" dataKey="videos" stroke={CHART_COLORS.videos} strokeWidth={2} dot={false} name="videos" isAnimationActive={false} />
-                   <Line yAxisId="right" type="monotone" dataKey="hoursWorked" stroke={CHART_COLORS.hoursWorked} strokeWidth={2} strokeDasharray="5 5" dot={false} name="hoursWorked" isAnimationActive={false} />
+                  <Line yAxisId="left" type="monotone" dataKey="documents" stroke={CHART_COLORS.documents} strokeWidth={2} dot={false} name="documents" />
+                  <Line yAxisId="left" type="monotone" dataKey="videos" stroke={CHART_COLORS.videos} strokeWidth={2} dot={false} name="videos" />
+                   <Line yAxisId="right" type="monotone" dataKey="hoursWorked" stroke={CHART_COLORS.hoursWorked} strokeWidth={2} strokeDasharray="5 5" dot={false} name="hoursWorked" />
                    <ChartLegend content={<ChartLegendContent />} />
                 </LineChart>
               </ChartContainer>
@@ -563,7 +526,7 @@ export default function AnalyticsPage() {
           <CardContent>
             {uphChartSpecificData.length > 0 && selectedTargetDetails ? (
                 <ChartContainer config={dailyUPHChartConfig} className="h-[300px] w-full">
-                    <BarChart data={uphChartSpecificData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }} isAnimationActive={false}>
+                    <BarChart data={uphChartSpecificData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))"/>
                         <XAxis
                             dataKey="date"
@@ -584,14 +547,13 @@ export default function AnalyticsPage() {
                            cursor={false}
                            content={<ChartTooltipContent hideLabel />}
                         />
-                        <Bar dataKey="uph" fill={CHART_COLORS.uph} radius={4} name="Actual UPH" isAnimationActive={false}/>
+                        <Bar dataKey="uph" fill={CHART_COLORS.uph} radius={4} name="Actual UPH" />
                         {selectedTargetDetails && selectedTargetDetails.targetUPH > 0 && (
                              <ReferenceLine
                                 y={selectedTargetDetails.targetUPH}
                                 stroke={CHART_COLORS.targetUPHLine}
                                 strokeDasharray="3 3"
                                 strokeWidth={1.5}
-                                isAnimationActive={false}
                              >
                                  <RechartsLabel
                                     value={`Target: ${selectedTargetDetails.targetUPH.toFixed(1)}`}
